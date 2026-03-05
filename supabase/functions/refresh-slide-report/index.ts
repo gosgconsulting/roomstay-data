@@ -123,9 +123,9 @@ async function validateRequestAuth(req: Request): Promise<boolean> {
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
+  // Handle CORS preflight (204 is standard for OPTIONS)
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: getCorsHeaders(req) });
+    return new Response(null, { status: 204, headers: getCorsHeaders(req) });
   }
   
   // Get CORS headers for this request

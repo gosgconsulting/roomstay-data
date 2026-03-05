@@ -1,4 +1,5 @@
 import type { DataSource, ResponseBody } from './types.ts';
+import { extractSpreadsheetId } from './utils.ts';
 import { fetchGoogleSheetsData } from './google-sheets.ts';
 import { fetchCSVUrlData } from './csv-url.ts';
 import { deleteExistingData, deleteCustomDimensions, fixColumnMappings } from './database.ts';
@@ -134,18 +135,24 @@ export const resyncDataSource = async (
       
       console.log(`[RESYNC] Successfully fetched ${allData.length} rows from CSV URL`);
     } else {
-      // Google Sheets source
-      if (!dataSource.spreadsheet_id || !dataSource.tab_name) {
-        throw new Error('Spreadsheet ID and tab name are required for Google Sheets data source');
+      // Google Sheets source: allow spreadsheet_id from URL if missing
+      let spreadsheetId = dataSource.spreadsheet_id || null;
+      if (!spreadsheetId && dataSource.google_sheets_url) {
+        spreadsheetId = extractSpreadsheetId(dataSource.google_sheets_url);
       }
-      
+      const tabName = (dataSource.tab_name && String(dataSource.tab_name).trim()) || 'Sheet1';
+      if (!spreadsheetId) {
+        throw new Error('Spreadsheet ID (or Google Sheets URL) and tab name are required for Google Sheets data source');
+      }
+
       // Fetch headers
-      const headerRange = `A${dataSource.header_row}:Z${dataSource.header_row}`;
+      const headerRow = dataSource.header_row ?? 1;
+      const headerRange = `A${headerRow}:Z${headerRow}`;
       const headerData = await fetchGoogleSheetsData(
         supabaseUrl,
         supabaseAnonKey,
-        dataSource.spreadsheet_id,
-        dataSource.tab_name,
+        spreadsheetId,
+        tabName,
         headerRange
       );
       
@@ -161,12 +168,12 @@ export const resyncDataSource = async (
       // Try to fetch all data first, with fallback to chunked approach
       try {
         console.log(`[RESYNC] Attempting to fetch all data at once...`);
-        const dataRange = `A${dataSource.header_row + 1}:Z`;
+        const dataRange = `A${headerRow + 1}:Z`;
         const initialData = await fetchGoogleSheetsData(
           supabaseUrl,
           supabaseAnonKey,
-          dataSource.spreadsheet_id,
-          dataSource.tab_name,
+          spreadsheetId,
+          tabName,
           dataRange
         );
         
@@ -178,7 +185,7 @@ export const resyncDataSource = async (
         console.warn(`[RESYNC] Single fetch failed, switching to chunked approach:`, fetchError);
         
         // Fallback to chunked fetching for very large datasets
-        let startRow = dataSource.header_row + 1;
+        let startRow = headerRow + 1;
         let hasMoreData = true;
         let chunkCount = 0;
         
@@ -192,8 +199,8 @@ export const resyncDataSource = async (
             const chunkData = await fetchGoogleSheetsData(
               supabaseUrl,
               supabaseAnonKey,
-              dataSource.spreadsheet_id,
-              dataSource.tab_name,
+              spreadsheetId,
+              tabName,
               chunkRange
             );
             
