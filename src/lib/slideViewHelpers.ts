@@ -378,7 +378,7 @@ export const formatNumber = (
         maximumFractionDigits: maxFrac,
         useGrouping: true,
       }).format(value);
-      return `A$${numberPart}`;
+      return `$${numberPart}`;
     }
     return new Intl.NumberFormat('en-US', {
       style: 'currency',

@@ -3,7 +3,7 @@
  * Ported from src/lib/slideReportPivotComputation.ts
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'; // removed: using `any` for supabase param
 import type {
   SlideReportPivotData,
   SlideReportConfiguration,
@@ -36,7 +36,7 @@ const ROW_COUNT_CPU_GUARD = 10000;
  * Build metric name to dimension ID mapping for a report
  */
 async function buildMetricNameToIdMap(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   reportId: string
 ): Promise<Record<string, string>> {
   const nameToIdMap: Record<string, string> = {};
@@ -144,7 +144,7 @@ async function buildMetricNameToIdMap(
  * Uses smaller batch size to reduce memory footprint
  */
 async function fetchDimensionDataForReport(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   reportId: string
 ): Promise<any[]> {
   const allRows: any[] = [];
@@ -204,7 +204,7 @@ async function fetchDimensionDataForReport(
  * @param month - if provided, filters to that month; otherwise filters to entire year
  */
 async function fetchDimensionDataFilteredByDateRpc(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   reportId: string,
   dateDimId: string | undefined,
   year: number,
@@ -247,7 +247,7 @@ async function fetchDimensionDataFilteredByDateRpc(
  * Prefers DB-side RPC when date dimension is known; otherwise streams and filters in memory.
  */
 async function fetchDimensionDataForReportWithYearFilter(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   reportId: string,
   dateDimId: string | undefined,
   year: number
@@ -314,7 +314,7 @@ async function fetchDimensionDataForReportWithYearFilter(
  * Only keeps rows where date dimension is in that year-month (minimal memory and CPU per invocation).
  */
 async function fetchDimensionDataForReportWithMonthFilter(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   reportId: string,
   dateDimId: string | undefined,
   year: number,
@@ -634,7 +634,7 @@ function computeYearlyMetrics(
  * Compute pivot data for a slide report
  */
 export async function computeSlideReportPivotData(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   reportIds: Record<string, string>,
   configuration: SlideReportConfiguration,
   dateRange: SlideReportDateRange
@@ -1058,7 +1058,7 @@ export async function computeSlideReportPivotData(
  * This function processes one channel and returns its data plus overview contributions
  */
 export async function computeChannelPivotData(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   channel: string,
   reportId: string,
   channelConfig: SlideReportConfiguration['channelConfigs'][string] | undefined,
@@ -1347,7 +1347,7 @@ export async function computeChannelPivotData(
  * Returns slice to be stored in slide_report_channel_year_data and merged by main refresh.
  */
 export async function computeChannelPivotDataForYear(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   channel: string,
   reportId: string,
   year: number,
@@ -1485,7 +1485,7 @@ export async function computeChannelPivotDataForYear(
  * Fetches only rows for that month, returns one month's monthly + monthlyBreakdowns + breakdowns.
  */
 export async function computeChannelPivotDataForMonth(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   channel: string,
   reportId: string,
   year: number,
@@ -1595,7 +1595,7 @@ export async function computeChannelPivotDataForMonth(
   }
 
   console.log(`[channel-pivot] Per-month slice completed for channel ${channel} ${monthKey}`);
-  return {
+  const result: any = {
     channelDataSlice: {
       monthly,
       yearly,
@@ -1612,4 +1612,5 @@ export async function computeChannelPivotDataForMonth(
     rawDataRows,
     dimensionMap,
   };
+  return result;
 }

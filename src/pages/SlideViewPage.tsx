@@ -45,6 +45,7 @@ import { ShareModal } from "@/components/ShareModal";
 import { SlideViewHeader } from "@/components/slides/SlideViewHeader";
 import { FiltersRow } from "@/components/slides/FiltersRow";
 import { ComparisonBanner } from "@/components/slides/ComparisonBanner";
+import { BreakdownTableSection } from "@/components/slides/BreakdownTableSection";
 import { OverviewTab } from "@/components/slides/OverviewTab";
 import { ChannelTab } from "@/components/slides/ChannelTab";
 import { BudgetTab } from "@/components/slides/BudgetTab";
@@ -3601,7 +3602,7 @@ export default function SlideViewPage() {
 
         {/* Comparison Banner */}
         {comparisonType !== 'none' && (
-          <ComparisonBanner comparisonType={comparisonType} />
+          <ComparisonBanner comparisonType={comparisonType} selectedTab={selectedTab} selectedYear={selectedYear} selectedMonth={selectedMonth} />
         )}
 
         {/* Tab Content */}
@@ -3732,8 +3733,9 @@ export default function SlideViewPage() {
 
       {/* Modals */}
       <EditSourceModal
-        open={isEditSourceOpen}
+        isOpen={isEditSourceOpen}
         onOpenChange={setIsEditSourceOpen}
+        handleModalClose={setIsEditSourceOpen}
         modalStep={modalStep}
         handleNext={handleNext}
         handleBack={handleBack}
@@ -3743,7 +3745,6 @@ export default function SlideViewPage() {
         setSinceYear={setSinceYear}
         selectedDimensions={selectedDimensions}
         handleDimensionToggle={handleDimensionToggle}
-        accountReportIds={accountReportIds}
         selectedChannels={selectedChannels}
         activeChannelTab={activeChannelTab}
         setActiveChannelTab={setActiveChannelTab}
@@ -3758,7 +3759,6 @@ export default function SlideViewPage() {
         handleDeselectAllValues={handleDeselectAllValues}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        filteredValues={filteredValues}
         breakdownDimensions={breakdownDimensions}
         breakdownConfigs={breakdownConfigs}
         handleBreakdownToggle={handleBreakdownToggle}
@@ -3789,7 +3789,9 @@ export default function SlideViewPage() {
       {isDataModalOpen && slideReportId && (
         <SlideDataBrowser
           slideReportId={slideReportId}
-          slideReport={slideReport as any}
+          configuration={slideReport?.configuration as any}
+          lastRefreshedAt={slideReport?.last_refreshed_at}
+          reportIds={slideReport?.report_ids as any}
           pivotData={effectivePivotData}
           open={isDataModalOpen}
           onOpenChange={setIsDataModalOpen}
@@ -3800,10 +3802,11 @@ export default function SlideViewPage() {
         <ShareModal
           open={isShareModalOpen}
           onOpenChange={setIsShareModalOpen}
+          reportId={slideReportId}
+          reportName={slideReport?.name || 'Report'}
           slideReportId={slideReportId}
           accountId={accountId}
-          filterValues={filterValues}
-          selectedViewId={selectedViewId}
+          currentFilterValues={filterValues}
         />
       )}
 
