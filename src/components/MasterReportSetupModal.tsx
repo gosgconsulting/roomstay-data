@@ -108,19 +108,22 @@ export const MasterReportSetupModal: React.FC<MasterReportSetupModalProps> = ({
   const loadDimensionsForReport = async (reportId: string) => {
     setLoadingDimensions((prev) => ({ ...prev, [reportId]: true }));
     try {
-      // 1. Fetch data source for the report
-      const { data: dsData, error: dsError } = await supabase
+      // 1. Fetch data sources for the report (prefer Google Sheets if multiple exist)
+      const { data: dsList, error: dsError } = await supabase
         .from("data_sources")
         .select("*")
         .eq("report_id", reportId)
-        .limit(1)
-        .single();
+        .order("created_at", { ascending: false });
 
-      if (dsError || !dsData) {
-        console.error(`Error fetching data source for report ${reportId}:`, dsError);
+      if (dsError || !dsList || dsList.length === 0) {
+        console.error(`Error fetching data sources for report ${reportId}:`, dsError);
         setDimensionsByReport((prev) => ({ ...prev, [reportId]: [] }));
         return;
       }
+
+      const dsData =
+        dsList.find((ds: any) => ds.source_type === 'google_sheets') ||
+        dsList[0];
 
       // 2. Extract dimension IDs from column mappings
       const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
