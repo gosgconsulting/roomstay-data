@@ -39,10 +39,19 @@ export const transformDataRows = async (
         const rawValue = row[colIndex];
         const dimensionId = dimensionIdMap[mapping.column];
         
-        // Skip if this dimensionId was already set by a prior column (first-write-wins).
-        // This prevents "Cost Local Currency" (text like "AUD") from overwriting
-        // "Cost(Local)" (the actual numeric value) when both map to the same dimensionId.
-        if (dimensionId in dimensionValues) return;
+        // When multiple columns map to the same dimensionId, prefer numeric values.
+        // This prevents text labels (e.g., "AUD") from taking priority over numeric values (e.g., 41.23).
+        if (dimensionId in dimensionValues) {
+          const existingValue = dimensionValues[dimensionId];
+          const dimensionType = mapping.newDimensionType || mapping.dimensionType || dimensionTypeMap[dimensionId] || 'text';
+          const dateFormat = mapping.dateFormat;
+          const newParsed = parseValue(rawValue, dimensionType, dateFormat);
+          // Only overwrite if existing is non-numeric and new value is numeric
+          if (typeof existingValue === 'number' || typeof newParsed !== 'number') return;
+          // New value is numeric and existing is not — overwrite
+          dimensionValues[dimensionId] = newParsed;
+          return;
+        }
         
         const dimensionType = mapping.newDimensionType || mapping.dimensionType || dimensionTypeMap[dimensionId] || 'text';
         const dateFormat = mapping.dateFormat;
