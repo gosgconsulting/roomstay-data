@@ -866,7 +866,9 @@ export default function SlideViewPage() {
 
   // Determine slide type from URL
   const slideType = location.pathname.includes('/master-report') ? 'master-report' :
-    location.pathname.includes('/brady') ? 'brady' : 'default';
+    location.pathname.includes('/brady') ? 'brady' :
+    location.pathname.includes('/data-studio') ? 'default' : 'default';
+  const isDataStudioRoute = location.pathname.includes('/data-studio');
 
   // Master Report currency settings
   const [displayCurrency, setDisplayCurrency] = useState<'AUD' | 'USD'>('AUD');
@@ -994,7 +996,7 @@ export default function SlideViewPage() {
   const queryClient = useQueryClient();
 
   // Data Studio: fetch directly from all sources on each load (resync + refresh)
-  const isDataStudio = slideReport?.name === 'Data Studio';
+  const isDataStudio = isDataStudioRoute || slideReport?.name === 'Data Studio';
   const [isDataStudioLoading, setIsDataStudioLoading] = useState(false);
   const dataStudioLoadDoneRef = useRef(false);
   useEffect(() => {
