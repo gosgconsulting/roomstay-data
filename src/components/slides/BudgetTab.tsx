@@ -393,7 +393,7 @@ export function BudgetTab({
                   </>
                 ) : forecastEnabled ? (
                   <>
-                    <TableCell className="text-right">{formatNumber(cpc, 'currency')}</TableCell>
+                    <TableCell className="text-right">{formatNumber(cpc, 'currency', undefined, 2)}</TableCell>
                     <TableCell className="text-right">{formatNumber(totalRevenue, 'currency')}</TableCell>
                     <TableCell className="text-right">{formatNumber(revenueRow, 'currency')}</TableCell>
                     <TableCell className="text-right">{revenueShare.toFixed(1)}%</TableCell>

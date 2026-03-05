@@ -312,14 +312,16 @@ export function OverviewTab({
                       return calculateDerivedMetrics(compTotals);
                     })() : null;
 
-                    const renderMetricCell = (current: number, comparison: number | undefined, format: 'number' | 'currency' | 'percent' | 'roas' = 'number', isCostMetric = false) => {
-                      const formatted = format === 'currency' 
-                        ? formatNumber(current, 'currency') 
-                        : format === 'percent' 
-                          ? `${current.toFixed(2)}%` 
-                          : format === 'roas' 
-                            ? `${current.toFixed(1)}x`
-                            : formatNumber(current);
+                    const renderMetricCell = (current: number, comparison: number | undefined, format: 'number' | 'currency' | 'currency_cpc' | 'percent' | 'roas' = 'number', isCostMetric = false) => {
+                      const formatted = format === 'currency_cpc'
+                        ? formatNumber(current, 'currency', undefined, 2)
+                        : format === 'currency' 
+                          ? formatNumber(current, 'currency') 
+                          : format === 'percent' 
+                            ? `${current.toFixed(2)}%` 
+                            : format === 'roas' 
+                              ? `${current.toFixed(1)}x`
+                              : formatNumber(current);
                       return (
                         <TableCell className="text-right">
                           <div>{formatted}</div>
@@ -348,7 +350,7 @@ export function OverviewTab({
                                 {renderMetricCell(row.ctr, row.compDerived?.ctr, 'percent')}
                                 {renderMetricCell(row.bookings, row.compDerived?.bookings)}
                                 {renderMetricCell(row.conversionRate, row.compDerived?.conversionRate, 'percent')}
-                                {renderMetricCell(row.cpc, row.compDerived?.cpc, 'currency', true)}
+                                {renderMetricCell(row.cpc, row.compDerived?.cpc, 'currency_cpc', true)}
                                 {renderMetricCell(row.cost, row.compDerived?.cost, 'currency', true)}
                                 {renderMetricCell(row.revenue, row.compDerived?.revenue, 'currency')}
                                 {renderMetricCell(row.roas, row.compDerived?.roas, 'roas')}
@@ -363,7 +365,7 @@ export function OverviewTab({
                                 {renderMetricCell(totalDerived.ctr, totalCompDerived?.ctr, 'percent')}
                                 {renderMetricCell(totalDerived.bookings, totalCompDerived?.bookings)}
                                 {renderMetricCell(totalDerived.conversionRate, totalCompDerived?.conversionRate, 'percent')}
-                                {renderMetricCell(totalDerived.cpc, totalCompDerived?.cpc, 'currency', true)}
+                                {renderMetricCell(totalDerived.cpc, totalCompDerived?.cpc, 'currency_cpc', true)}
                                 {renderMetricCell(totalDerived.cost, totalCompDerived?.cost, 'currency', true)}
                                 {renderMetricCell(totalDerived.revenue, totalCompDerived?.revenue, 'currency')}
                                 {renderMetricCell(totalDerived.roas, totalCompDerived?.roas, 'roas')}
