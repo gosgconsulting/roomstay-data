@@ -987,78 +987,9 @@ export default function SlideViewPage() {
   const [dataStudioRefreshStatus, setDataStudioRefreshStatus] = useState<'idle' | 'refreshing' | 'done' | 'error'>('idle');
   const dataStudioLoadDoneRef = useRef(false);
 
-  useEffect(() => {
-    if (!isDataStudio || !slideReportId || !slideReport || dataStudioLoadDoneRef.current) return;
-    dataStudioLoadDoneRef.current = true;
-
-    // Background refresh: resync all data sources then recompute pivot data from fresh source.
-    // This ensures KPI cards, charts, and breakdown tables all use the latest data.
-    setDataStudioRefreshStatus('refreshing');
-
-    const reportIds = (slideReport.report_ids || {}) as Record<string, string>;
-    const channelReportIds = [reportIds.metasearch, reportIds.sem, reportIds.social].filter(Boolean) as string[];
-
-    (async () => {
-      try {
-        // Step 1: Resync all data sources (fetch fresh data from Google Sheets/CSV)
-        const { data: allSources, error: sourcesError } = await supabase
-          .from('data_sources')
-          .select('id, report_id')
-          .in('report_id', channelReportIds);
-        if (sourcesError) throw sourcesError;
-
-        const resyncResults = await Promise.allSettled(
-          (allSources || []).map(ds =>
-            supabase.functions.invoke('resync-data-source', { body: { dataSourceId: ds.id } })
-          )
-        );
-        const failedResyncs = resyncResults.filter(r => r.status === 'rejected');
-        if (failedResyncs.length > 0) {
-          console.warn(`[Data Studio] ${failedResyncs.length}/${resyncResults.length} resyncs failed, continuing...`);
-        }
-
-        // Step 2: Recompute pivot data from fresh source data so KPI cards/charts are accurate
-        try {
-          const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
-          const pivotData = await computeSlideReportPivotData(
-            slideReport.report_ids as unknown as Record<string, string>,
-            slideReport.configuration as unknown as SlideReportConfiguration,
-            slideReport.date_range as unknown as SlideReportDateRange
-          );
-          await supabase
-            .from("slide_reports")
-            .update({
-              pivot_data: pivotData as any,
-              last_refreshed_at: new Date().toISOString(),
-            })
-            .eq("id", slideReportId);
-        } catch (pivotErr) {
-          console.warn('[Data Studio] Pivot recompute failed, using breakdown fallback:', pivotErr);
-        }
-
-        // Step 3: Invalidate all caches to pick up fresh data
-        queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
-        queryClient.invalidateQueries({ queryKey: ['data-studio-raw-rows'] });
-        queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
-        queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
-        queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
-
-        setDataStudioRefreshStatus('done');
-        toast({
-          title: 'Data refreshed',
-          description: 'Latest data loaded from all sources.',
-        });
-      } catch (e: any) {
-        console.error('[Data Studio] Background refresh failed:', e);
-        setDataStudioRefreshStatus('error');
-        toast({
-          title: 'Background refresh failed',
-          description: 'Showing cached data. Try "Refresh Data" to retry.',
-          variant: 'default',
-        });
-      }
-    })();
-  }, [isDataStudio, slideReportId, slideReport, queryClient]);
+  // Data Studio: use cached data on page load — no auto-refresh from source.
+  // The "Refresh Data" button triggers the full resync + pivot recompute.
+  
 
   // Open Edit Source when master-report and no Master Report exists (once)
   const hasOpenedEditSourceForMasterRef = useRef(false);
@@ -3328,7 +3259,9 @@ export default function SlideViewPage() {
 
         const ONE_HOUR_AGO = new Date(Date.now() - 60 * 60 * 1000).toISOString();
         const sourcesToResync = (allSources || []).filter((ds: any) => {
-          // Skip if synced within the last hour
+          // Data Studio: always force resync from source
+          if (isDataStudio) return true;
+          // Skip if synced within the last hour (for non-Data Studio)
           if (ds.last_synced_at && ds.last_synced_at > ONE_HOUR_AGO) {
             console.log(`[RefreshData] Skipping resync for ${ds.id} — synced recently at ${ds.last_synced_at}`);
             return false;
@@ -3367,8 +3300,29 @@ export default function SlideViewPage() {
         setRefreshStepStatus((prev) => ({ ...prev, 1: 'complete' }));
 
         if (isDataStudio) {
-          // Data Studio: skip pivot aggregation — uses ALL raw rows from dimension_data directly
-          console.log('[RefreshData] Data Studio mode — skipping refresh-slide-report, using raw cached rows');
+          // Data Studio: resync done, now recompute pivot data from fresh source
+          console.log('[RefreshData] Data Studio mode — recomputing pivot data from fresh source');
+          setRefreshStep(2);
+          setRefreshStepStatus((prev) => ({ ...prev, 2: 'loading', 3: 'loading', 4: 'loading', 5: 'loading' }));
+
+          try {
+            const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
+            const pivotData = await computeSlideReportPivotData(
+              slideReport.report_ids as unknown as Record<string, string>,
+              slideReport.configuration as unknown as SlideReportConfiguration,
+              slideReport.date_range as unknown as SlideReportDateRange
+            );
+            await supabase
+              .from("slide_reports")
+              .update({
+                pivot_data: pivotData as any,
+                last_refreshed_at: new Date().toISOString(),
+              })
+              .eq("id", slideReportId);
+          } catch (pivotErr) {
+            console.warn('[RefreshData] Data Studio pivot recompute failed:', pivotErr);
+          }
+
           setRefreshStep(5);
           setRefreshStepStatus((prev) => ({ ...prev, 2: 'complete', 3: 'complete', 4: 'complete', 5: 'complete' }));
 
