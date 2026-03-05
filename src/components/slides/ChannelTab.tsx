@@ -244,6 +244,8 @@ export function ChannelTab({
                     suppressExpandedBreakdown={suppressExpandedBreakdown}
                     displayCurrency={displayCurrency}
                     availableDimensions={availableDimensionsList}
+                    comparisonChannelTotals={comparisonTotals}
+                    comparisonType={comparisonType}
                   />
                 );
               })()}

@@ -107,6 +107,8 @@ const UnifiedBreakdownTable = ({
   apiBreakdowns,
   suppressExpandedBreakdown,
   displayCurrency,
+  comparisonChannelTotals,
+  comparisonType: compType,
 }: {
   groupBy: string;
   breakdownBy: string;
@@ -129,6 +131,9 @@ const UnifiedBreakdownTable = ({
   suppressExpandedBreakdown?: boolean;
   /** Display currency for formatting (AUD/USD). */
   displayCurrency?: 'AUD' | 'USD';
+  /** Comparison totals per channel for showing % change on total row */
+  comparisonChannelTotals?: Record<string, any> | null;
+  comparisonType?: string;
 }) => {
   // Auto-select defaults when dimensions are available
   useEffect(() => {
@@ -750,20 +755,79 @@ const UnifiedBreakdownTable = ({
             </React.Fragment>
           ))}
           {/* Totals Row */}
-          <TableRow className="bg-muted/50 font-semibold border-t-2">
-            <TableCell></TableCell>
-            <TableCell className="font-bold">Total</TableCell>
-            <TableCell className="text-right">{formatNumber(totalMetrics.impressions)}</TableCell>
-            <TableCell className="text-right">{formatNumber(totalMetrics.clicks)}</TableCell>
-            <TableCell className="text-right">{totalMetrics.ctr.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">{totalMetrics.bookings.toFixed(2)}</TableCell>
-            <TableCell className="text-right">{totalMetrics.conversionRate.toFixed(2)}%</TableCell>
-            <TableCell className="text-right">{formatNumber(totalMetrics.cpc, 'currency', displayCurrency, 2)}</TableCell>
-            <TableCell className="text-right">{formatNumber(totalMetrics.cost, 'currency', displayCurrency)}</TableCell>
-            <TableCell className="text-right">{formatNumber(totalMetrics.revenue, 'currency', displayCurrency)}</TableCell>
-            <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
-            <TableCell className="text-right">{totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%</TableCell>
-          </TableRow>
+          {(() => {
+            // Compute comparison metrics for total row
+            const showComp = compType && compType !== 'none';
+            const compDerived = showComp && comparisonChannelTotals && selectedChannel && selectedChannel !== 'overview'
+              ? (() => {
+                  const ch = comparisonChannelTotals[selectedChannel];
+                  if (!ch) return null;
+                  const hasData = (ch.impressions || 0) > 0 || (ch.clicks || 0) > 0 || (ch.cost || 0) > 0 || (ch.revenue || 0) > 0 || (ch.bookings || 0) > 0;
+                  return hasData ? calculateDerivedMetrics(ch) : null;
+                })()
+              : null;
+
+            const renderCompBadge = (current: number, previous: number | undefined, isCostMetric = false) => {
+              if (previous === undefined || previous === null) return null;
+              const pct = calculatePercentChange(current, previous);
+              if (pct === null) return null;
+              const isPositive = pct >= 0;
+              const isGood = isCostMetric ? !isPositive : isPositive;
+              return (
+                <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${isGood ? 'text-green-600' : 'text-red-600'}`}>
+                  {isPositive ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}
+                  {Math.abs(pct).toFixed(1)}%
+                </span>
+              );
+            };
+
+            return (
+              <TableRow className="bg-muted/50 font-semibold border-t-2">
+                <TableCell></TableCell>
+                <TableCell className="font-bold">Total</TableCell>
+                <TableCell className="text-right">
+                  <div>{formatNumber(totalMetrics.impressions)}</div>
+                  {renderCompBadge(totalMetrics.impressions, compDerived?.impressions)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div>{formatNumber(totalMetrics.clicks)}</div>
+                  {renderCompBadge(totalMetrics.clicks, compDerived?.clicks)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div>{totalMetrics.ctr.toFixed(2)}%</div>
+                  {renderCompBadge(totalMetrics.ctr, compDerived?.ctr)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div>{totalMetrics.bookings.toFixed(2)}</div>
+                  {renderCompBadge(totalMetrics.bookings, compDerived?.bookings)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div>{totalMetrics.conversionRate.toFixed(2)}%</div>
+                  {renderCompBadge(totalMetrics.conversionRate, compDerived?.conversionRate)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div>{formatNumber(totalMetrics.cpc, 'currency', displayCurrency, 2)}</div>
+                  {renderCompBadge(totalMetrics.cpc, compDerived?.cpc, true)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div>{formatNumber(totalMetrics.cost, 'currency', displayCurrency)}</div>
+                  {renderCompBadge(totalMetrics.cost, compDerived?.cost, true)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div>{formatNumber(totalMetrics.revenue, 'currency', displayCurrency)}</div>
+                  {renderCompBadge(totalMetrics.revenue, compDerived?.revenue)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div>{totalMetrics.roas.toFixed(1)}x</div>
+                  {renderCompBadge(totalMetrics.roas, compDerived?.roas)}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div>{totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%</div>
+                  {renderCompBadge(totalMetrics.costOfSale, compDerived?.costOfSale, true)}
+                </TableCell>
+              </TableRow>
+            );
+          })()}
         </TableBody>
       </Table>
     </div>
@@ -3444,6 +3508,9 @@ export default function SlideViewPage() {
       totals.revenue += ch.revenue || 0;
       totals.bookings += ch.bookings || 0;
     });
+    // If all base metrics are zero, there's no real comparison data
+    const hasAnyCompData = totals.impressions > 0 || totals.clicks > 0 || totals.cost > 0 || totals.revenue > 0 || totals.bookings > 0;
+    if (!hasAnyCompData) return null;
     const derived = calculateDerivedMetrics(totals);
     return { ...derived, label: comparisonType === 'previous_period' ? 'vs prev period' : 'vs prev year' };
   }, [comparisonTotals, comparisonType]);
@@ -3452,6 +3519,9 @@ export default function SlideViewPage() {
     if (!comparisonTotals || comparisonType === 'none') return null;
     const ch = comparisonTotals[channel];
     if (!ch) return null;
+    // If all base metrics are zero, there's no real comparison data — don't show misleading 100% changes
+    const hasAnyCompData = (ch.impressions || 0) > 0 || (ch.clicks || 0) > 0 || (ch.cost || 0) > 0 || (ch.revenue || 0) > 0 || (ch.bookings || 0) > 0;
+    if (!hasAnyCompData) return null;
     const derived = calculateDerivedMetrics(ch);
     return { ...derived, label: comparisonType === 'previous_period' ? 'vs prev period' : 'vs prev year' };
   }, [comparisonTotals, comparisonType]);
