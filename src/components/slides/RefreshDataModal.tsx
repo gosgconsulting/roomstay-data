@@ -5,22 +5,27 @@ import { RefreshStepIndicator } from "./EditSourceModal";
 import { cn } from "@/lib/utils";
 
 interface RefreshDataModalProps {
-  isRefreshModalOpen: boolean;
-  setIsRefreshModalOpen: (open: boolean) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  slideReportId?: string | null;
+  slideReport?: any;
   refreshStep: number;
+  setRefreshStep?: (step: number) => void;
   refreshStepStatus: Record<number, 'pending' | 'loading' | 'complete' | 'error'>;
+  setRefreshStepStatus?: (fn: (prev: Record<number, 'pending' | 'loading' | 'complete' | 'error'>) => Record<number, 'pending' | 'loading' | 'complete' | 'error'>) => void;
   refreshError: string | null;
+  setRefreshError?: (err: string | null) => void;
 }
 
 export function RefreshDataModal({
-  isRefreshModalOpen,
-  setIsRefreshModalOpen,
+  open,
+  onOpenChange,
   refreshStep,
   refreshStepStatus,
   refreshError,
 }: RefreshDataModalProps) {
   return (
-    <Dialog open={isRefreshModalOpen} onOpenChange={(open) => !open && !refreshStep && setIsRefreshModalOpen(false)}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onOpenChange(false)}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2">
@@ -36,8 +41,8 @@ export function RefreshDataModal({
           <RefreshStepIndicator
             stepNumber={1}
             status={refreshStepStatus[1]}
-            title="Verifying settings"
-            description="Checking configuration and data sources"
+            title="Resyncing data sources"
+            description="Pulling latest data from all connected sources"
           />
           <RefreshStepIndicator
             stepNumber={2}
@@ -82,9 +87,9 @@ export function RefreshDataModal({
 
         <DialogFooter>
           {refreshError ? (
-            <Button onClick={() => setIsRefreshModalOpen(false)}>Close</Button>
+            <Button onClick={() => onOpenChange(false)}>Close</Button>
           ) : refreshStepStatus[5] === 'complete' ? (
-            <Button onClick={() => setIsRefreshModalOpen(false)} className="bg-green-600 hover:bg-green-700">
+            <Button onClick={() => onOpenChange(false)} className="bg-green-600 hover:bg-green-700">
               Done
             </Button>
           ) : null}

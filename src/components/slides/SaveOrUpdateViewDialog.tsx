@@ -40,8 +40,8 @@ export const SaveOrUpdateViewDialog = React.memo<SaveOrUpdateViewDialogProps>(
     const [selectedViewToUpdate, setSelectedViewToUpdate] = useState<string>('');
     const [showUpdateDropdown, setShowUpdateDropdown] = useState(false);
 
-    // Filter out views without IDs (like 'unsaved')
-    const validViews = availableViews.filter(v => v.id && v.id !== 'unsaved');
+    // Filter out views without IDs (like 'unsaved'); guard against undefined
+    const validViews = (availableViews ?? []).filter(v => v.id && v.id !== 'unsaved');
 
     const handleSaveNew = () => {
       onSaveNew();

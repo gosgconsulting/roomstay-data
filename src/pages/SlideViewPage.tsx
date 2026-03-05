@@ -57,7 +57,7 @@ import { useGetSummaryForTab, type SlideReportSummary } from "@/hooks/useSlideRe
 import { extractMinimalAIData } from "@/lib/extractMinimalAIData";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
-import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
+import { BASE_METRICS, CHANNEL_REPORT_IDS, METASEARCH_GOOGLE_SHEETS_DATA_SOURCE_ID, MONTH_NAMES } from "@/constants/slideViewConstants";
 import type { AccountReportIds } from "@/lib/accountReportIds";
 import {
   calculateDerivedMetrics,
@@ -988,6 +988,60 @@ export default function SlideViewPage() {
   } = reportPage;
   const queryClient = useQueryClient();
 
+  // Data Studio: fetch directly from all sources on each load (resync + refresh)
+  const isDataStudio = slideReport?.name === 'Data Studio';
+  const [isDataStudioLoading, setIsDataStudioLoading] = useState(false);
+  const dataStudioLoadDoneRef = useRef(false);
+  useEffect(() => {
+    if (!isDataStudio || !slideReportId || !slideReport || dataStudioLoadDoneRef.current) return;
+
+    dataStudioLoadDoneRef.current = true;
+    setIsDataStudioLoading(true);
+
+    const reportIds = (slideReport.report_ids || {}) as Record<string, string>;
+    const channelReportIds = [reportIds.metasearch, reportIds.sem, reportIds.social].filter(Boolean) as string[];
+
+    (async () => {
+      try {
+        const { data: allSources, error: sourcesError } = await supabase
+          .from('data_sources')
+          .select('id, report_id')
+          .in('report_id', channelReportIds);
+        if (sourcesError) throw sourcesError;
+
+        for (const ds of allSources || []) {
+          const { data: resyncResult, error: resyncError } = await supabase.functions.invoke(
+            'resync-data-source',
+            { body: { dataSourceId: ds.id } }
+          );
+          if (resyncError) throw resyncError;
+          if (!resyncResult?.success) throw new Error((resyncResult as any)?.error || 'Resync failed');
+        }
+
+        const { data: refreshResult, error: refreshErr } = await supabase.functions.invoke(
+          'refresh-slide-report',
+          { body: { slideReportId, years: [2024, 2025, 2026] } }
+        );
+        if (refreshErr) throw refreshErr;
+        if (!refreshResult?.success) throw new Error((refreshResult as any)?.error || 'Refresh failed');
+
+        queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
+        queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
+        queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
+        queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
+      } catch (e: any) {
+        console.error('[Data Studio]', e);
+        toast({
+          title: 'Data Studio load failed',
+          description: e?.message || 'Failed to fetch from sources',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsDataStudioLoading(false);
+      }
+    })();
+  }, [isDataStudio, slideReportId, slideReport, queryClient]);
+
   // Open Edit Source when master-report and no Master Report exists (once)
   const hasOpenedEditSourceForMasterRef = useRef(false);
   useEffect(() => {
@@ -997,8 +1051,9 @@ export default function SlideViewPage() {
     }
   }, [needEditSourceForMasterReport]);
 
-  // One-time: switch Metasearch to the newest Google Sheets data source (if present), resync it,
-  // remove old Metasearch data from other sources, then refresh the Master Report tables.
+  // Master report: use the configured Metasearch Google Sheets data source and resync it.
+  // If METASEARCH_GOOGLE_SHEETS_DATA_SOURCE_ID is set, that source is used and always resynced (hardcoded).
+  // Otherwise use the newest Google Sheets source for the metasearch report (with optional ?metasearch_resync=1 to force).
   const hasRunMetasearchMigrationRef = useRef(false);
   useEffect(() => {
     if (slideType !== 'master-report') return;
@@ -1006,14 +1061,19 @@ export default function SlideViewPage() {
     if (!slideReportId) return;
     if (hasRunMetasearchMigrationRef.current) return;
 
+    const useHardcodedId = METASEARCH_GOOGLE_SHEETS_DATA_SOURCE_ID.trim() !== '';
     const metasearchReportId =
       (slideReport?.report_ids as any)?.metasearch ||
       (accountReportIds as any)?.metasearch;
 
-    if (!metasearchReportId) return;
+    if (!useHardcodedId && !metasearchReportId) return;
 
     const storageKey = `master_report_metasearch_gs_migration_${slideReportId}`;
-    if (localStorage.getItem(storageKey) === 'done') {
+    const forceResync = searchParams.get('metasearch_resync') === '1';
+    if (forceResync) {
+      localStorage.removeItem(storageKey);
+    }
+    if (!useHardcodedId && !forceResync && localStorage.getItem(storageKey) === 'done') {
       hasRunMetasearchMigrationRef.current = true;
       return;
     }
@@ -1022,29 +1082,51 @@ export default function SlideViewPage() {
 
     (async () => {
       try {
-        const { data: sources, error: sourcesError } = await supabase
-          .from('data_sources')
-          .select('id, source_type, created_at, last_synced_at')
-          .eq('report_id', metasearchReportId)
-          .order('created_at', { ascending: false });
+        let googleSheetsSource: { id: string; report_id: string; source_type: string } | null = null;
+        let metasearchReportIdForFlow: string;
+        let otherSourceIds: string[] = [];
 
-        if (sourcesError) throw sourcesError;
-
-        const googleSheetsSource = (sources || []).find(
-          (ds: any) => ds.source_type === 'google_sheets'
-        );
-
-        if (!googleSheetsSource) {
-          localStorage.setItem(storageKey, 'done');
-          return;
+        if (useHardcodedId) {
+          const { data: ds, error: dsError } = await supabase
+            .from('data_sources')
+            .select('id, report_id, source_type')
+            .eq('id', METASEARCH_GOOGLE_SHEETS_DATA_SOURCE_ID.trim())
+            .single();
+          if (dsError || !ds) {
+            throw new Error(dsError?.message || 'Hardcoded Metasearch data source not found');
+          }
+          googleSheetsSource = ds as any;
+          metasearchReportIdForFlow = googleSheetsSource.report_id;
+          const { data: allSources } = await supabase
+            .from('data_sources')
+            .select('id')
+            .eq('report_id', metasearchReportIdForFlow);
+          otherSourceIds = (allSources || [])
+            .filter((s: any) => s.id !== googleSheetsSource!.id)
+            .map((s: any) => s.id);
+        } else {
+          metasearchReportIdForFlow = metasearchReportId!;
+          const { data: sources, error: sourcesError } = await supabase
+            .from('data_sources')
+            .select('id, source_type, created_at, last_synced_at, report_id')
+            .eq('report_id', metasearchReportIdForFlow)
+            .order('created_at', { ascending: false });
+          if (sourcesError) throw sourcesError;
+          googleSheetsSource = (sources || []).find((ds: any) => ds.source_type === 'google_sheets') || null;
+          if (!googleSheetsSource) {
+            localStorage.setItem(storageKey, 'done');
+            return;
+          }
+          otherSourceIds = (sources || [])
+            .filter((ds: any) => ds.id !== googleSheetsSource!.id)
+            .map((ds: any) => ds.id);
+          if (!forceResync && googleSheetsSource.last_synced_at && otherSourceIds.length === 0) {
+            localStorage.setItem(storageKey, 'done');
+            return;
+          }
         }
 
-        const otherSourceIds = (sources || [])
-          .filter((ds: any) => ds.id !== googleSheetsSource.id)
-          .map((ds: any) => ds.id);
-
-        // If this Google Sheets source has already been synced and there are no other sources, do nothing.
-        if (googleSheetsSource.last_synced_at && otherSourceIds.length === 0) {
+        if (!googleSheetsSource) {
           localStorage.setItem(storageKey, 'done');
           return;
         }
@@ -1069,24 +1151,19 @@ export default function SlideViewPage() {
           .update({ last_synced_at: new Date().toISOString() })
           .eq('id', googleSheetsSource.id);
 
-        // Remove Metasearch data from older sources so the report uses the new Google Sheets source only.
         if (otherSourceIds.length > 0) {
           const { error: deleteDimError } = await supabase
             .from('dimension_data')
             .delete()
             .in('data_source_id', otherSourceIds);
-
           if (deleteDimError) throw deleteDimError;
-
           const { error: deleteMonthlyError } = await supabase
             .from('monthly_dimension_data')
             .delete()
             .in('data_source_id', otherSourceIds);
-
           if (deleteMonthlyError) throw deleteMonthlyError;
         }
 
-        // Refresh all Master Report channel tables (monthly/year/raw) via edge function.
         const { data: refreshResult, error: refreshError } = await supabase.functions.invoke(
           'refresh-slide-report',
           {
@@ -1096,18 +1173,23 @@ export default function SlideViewPage() {
             },
           }
         );
-
         if (refreshError) throw refreshError;
         if (!refreshResult?.success) {
           throw new Error(refreshResult?.error || 'Master Report refresh failed');
         }
 
-        // Bust caches so UI re-queries the updated tables.
-        queryClient.invalidateQueries({ queryKey: ['cached-dimension-data', metasearchReportId] });
+        queryClient.invalidateQueries({ queryKey: ['cached-dimension-data', metasearchReportIdForFlow] });
         queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
         queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
 
-        localStorage.setItem(storageKey, 'done');
+        if (!useHardcodedId) {
+          localStorage.setItem(storageKey, 'done');
+        }
+        if (forceResync) {
+          const next = new URLSearchParams(searchParams);
+          next.delete('metasearch_resync');
+          setSearchParams(next, { replace: true });
+        }
 
         toast({
           title: 'Metasearch updated',
@@ -1115,7 +1197,7 @@ export default function SlideViewPage() {
         });
       } catch (e: any) {
         console.error('[MASTER-REPORT] Metasearch migration failed:', e);
-        hasRunMetasearchMigrationRef.current = false; // allow retry on next mount
+        hasRunMetasearchMigrationRef.current = false;
         toast({
           title: 'Metasearch update failed',
           description: e?.message || 'Failed to switch Metasearch to Google Sheets',
@@ -1130,6 +1212,8 @@ export default function SlideViewPage() {
     slideReport?.report_ids,
     accountReportIds,
     queryClient,
+    searchParams,
+    setSearchParams,
   ]);
 
   // Sync selectedDimensions from accountReportIds when no saved config yet
@@ -3265,6 +3349,25 @@ export default function SlideViewPage() {
     }
   }, [slideReportId, slideReport, user, accountId, selectedYear, selectedMonth, comparisonType, chartTimeRange, priceCheckChartTimeRange, filterValues, createView, queryClient]);
 
+  // Update an existing view with current filter configuration
+  const handleUpdateView = useCallback(async (viewId: string) => {
+    if (!slideReportId || !user) return;
+    try {
+      await updateView.mutateAsync({
+        id: viewId,
+        selected_year: selectedYear,
+        selected_month: selectedMonth,
+        comparison_type: comparisonType as any,
+        chart_time_range: chartTimeRange,
+        price_check_chart_time_range: priceCheckChartTimeRange,
+        filter_values: { ...filterValues },
+      });
+      queryClient.invalidateQueries({ queryKey: ['slide_report_views', 'list', slideReportId] });
+    } catch (error) {
+      console.error('Error updating view:', error);
+    }
+  }, [slideReportId, user, selectedYear, selectedMonth, comparisonType, chartTimeRange, priceCheckChartTimeRange, filterValues, updateView, queryClient]);
+
   // Apply a saved view (or reset to Master when viewId is null)
   const handleApplyView = useCallback((viewId: string | null) => {
     if (!slideReportId) return;
@@ -3301,8 +3404,87 @@ export default function SlideViewPage() {
       toast({ title: "No report", description: "Please configure your report first.", variant: "destructive" });
       return;
     }
+    setRefreshStep(0);
+    setRefreshStepStatus({ 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'pending' });
+    setRefreshError(null);
     setIsRefreshModalOpen(true);
   }, [slideReportId]);
+
+  // When Refresh Data modal is open and step is 0: resync all data sources, then run refresh-slide-report.
+  useEffect(() => {
+    if (!isRefreshModalOpen || refreshStep !== 0 || !slideReportId || !slideReport) return;
+
+    setRefreshStep(1);
+    setRefreshStepStatus((prev) => ({ ...prev, 1: 'loading' }));
+
+    (async () => {
+      const reportIds = (slideReport.report_ids || {}) as Record<string, string>;
+      const channelReportIds = [
+        reportIds.metasearch,
+        reportIds.sem,
+        reportIds.social,
+      ].filter(Boolean) as string[];
+
+      try {
+        // Step 1: Resync every data source for each channel report
+        const { data: allSources, error: sourcesError } = await supabase
+          .from('data_sources')
+          .select('id, report_id')
+          .in('report_id', channelReportIds);
+
+        if (sourcesError) throw sourcesError;
+
+        const dataSourceIds = (allSources || []).map((ds: any) => ds.id);
+        for (const dataSourceId of dataSourceIds) {
+          const { data: resyncResult, error: resyncError } = await supabase.functions.invoke(
+            'resync-data-source',
+            { body: { dataSourceId } }
+          );
+          if (resyncError) throw resyncError;
+          if (!resyncResult?.success) {
+            throw new Error((resyncResult as any)?.error || `Resync failed for source ${dataSourceId}`);
+          }
+        }
+
+        setRefreshStepStatus((prev) => ({ ...prev, 1: 'complete' }));
+        setRefreshStep(2);
+        setRefreshStepStatus((prev) => ({ ...prev, 2: 'loading', 3: 'loading', 4: 'loading', 5: 'loading' }));
+
+        // Steps 2–5: Refresh slide report (compute pivot, store monthly, breakdowns, update report)
+        const { data: refreshResult, error: refreshErr } = await supabase.functions.invoke(
+          'refresh-slide-report',
+          {
+            body: {
+              slideReportId,
+              years: [2024, 2025, 2026],
+            },
+          }
+        );
+
+        if (refreshErr) throw refreshErr;
+        if (!refreshResult?.success) {
+          throw new Error((refreshResult as any)?.error || 'Refresh failed');
+        }
+
+        setRefreshStepStatus((prev) => ({
+          ...prev,
+          2: 'complete',
+          3: 'complete',
+          4: 'complete',
+          5: 'complete',
+        }));
+
+        queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
+        queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
+        queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
+        queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
+      } catch (e: any) {
+        console.error('[RefreshData]', e);
+        setRefreshError(e?.message || 'Refresh failed');
+        setRefreshStepStatus((prev) => ({ ...prev, 1: prev[1] === 'loading' ? 'error' : prev[1], 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
+      }
+    })();
+  }, [isRefreshModalOpen, refreshStep, slideReportId, slideReport, queryClient]);
 
   // ========== Budget edit handlers ==========
   const handleStartEditBudget = useCallback((month: string, channel: string | null, currentBudget: number) => {
@@ -3496,6 +3678,14 @@ export default function SlideViewPage() {
   // ========== JSX Return ==========
   return (
     <div className="min-h-screen bg-background">
+      {/* Data Studio: full-page loading while fetching from all sources */}
+      {isDataStudioLoading && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-background/95">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="text-lg font-medium">Fetching latest data from all sources…</p>
+          <p className="text-sm text-muted-foreground">This may take a minute.</p>
+        </div>
+      )}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
         {/* Header */}
         <SlideViewHeader
@@ -3785,13 +3975,13 @@ export default function SlideViewPage() {
       <SaveOrUpdateViewDialog
         open={isSaveOrUpdateViewDialogOpen}
         onOpenChange={setIsSaveOrUpdateViewDialogOpen}
-        onSaveNew={(name: string) => handleSaveView(name)}
-        onUpdateExisting={() => {
-          if (selectedViewId) {
-            // Update existing view logic
-          }
+        onSaveNew={() => {
+          setIsSaveOrUpdateViewDialogOpen(false);
+          setIsSaveViewDialogOpen(true);
         }}
-        existingViewName={views.find(v => v.id === selectedViewId)?.name}
+        onUpdate={handleUpdateView}
+        availableViews={availableViews}
+        currentViewId={selectedViewId}
       />
     </div>
   );

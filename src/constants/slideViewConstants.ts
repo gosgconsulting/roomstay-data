@@ -40,3 +40,9 @@ export const CHANNEL_REPORT_IDS: Record<string, string> = {
   sem: '3b2a0e45-33be-4eec-911e-b955b951c84e',
   social: '8c2f7db9-acbd-4c59-9593-74e8953e7787',
 };
+
+/**
+ * Master report metasearch: use this Google Sheets data source and always resync it when loading master report.
+ * Set to the data_sources.id (UUID) of the new Metasearch Google Sheet. Leave empty to use dynamic "newest" lookup.
+ */
+export const METASEARCH_GOOGLE_SHEETS_DATA_SOURCE_ID = '';

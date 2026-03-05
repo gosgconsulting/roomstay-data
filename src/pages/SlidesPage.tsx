@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { SlideListItem } from "@/components/slides/SlideListItem";
 import { CreateChildReportModal } from "@/components/slides/CreateChildReportModal";
 import { useSlides, useDeleteSlide, useRefreshSlideData } from "@/hooks/useSlides";
-import { useSlideReports, useDeleteSlideReport } from "@/hooks/useSlideReports";
+import { useSlideReports, useDeleteSlideReport, useCreateSlideReport } from "@/hooks/useSlideReports";
 import { SlideReport } from "@/types/slideReports";
 import {
   AlertDialog,
@@ -56,6 +56,7 @@ export default function SlidesPage() {
   const deleteSlide = useDeleteSlide();
   const refreshSlideData = useRefreshSlideData();
   const deleteSlideReport = useDeleteSlideReport();
+  const createSlideReport = useCreateSlideReport();
 
   useEffect(() => {
     checkAuth();
@@ -108,6 +109,28 @@ export default function SlidesPage() {
     
     cleanupDuplicateMasterReports();
   }, [slideReports, slideReportsLoading, session, accountId, cleanupDone]);
+
+  // Ensure Data Studio report exists (duplicate of Master Report with same filters; loads from sources each time)
+  const [dataStudioCreateAttempted, setDataStudioCreateAttempted] = useState(false);
+  useEffect(() => {
+    if (!accountId || !session || slideReportsLoading || dataStudioCreateAttempted) return;
+    const master = slideReports?.find(r => r.name === 'Master Report');
+    const dataStudio = slideReports?.find(r => r.name === 'Data Studio');
+    if (!master || dataStudio) {
+      setDataStudioCreateAttempted(true);
+      return;
+    }
+    setDataStudioCreateAttempted(true);
+    createSlideReport.mutate({
+      name: 'Data Studio',
+      account_id: accountId,
+      user_id: session.user.id,
+      configuration: master.configuration || undefined,
+      report_ids: master.report_ids || undefined,
+      date_range: master.date_range || undefined,
+      description: 'Same filters as Master Report; fetches data directly from all sources each time.',
+    });
+  }, [accountId, session, slideReports, slideReportsLoading, dataStudioCreateAttempted, createSlideReport]);
 
   const checkAuth = async () => {
     try {
@@ -222,22 +245,24 @@ export default function SlidesPage() {
 
   // Get master report for child report creation
   const masterReport = slideReports?.find(r => r.name === 'Master Report') || null;
+  const dataStudioReport = slideReports?.find(r => r.name === 'Data Studio') || null;
 
   const handleViewSlideReport = (report: SlideReport) => {
-    // Generate slug from report name
+    if (report.name === 'Master Report') {
+      navigate(`/tools/reports/${accountId}/master-report`);
+      return;
+    }
+    if (report.name === 'Data Studio') {
+      navigate(`/tools/reports/${accountId}/data-studio?reportId=${report.id}`);
+      return;
+    }
     const slug = report.name
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, "")
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
       .substring(0, 50);
-    
-    // For master report, use master-report slug
-    if (report.name === 'Master Report') {
-      navigate(`/tools/reports/${accountId}/master-report`);
-    } else {
-      navigate(`/tools/reports/${accountId}/${slug}?reportId=${report.id}`);
-    }
+    navigate(`/tools/reports/${accountId}/${slug}?reportId=${report.id}`);
   };
 
   const handleDeleteSlideReport = (report: SlideReport) => {
@@ -348,9 +373,30 @@ export default function SlidesPage() {
               </div>
             </Card>
 
-            {/* Other Reports Dropdown - Filter out Master Report */}
+            {/* Data Studio Card - Same filters as Master; fetches from sources each time */}
+            {dataStudioReport && (
+              <Card 
+                className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" 
+                onClick={() => handleViewSlideReport(dataStudioReport)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Database className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">Data Studio</h3>
+                      <p className="text-sm text-muted-foreground">Same filters as Master • Fetches directly from all sources each time</p>
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm">View Report</Button>
+                </div>
+              </Card>
+            )}
+
+            {/* Other Reports Dropdown - Filter out Master Report and Data Studio */}
             {(() => {
-              const otherReports = slideReports.filter(r => r.name !== 'Master Report');
+              const otherReports = slideReports.filter(r => r.name !== 'Master Report' && r.name !== 'Data Studio');
               if (slideReportsLoading) {
                 return (
                   <div className="text-center py-4">
