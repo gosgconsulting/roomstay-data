@@ -991,9 +991,8 @@ export default function SlideViewPage() {
     if (!isDataStudio || !slideReportId || !slideReport || dataStudioLoadDoneRef.current) return;
     dataStudioLoadDoneRef.current = true;
 
-    // Don't block the UI — data is already loaded from cached pivot_data via useSlideReportPage.
-    // Background refresh: resync all data sources (stores ALL raw rows in dimension_data).
-    // No refresh-slide-report needed — Data Studio reads raw rows directly.
+    // Background refresh: resync all data sources then recompute pivot data from fresh source.
+    // This ensures KPI cards, charts, and breakdown tables all use the latest data.
     setDataStudioRefreshStatus('refreshing');
 
     const reportIds = (slideReport.report_ids || {}) as Record<string, string>;
@@ -1001,6 +1000,7 @@ export default function SlideViewPage() {
 
     (async () => {
       try {
+        // Step 1: Resync all data sources (fetch fresh data from Google Sheets/CSV)
         const { data: allSources, error: sourcesError } = await supabase
           .from('data_sources')
           .select('id, report_id')
@@ -1017,7 +1017,26 @@ export default function SlideViewPage() {
           console.warn(`[Data Studio] ${failedResyncs.length}/${resyncResults.length} resyncs failed, continuing...`);
         }
 
-        // Invalidate caches to pick up fresh raw data (no pivot aggregation needed)
+        // Step 2: Recompute pivot data from fresh source data so KPI cards/charts are accurate
+        try {
+          const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
+          const pivotData = await computeSlideReportPivotData(
+            slideReport.report_ids as unknown as Record<string, string>,
+            slideReport.configuration as unknown as SlideReportConfiguration,
+            slideReport.date_range as unknown as SlideReportDateRange
+          );
+          await supabase
+            .from("slide_reports")
+            .update({
+              pivot_data: pivotData as any,
+              last_refreshed_at: new Date().toISOString(),
+            })
+            .eq("id", slideReportId);
+        } catch (pivotErr) {
+          console.warn('[Data Studio] Pivot recompute failed, using breakdown fallback:', pivotErr);
+        }
+
+        // Step 3: Invalidate all caches to pick up fresh data
         queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
         queryClient.invalidateQueries({ queryKey: ['data-studio-raw-rows'] });
         queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
@@ -1032,7 +1051,6 @@ export default function SlideViewPage() {
       } catch (e: any) {
         console.error('[Data Studio] Background refresh failed:', e);
         setDataStudioRefreshStatus('error');
-        // Don't show a destructive toast — cached data is still visible
         toast({
           title: 'Background refresh failed',
           description: 'Showing cached data. Try "Refresh Data" to retry.',
