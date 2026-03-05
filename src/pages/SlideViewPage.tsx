@@ -3798,6 +3798,7 @@ export default function SlideViewPage() {
         setRefreshStepStatus={setRefreshStepStatus}
         refreshError={refreshError}
         setRefreshError={setRefreshError}
+        isDataStudio={isDataStudio}
       />
 
       {isDataModalOpen && slideReportId && (
