@@ -28,6 +28,7 @@ export function UnifiedDataSourceModal({
   const [csvUrl, setCsvUrl] = useState("");
   const [tabName, setTabName] = useState("");
   const [headerRow, setHeaderRow] = useState("1");
+  const [currency, setCurrency] = useState<"AUD" | "USD">("AUD");
   const [isLoading, setIsLoading] = useState(false);
 
   // Reset form when modal opens/closes or source type changes
@@ -38,6 +39,7 @@ export function UnifiedDataSourceModal({
       setCsvUrl("");
       setTabName("");
       setHeaderRow("1");
+      setCurrency("AUD");
     }
   }, [open, sourceType]);
 
@@ -128,6 +130,7 @@ export function UnifiedDataSourceModal({
         name: name.trim(),
         source_type: sourceType,
         header_row: parseInt(headerRow),
+        currency: currency,
       };
 
       if (sourceType === 'google_sheets') {
@@ -265,6 +268,22 @@ export function UnifiedDataSourceModal({
             </Select>
             <p className="text-sm text-muted-foreground mt-1">
               The row number where your column headers are located.
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="currency">Currency</Label>
+            <Select value={currency} onValueChange={(v: "AUD" | "USD") => setCurrency(v)} disabled={isLoading}>
+              <SelectTrigger id="currency">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="AUD">AUD</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground mt-1">
+              Currency of cost and revenue values in this source. Used for report conversion.
             </p>
           </div>
         </div>

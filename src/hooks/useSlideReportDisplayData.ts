@@ -42,9 +42,10 @@ function convertMetricData(
   channel: ChannelKey,
   m: MetricData & { cpc?: number; roas?: number; costOfSale?: number },
   to: CurrencyCode,
-  audPerUsd: number
+  audPerUsd: number,
+  fromCurrency?: CurrencyCode
 ): MetricData & { cpc?: number; roas?: number; costOfSale?: number } {
-  const from = getChannelBaseCurrency(channel);
+  const from: CurrencyCode = fromCurrency ?? getChannelBaseCurrency(channel);
   const factorConvertedCost = convertAmount(1, from, to, audPerUsd);
   const factor = from === to ? 1 : factorConvertedCost;
 
@@ -63,9 +64,10 @@ function convertBreakdownRow(
   channel: ChannelKey,
   row: DisplayDataBreakdownRow,
   to: CurrencyCode,
-  audPerUsd: number
+  audPerUsd: number,
+  fromCurrency?: CurrencyCode
 ): DisplayDataBreakdownRow {
-  const from = getChannelBaseCurrency(channel);
+  const from: CurrencyCode = fromCurrency ?? getChannelBaseCurrency(channel);
   const factorConvertedCost = convertAmount(1, from, to, audPerUsd);
   const factor = from === to ? 1 : factorConvertedCost;
 
@@ -83,10 +85,17 @@ function convertRevenuePointByChannel(
   channel: ChannelKey,
   value: number,
   to: CurrencyCode,
-  audPerUsd: number
+  audPerUsd: number,
+  fromCurrency?: CurrencyCode
 ): number {
-  const from = getChannelBaseCurrency(channel);
+  const from: CurrencyCode = fromCurrency ?? getChannelBaseCurrency(channel);
   return convertAmount(value ?? 0, from, to, audPerUsd);
+}
+
+/** Resolve source currency for a channel: API-provided or fallback by channel name. */
+function getSourceCurrency(ch: ChannelKey, channelSourceCurrency?: Record<string, string> | null): CurrencyCode {
+  const raw = channelSourceCurrency?.[ch];
+  return raw === 'USD' || raw === 'AUD' ? raw : getChannelBaseCurrency(ch);
 }
 
 function convertApiResponse(
@@ -95,11 +104,13 @@ function convertApiResponse(
   audPerUsd: number,
   breakdownChannel?: ChannelKey | null
 ): GetSlideReportDisplayDataResponse {
+  const sourceCurrencies = res.channel_source_currency;
+
   const channelTotals = { ...res.channel_totals };
   (['metasearch', 'sem', 'social'] as const).forEach((ch) => {
     const current = channelTotals[ch];
     if (current) {
-      channelTotals[ch] = convertMetricData(ch, current, to, audPerUsd);
+      channelTotals[ch] = convertMetricData(ch, current, to, audPerUsd, getSourceCurrency(ch, sourceCurrencies));
     }
   });
 
@@ -109,7 +120,7 @@ function convertApiResponse(
         (['metasearch', 'sem', 'social'] as const).forEach((ch) => {
           const current = out?.[ch];
           if (current) {
-            out[ch] = convertMetricData(ch, current, to, audPerUsd);
+            out[ch] = convertMetricData(ch, current, to, audPerUsd, getSourceCurrency(ch, sourceCurrencies));
           }
         });
         return out;
@@ -118,25 +129,25 @@ function convertApiResponse(
 
   const monthlyData: MonthlyDataPoint[] = (res.monthly_data || []).map((m) => ({
     ...m,
-    metasearch: convertRevenuePointByChannel('metasearch', m.metasearch ?? 0, to, audPerUsd),
-    sem: convertRevenuePointByChannel('sem', m.sem ?? 0, to, audPerUsd),
-    social: convertRevenuePointByChannel('social', m.social ?? 0, to, audPerUsd),
+    metasearch: convertRevenuePointByChannel('metasearch', m.metasearch ?? 0, to, audPerUsd, getSourceCurrency('metasearch', sourceCurrencies)),
+    sem: convertRevenuePointByChannel('sem', m.sem ?? 0, to, audPerUsd, getSourceCurrency('sem', sourceCurrencies)),
+    social: convertRevenuePointByChannel('social', m.social ?? 0, to, audPerUsd, getSourceCurrency('social', sourceCurrencies)),
   }));
 
   const monthly_channel_metrics = res.monthly_channel_metrics
     ? res.monthly_channel_metrics.map((p) => ({
         ...p,
         metasearch: {
-          cost: convertRevenuePointByChannel('metasearch', p.metasearch?.cost ?? 0, to, audPerUsd),
-          revenue: convertRevenuePointByChannel('metasearch', p.metasearch?.revenue ?? 0, to, audPerUsd),
+          cost: convertRevenuePointByChannel('metasearch', p.metasearch?.cost ?? 0, to, audPerUsd, getSourceCurrency('metasearch', sourceCurrencies)),
+          revenue: convertRevenuePointByChannel('metasearch', p.metasearch?.revenue ?? 0, to, audPerUsd, getSourceCurrency('metasearch', sourceCurrencies)),
         },
         sem: {
-          cost: convertRevenuePointByChannel('sem', p.sem?.cost ?? 0, to, audPerUsd),
-          revenue: convertRevenuePointByChannel('sem', p.sem?.revenue ?? 0, to, audPerUsd),
+          cost: convertRevenuePointByChannel('sem', p.sem?.cost ?? 0, to, audPerUsd, getSourceCurrency('sem', sourceCurrencies)),
+          revenue: convertRevenuePointByChannel('sem', p.sem?.revenue ?? 0, to, audPerUsd, getSourceCurrency('sem', sourceCurrencies)),
         },
         social: {
-          cost: convertRevenuePointByChannel('social', p.social?.cost ?? 0, to, audPerUsd),
-          revenue: convertRevenuePointByChannel('social', p.social?.revenue ?? 0, to, audPerUsd),
+          cost: convertRevenuePointByChannel('social', p.social?.cost ?? 0, to, audPerUsd, getSourceCurrency('social', sourceCurrencies)),
+          revenue: convertRevenuePointByChannel('social', p.social?.revenue ?? 0, to, audPerUsd, getSourceCurrency('social', sourceCurrencies)),
         },
       }))
     : res.monthly_channel_metrics;
@@ -145,12 +156,13 @@ function convertApiResponse(
   const breakdowns = res.breakdowns
     ? (() => {
         const inferredChannel: ChannelKey = breakdownChannel ?? 'sem';
-        const rows = (res.breakdowns?.rows || []).map((r) => convertBreakdownRow(inferredChannel, r, to, audPerUsd));
+        const fromCur = getSourceCurrency(inferredChannel, sourceCurrencies);
+        const rows = (res.breakdowns?.rows || []).map((r) => convertBreakdownRow(inferredChannel, r, to, audPerUsd, fromCur));
         const expanded = res.breakdowns?.expanded
           ? Object.fromEntries(
               Object.entries(res.breakdowns.expanded).map(([k, v]) => [
                 k,
-                (v || []).map((r) => convertBreakdownRow(inferredChannel, r, to, audPerUsd)),
+                (v || []).map((r) => convertBreakdownRow(inferredChannel, r, to, audPerUsd, fromCur)),
               ])
             )
           : res.breakdowns?.expanded;
