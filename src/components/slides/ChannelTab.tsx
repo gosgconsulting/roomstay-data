@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { JAN_2026_BREAKDOWN_DIMENSIONS } from "@/hooks/useMetasearchJan2026RawRows";
+import { formatNumber } from "@/lib/slideViewHelpers";
 import { AISummaryButton } from "./AISummaryButton";
 import { AISummaryDisplay } from "./AISummaryDisplay";
 
@@ -143,7 +144,7 @@ export function ChannelTab({
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
                     <Tooltip 
-                      formatter={(value: number) => [`$${value.toLocaleString()}`, 'Revenue']}
+                      formatter={(value: number) => [formatNumber(value, 'currency', displayCurrency), 'Revenue']}
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                     />
                     <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fill={`url(#${gradientId})`} />

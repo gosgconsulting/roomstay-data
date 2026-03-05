@@ -661,10 +661,12 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
                       {group.metrics.conversionRate.toFixed(2)}%
                     </TableCell>
                     <TableCell className="text-right">
-                      $
-                      {group.metrics.cpc < 0.01
-                        ? group.metrics.cpc.toFixed(4)
-                        : group.metrics.cpc.toFixed(2)}
+                      {formatNumber(
+                        group.metrics.cpc,
+                        'currency',
+                        undefined,
+                        group.metrics.cpc < 0.01 ? 4 : 2
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {formatNumber(group.metrics.cost, 'currency')}
@@ -712,10 +714,12 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
                             {item.metrics.conversionRate.toFixed(2)}%
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            $
-                            {item.metrics.cpc < 0.01
-                              ? item.metrics.cpc.toFixed(4)
-                              : item.metrics.cpc.toFixed(2)}
+                            {formatNumber(
+                              item.metrics.cpc,
+                              'currency',
+                              undefined,
+                              item.metrics.cpc < 0.01 ? 4 : 2
+                            )}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {formatNumber(item.metrics.cost, 'currency')}
@@ -756,7 +760,12 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
                   {totalMetrics.conversionRate.toFixed(2)}%
                 </TableCell>
                 <TableCell className="text-right">
-                  ${totalMetrics.cpc < 0.01 ? totalMetrics.cpc.toFixed(4) : totalMetrics.cpc.toFixed(2)}
+                  {formatNumber(
+                    totalMetrics.cpc,
+                    'currency',
+                    undefined,
+                    totalMetrics.cpc < 0.01 ? 4 : 2
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   {formatNumber(totalMetrics.cost, 'currency')}

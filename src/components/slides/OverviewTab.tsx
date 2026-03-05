@@ -275,7 +275,7 @@ export function OverviewTab({
                                 <TableCell className="text-right">{row.ctr.toFixed(2)}%</TableCell>
                                 <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
                                 <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
-                                <TableCell className="text-right">${row.cpc.toFixed(2)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(row.cpc, 'currency', undefined, 2)}</TableCell>
                                 <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
                                 <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
                                 <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
@@ -294,7 +294,7 @@ export function OverviewTab({
                                 <TableCell className="text-right">{totalDerived.ctr.toFixed(2)}%</TableCell>
                                 <TableCell className="text-right">{totalDerived.bookings.toFixed(2)}</TableCell>
                                 <TableCell className="text-right">{totalDerived.conversionRate.toFixed(2)}%</TableCell>
-                                <TableCell className="text-right">${totalDerived.cpc.toFixed(2)}</TableCell>
+                                <TableCell className="text-right">{formatNumber(totalDerived.cpc, 'currency', undefined, 2)}</TableCell>
                                 <TableCell className="text-right">{formatNumber(totalDerived.cost, 'currency')}</TableCell>
                                 <TableCell className="text-right">{formatNumber(totalDerived.revenue, 'currency')}</TableCell>
                                 <TableCell className="text-right">{totalDerived.roas.toFixed(1)}x</TableCell>
