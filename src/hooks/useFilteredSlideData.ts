@@ -318,6 +318,7 @@ export function useFilteredSlideData({
           if (months && months.length > 0 && selectedYear !== 'all') {
             // Multi-month: aggregate across all selected months
             const agg: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            let foundPreComputed = false;
             for (const m of months) {
               const mk = `${selectedYear}-${m.toString().padStart(2, '0')}`;
               const md = (channelData as any).monthly?.[mk];
@@ -327,6 +328,7 @@ export function useFilteredSlideData({
                 agg.cost += md.cost || 0;
                 agg.revenue += md.revenue || 0;
                 agg.bookings += md.bookings || 0;
+                foundPreComputed = true;
               } else {
                 // Fallback 1: aggregate from monthlyBreakdowns for this month key
                 const monthlyBreakdowns = (channelData as any).monthlyBreakdowns as Record<string, Record<string, any[]>> | undefined;
@@ -340,46 +342,63 @@ export function useFilteredSlideData({
                       agg.cost += summed.cost;
                       agg.revenue += summed.revenue;
                       agg.bookings += summed.bookings;
+                      foundPreComputed = true;
                       break; // Only use one dimension to avoid double-counting
                     }
                   }
                 }
               }
             }
-            // If month-level aggregation yielded no data, try fallbacks
-            if (agg.impressions === 0 && agg.clicks === 0 && agg.cost === 0 && agg.revenue === 0 && agg.bookings === 0) {
-              // Fallback 2: aggregate from all-time breakdowns (matches BreakdownTableSection behavior)
-              const allTimeBreakdowns = (channelData as any).breakdowns as Record<string, BreakdownRowLike[]> | undefined;
-              if (allTimeBreakdowns) {
-                for (const dimRows of Object.values(allTimeBreakdowns)) {
-                  if (Array.isArray(dimRows) && dimRows.length > 0) {
-                    const summed = sumBreakdownRows(dimRows);
-                    if (summed.impressions > 0 || summed.clicks > 0 || summed.cost > 0 || summed.revenue > 0 || summed.bookings > 0) {
-                      channelTotals[channel] = summed;
-                      break;
+
+            // If pre-computed data yielded results, use them
+            if (foundPreComputed && (agg.impressions > 0 || agg.clicks > 0 || agg.cost > 0 || agg.revenue > 0 || agg.bookings > 0)) {
+              channelTotals[channel] = agg;
+            } else if (rawDataRows.length > 0) {
+              // Fallback 2: Aggregate directly from rawDataRows with date filtering
+              // This matches BreakdownTableSection behavior and handles cases where
+              // pre-computed monthly data hasn't been synced yet (e.g. 2026 data)
+              const minMonth = Math.min(...months);
+              const maxMonth = Math.max(...months);
+              const yearNum = parseInt(selectedYear);
+              const rawDateRange = {
+                start: new Date(yearNum, minMonth - 1, 1),
+                end: new Date(yearNum, maxMonth, 0, 23, 59, 59),
+              };
+              const dateFilteredRows = filterRawDataRows(rawDataRows, {}, rawDateRange);
+              if (dateFilteredRows.length > 0) {
+                const dimensionMap = (channelData as any).dimensionMap || {};
+                const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+                const rawAgg: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                dateFilteredRows.forEach((row) => {
+                  const rowData = row.dimension_values || row;
+                  const getVal = (keys: string[]): number => {
+                    for (const key of keys) {
+                      const v = (rowData as any)[key];
+                      if (v !== undefined && v !== null) {
+                        const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+                        if (!isNaN(n)) return n;
+                      }
                     }
-                  }
-                }
-                if (!channelTotals[channel]) {
-                  // Fallback 3: yearly data
-                  const yearlyData = (channelData as any).yearly?.[selectedYear];
-                  if (yearlyData) {
-                    channelTotals[channel] = yearlyData;
-                  } else {
-                    // Fallback 4: current (date-range totals)
-                    channelTotals[channel] = (channelData as any).current || agg;
-                  }
-                }
+                    return 0;
+                  };
+                  rawAgg.impressions += getVal(getMetricKeys('impressions', nameToIdsMap));
+                  rawAgg.clicks += getVal(getMetricKeys('clicks', nameToIdsMap));
+                  rawAgg.cost += getVal(getMetricKeys('cost', nameToIdsMap));
+                  rawAgg.revenue += getVal(getMetricKeys('revenue', nameToIdsMap));
+                  rawAgg.bookings += getVal(getMetricKeys('bookings', nameToIdsMap));
+                });
+                channelTotals[channel] = rawAgg;
               } else {
-                const yearlyData = (channelData as any).yearly?.[selectedYear];
-                if (yearlyData) {
-                  channelTotals[channel] = yearlyData;
-                } else {
-                  channelTotals[channel] = (channelData as any).current || agg;
-                }
+                channelTotals[channel] = agg;
               }
             } else {
-              channelTotals[channel] = agg;
+              // Fallback 3: yearly or current
+              const yearlyData = (channelData as any).yearly?.[selectedYear];
+              if (yearlyData && (yearlyData.impressions > 0 || yearlyData.clicks > 0 || yearlyData.cost > 0 || yearlyData.revenue > 0 || yearlyData.bookings > 0)) {
+                channelTotals[channel] = yearlyData;
+              } else {
+                channelTotals[channel] = (channelData as any).current || agg;
+              }
             }
           } else {
             const currentData = (channelData as any).current || {
@@ -396,25 +415,41 @@ export function useFilteredSlideData({
           const yearlyData = (channelData as any).yearly?.[String(yearNum)];
           if (yearlyData && (yearlyData.impressions > 0 || yearlyData.clicks > 0 || yearlyData.cost > 0 || yearlyData.revenue > 0 || yearlyData.bookings > 0)) {
             channelTotals[channel] = yearlyData;
-          } else {
-            // Fallback: try all-time breakdowns or current
-            const allTimeBreakdowns = (channelData as any).breakdowns as Record<string, BreakdownRowLike[]> | undefined;
-            let found = false;
-            if (allTimeBreakdowns) {
-              for (const dimRows of Object.values(allTimeBreakdowns)) {
-                if (Array.isArray(dimRows) && dimRows.length > 0) {
-                  const summed = sumBreakdownRows(dimRows);
-                  if (summed.impressions > 0 || summed.clicks > 0 || summed.cost > 0 || summed.revenue > 0 || summed.bookings > 0) {
-                    channelTotals[channel] = summed;
-                    found = true;
-                    break;
+          } else if (rawDataRows.length > 0) {
+            // Fallback: Aggregate from rawDataRows with year-only date filtering
+            const rawDateRange = {
+              start: new Date(yearNum, 0, 1),
+              end: new Date(yearNum, 11, 31, 23, 59, 59),
+            };
+            const dateFilteredRows = filterRawDataRows(rawDataRows, {}, rawDateRange);
+            if (dateFilteredRows.length > 0) {
+              const dimensionMap = (channelData as any).dimensionMap || {};
+              const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+              const rawAgg: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              dateFilteredRows.forEach((row) => {
+                const rowData = row.dimension_values || row;
+                const getVal = (keys: string[]): number => {
+                  for (const key of keys) {
+                    const v = (rowData as any)[key];
+                    if (v !== undefined && v !== null) {
+                      const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+                      if (!isNaN(n)) return n;
+                    }
                   }
-                }
-              }
-            }
-            if (!found) {
+                  return 0;
+                };
+                rawAgg.impressions += getVal(getMetricKeys('impressions', nameToIdsMap));
+                rawAgg.clicks += getVal(getMetricKeys('clicks', nameToIdsMap));
+                rawAgg.cost += getVal(getMetricKeys('cost', nameToIdsMap));
+                rawAgg.revenue += getVal(getMetricKeys('revenue', nameToIdsMap));
+                rawAgg.bookings += getVal(getMetricKeys('bookings', nameToIdsMap));
+              });
+              channelTotals[channel] = rawAgg;
+            } else {
               channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
             }
+          } else {
+            channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
           }
         } else {
           channelTotals[channel] =
