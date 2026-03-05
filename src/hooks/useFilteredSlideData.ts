@@ -314,25 +314,22 @@ export function useFilteredSlideData({
         filteredRawRows[channel] = rawDataRows; // Store all rows for consistency
 
         if (selectedMonth && selectedMonth !== 'all') {
-          const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
-          const monthKey =
-            selectedYear !== 'all'
-              ? `${selectedYear}-${monthNum.toString().padStart(2, '0')}`
-              : null;
-
-          if (monthKey) {
-            const monthlyData = (channelData as any).monthly?.[monthKey];
-            if (monthlyData) {
-              channelTotals[channel] = monthlyData;
-            } else {
-              channelTotals[channel] = {
-                impressions: 0,
-                clicks: 0,
-                cost: 0,
-                revenue: 0,
-                bookings: 0,
-              };
+          const months = parseSelectedMonths(selectedMonth);
+          if (months && months.length > 0 && selectedYear !== 'all') {
+            // Multi-month: aggregate across all selected months
+            const agg: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            for (const m of months) {
+              const mk = `${selectedYear}-${m.toString().padStart(2, '0')}`;
+              const md = (channelData as any).monthly?.[mk];
+              if (md) {
+                agg.impressions += md.impressions || 0;
+                agg.clicks += md.clicks || 0;
+                agg.cost += md.cost || 0;
+                agg.revenue += md.revenue || 0;
+                agg.bookings += md.bookings || 0;
+              }
             }
+            channelTotals[channel] = agg;
           } else {
             const currentData = (channelData as any).current || {
               impressions: 0,
