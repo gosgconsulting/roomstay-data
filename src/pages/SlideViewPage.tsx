@@ -3004,9 +3004,6 @@ export default function SlideViewPage() {
     setSelectedValueDimensionIds([]);
   };
 
-  // (Removed) Preloading all channel values on Step 2 -> Step 3.
-  // We now load values lazily when the user selects a dimension in Step 4 (Data Source).
-
   // Background loader for filter dimension values after saving configuration
   const loadFilterDimensionValuesAfterSave = useCallback(
     async (
@@ -3243,7 +3240,7 @@ export default function SlideViewPage() {
         name: viewName,
         selected_year: selectedYear,
         selected_month: selectedMonth,
-        comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
+        comparison_type: comparisonType as any,
         chart_time_range: chartTimeRange,
         price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues }, // Deep copy to avoid mutations
@@ -3268,22 +3265,32 @@ export default function SlideViewPage() {
     }
   }, [slideReportId, slideReport, user, accountId, selectedYear, selectedMonth, comparisonType, chartTimeRange, priceCheckChartTimeRange, filterValues, createView, queryClient]);
 
-  // Update an existing view
-  const handleUpdateView = useCallback(async (viewId: string) => {
-    if (!slideReportId || !slideReport || !user) {
-      toast({
-        title: "Error",
-        description: "No report selected. Please configure your report first.",
-        variant: "destructive",
-      });
+  // Apply a saved view (or reset to Master when viewId is null)
+  const handleApplyView = useCallback((viewId: string | null) => {
+    if (!slideReportId) return;
+
+    const emptyFilters: Record<string, Record<string, string[]>> = {
+      metasearch: {},
+      sem: {},
+      social: {},
+      'price-check': {},
+      booking: {},
+    };
+
+    // Reset to Master (no saved view)
+    if (viewId === null) {
+      isApplyingViewRef.current = true;
+      setSelectedViewId(null);
+      setFilterValues(emptyFilters);
+      setComparisonType('none');
+      setTimeout(() => {
+        isApplyingViewRef.current = false;
+      }, 0);
       return;
     }
 
-    try {
-      await updateView.mutateAsync({
-        id: viewId,
-        selected_year: selectedYear,
-        selected_month: selectedMonth,
-        comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
-        chart_time_range: chartTimeRange,
-        price_check_chart_time
+    const view = views.find(v => v.id === viewId);
+    if (!view) return;
+
+    isApplyingViewRef.current = true;
+    setSelectedView
