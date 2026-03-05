@@ -200,7 +200,7 @@ export const DatePresetPicker = React.memo<DatePresetPickerProps>(
                 <div className="p-2">
                   <Calendar
                     mode="range"
-                    selected={customRange.from && customRange.to ? { from: customRange.from, to: customRange.to } : undefined}
+                    selected={customRange.from ? { from: customRange.from, to: customRange.to } : undefined}
                     onSelect={(range) => {
                       setCustomRange({ from: range?.from, to: range?.to });
                     }}
