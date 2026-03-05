@@ -146,13 +146,16 @@ const UnifiedBreakdownTable = ({
     }
   }, [availableDimensions, groupBy, breakdownBy, onGroupByChange, onBreakdownByChange]);
 
-  // Build monthKey for filtering by selected year/month
+  // Build monthKey for filtering by selected year/month (supports multi-month)
   const monthKey = useMemo(() => {
     if (!selectedYear || selectedYear === 'all' || !selectedMonth || selectedMonth === 'all') {
       return null; // Use aggregated data
     }
+    // Only return a single monthKey if exactly one month is selected
+    const months = selectedMonth.split(',').map(m => m.trim());
+    if (months.length !== 1) return null;
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const monthNum = monthNames.indexOf(selectedMonth) + 1;
+    const monthNum = monthNames.indexOf(months[0]) + 1;
     return `${selectedYear}-${monthNum.toString().padStart(2, '0')}`;
   }, [selectedYear, selectedMonth]);
 
@@ -1373,8 +1376,10 @@ export default function SlideViewPage() {
     }
 
     if (selectedMonth !== 'all') {
-      const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
-      filteredRecords = filteredRecords.filter(r => r.month === monthNum);
+      const months = selectedMonth.split(',').map(m => MONTH_NAMES.indexOf(m.trim()) + 1).filter(n => n > 0);
+      if (months.length > 0) {
+        filteredRecords = filteredRecords.filter(r => months.includes(r.month));
+      }
     }
 
     // Aggregate metrics by channel
