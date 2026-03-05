@@ -3681,9 +3681,9 @@ export default function SlideViewPage() {
               filteredData={filteredData}
               slideType={slideType}
               KPI_CARDS={KPI_CARDS}
-              onAISummaryClick={() => setIsAISummaryModalOpen(true)}
+              onAISummaryClick={slideType !== 'master-report' ? () => setIsAISummaryModalOpen(true) : undefined}
               isAISummaryDisabled={!slideReportId}
-              summaryText={overviewSummary?.summary_text || null}
+              summaryText={slideType !== 'master-report' ? (overviewSummary?.summary_text || null) : null}
             />
           </TabsContent>
 
@@ -3720,9 +3720,9 @@ export default function SlideViewPage() {
                 getChannelComparisonMetrics={getChannelComparisonMetrics}
                 setBreakdownTotals={setBreakdownTotals}
                 UnifiedBreakdownTable={UnifiedBreakdownTable}
-                onAISummaryClick={() => setIsAISummaryModalOpen(true)}
+                onAISummaryClick={slideType !== 'master-report' ? () => setIsAISummaryModalOpen(true) : undefined}
                 isAISummaryDisabled={!slideReportId}
-                summaryText={channel === 'metasearch' ? metasearchSummary?.summary_text : channel === 'sem' ? semSummary?.summary_text : socialSummary?.summary_text}
+                summaryText={slideType !== 'master-report' ? (channel === 'metasearch' ? metasearchSummary?.summary_text : channel === 'sem' ? semSummary?.summary_text : socialSummary?.summary_text) : null}
                 displayCurrency={slideType === 'master-report' ? displayCurrency : undefined}
               />
             </TabsContent>
