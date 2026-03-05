@@ -371,10 +371,11 @@ export const formatNumber = (
     const effectiveCurrency: 'USD' | 'AUD' = currency ?? (stored === 'AUD' || stored === 'USD' ? stored : 'USD');
 
     const maxFrac = currencyMaxFractionDigits ?? 0;
+    const minFrac = maxFrac > 0 ? maxFrac : 0;
     if (effectiveCurrency === 'AUD') {
       // Explicit "AU$" prefix for AUD (not "$" or "A$")
       const numberPart = new Intl.NumberFormat('en-AU', {
-        minimumFractionDigits: 0,
+        minimumFractionDigits: minFrac,
         maximumFractionDigits: maxFrac,
         useGrouping: true,
       }).format(value);
@@ -383,7 +384,7 @@ export const formatNumber = (
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: effectiveCurrency,
-      minimumFractionDigits: 0,
+      minimumFractionDigits: minFrac,
       maximumFractionDigits: maxFrac,
     }).format(value);
   }
