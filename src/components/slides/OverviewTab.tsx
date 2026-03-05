@@ -287,7 +287,8 @@ export function OverviewTab({
                         : ct;
                       const derived = calculateDerivedMetrics(data);
                       const compData = showComparison && comparisonTotals?.[channelKey];
-                      const compDerived = compData ? calculateDerivedMetrics(compData) : null;
+                      const hasCompData = compData && ((compData.impressions || 0) > 0 || (compData.clicks || 0) > 0 || (compData.cost || 0) > 0 || (compData.revenue || 0) > 0 || (compData.bookings || 0) > 0);
+                      const compDerived = hasCompData ? calculateDerivedMetrics(compData) : null;
                       return {
                         report: channel.charAt(0).toUpperCase() + channel.slice(1),
                         ...derived,
@@ -320,7 +321,8 @@ export function OverviewTab({
                           bookings: acc.bookings + (c.bookings || 0),
                         };
                       }, { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
-                      return calculateDerivedMetrics(compTotals);
+                      const hasData = compTotals.impressions > 0 || compTotals.clicks > 0 || compTotals.cost > 0 || compTotals.revenue > 0 || compTotals.bookings > 0;
+                      return hasData ? calculateDerivedMetrics(compTotals) : null;
                     })() : null;
 
                     const renderMetricCell = (current: number, comparison: number | undefined, format: 'number' | 'currency' | 'currency_cpc' | 'percent' | 'roas' = 'number', isCostMetric = false) => {
