@@ -137,7 +137,7 @@ export function OverviewTab({
       {(isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData))) ? (
         renderKPICardsSkeleton()
       ) : slideReportId && slideReport?.pivot_data && hasAnyData(currentTotals) && renderKPICards(
-        slideType === 'master-report' && Object.keys(currentTotals).length > 0
+        Object.keys(currentTotals).length > 0
           ? (() => {
               // Prefer breakdownTotals (from table rows) over currentTotals (from pivot cache)
               const getEffective = (ch: string) => {
