@@ -128,6 +128,32 @@ Deno.serve(async (req) => {
       console.log('[CLEAR-AND-RESYNC] Cleared monthly_dimension_data');
     }
 
+    // Clear slide report data if slideReportId provided (or find it from account)
+    const slideReportId = body.slideReportId;
+    if (slideReportId) {
+      console.log('[CLEAR-AND-RESYNC] Clearing slide report data for:', slideReportId);
+
+      const slideReportTables = [
+        'slide_report_monthly_data',
+        'slide_report_channel_month_data',
+        'slide_report_channel_year_data',
+        'slide_report_channel_raw_rows',
+      ];
+
+      for (const table of slideReportTables) {
+        const { error: srError, count: srCount } = await supabase
+          .from(table)
+          .delete()
+          .eq('slide_report_id', slideReportId);
+
+        if (srError) {
+          console.error(`[CLEAR-AND-RESYNC] Error clearing ${table}:`, srError);
+        } else {
+          console.log(`[CLEAR-AND-RESYNC] Cleared ${table}, count: ${srCount}`);
+        }
+      }
+    }
+
     console.log('[CLEAR-AND-RESYNC] Clear operation completed');
 
     return new Response(
