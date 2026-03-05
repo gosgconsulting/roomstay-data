@@ -167,6 +167,14 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
           return;
         }
 
+        // For default/data-studio, prefer the Master Report so views (Brady etc.) are shared
+        const masterReport = (slideReports || [])
+          .filter(r => r.name === 'Master Report' && r.is_active)
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
+        if (masterReport) {
+          setSlideReportId(masterReport.id);
+          return;
+        }
         const existingReport = slideReports?.find(r => r.is_active);
         if (existingReport) {
           setSlideReportId(existingReport.id);
