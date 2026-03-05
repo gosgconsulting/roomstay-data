@@ -327,9 +327,37 @@ export function useFilteredSlideData({
                 agg.cost += md.cost || 0;
                 agg.revenue += md.revenue || 0;
                 agg.bookings += md.bookings || 0;
+              } else {
+                // Fallback: aggregate from monthlyBreakdowns for this month key
+                const monthlyBreakdowns = (channelData as any).monthlyBreakdowns as Record<string, Record<string, any[]>> | undefined;
+                if (monthlyBreakdowns?.[mk]) {
+                  const bdForMonth = monthlyBreakdowns[mk];
+                  // Pick the first available dimension's rows and sum them
+                  for (const dimRows of Object.values(bdForMonth)) {
+                    if (Array.isArray(dimRows) && dimRows.length > 0) {
+                      const summed = sumBreakdownRows(dimRows as BreakdownRowLike[]);
+                      agg.impressions += summed.impressions;
+                      agg.clicks += summed.clicks;
+                      agg.cost += summed.cost;
+                      agg.revenue += summed.revenue;
+                      agg.bookings += summed.bookings;
+                      break; // Only use one dimension to avoid double-counting
+                    }
+                  }
+                }
               }
             }
-            channelTotals[channel] = agg;
+            // If aggregation yielded no data, try yearly data as a last resort
+            if (agg.impressions === 0 && agg.clicks === 0 && agg.cost === 0 && agg.revenue === 0 && agg.bookings === 0) {
+              const yearlyData = (channelData as any).yearly?.[selectedYear];
+              if (yearlyData) {
+                channelTotals[channel] = yearlyData;
+              } else {
+                channelTotals[channel] = agg;
+              }
+            } else {
+              channelTotals[channel] = agg;
+            }
           } else {
             const currentData = (channelData as any).current || {
               impressions: 0,
