@@ -1,10 +1,12 @@
 import { TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { JAN_2026_BREAKDOWN_DIMENSIONS } from "@/hooks/useMetasearchJan2026RawRows";
-import { formatNumber } from "@/lib/slideViewHelpers";
+import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
 import { AISummaryButton } from "./AISummaryButton";
 import { AISummaryDisplay } from "./AISummaryDisplay";
 
@@ -49,6 +51,8 @@ interface ChannelTabProps {
   getChannelComparisonMetrics: (channel: 'metasearch' | 'sem' | 'social') => any;
   setBreakdownTotals: (updater: (prev: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>) => Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>) => void;
   UnifiedBreakdownTable: React.ComponentType<any>;
+  comparisonTotals?: Record<string, any> | null;
+  comparisonType?: string;
   onAISummaryClick?: () => void;
   isAISummaryDisabled?: boolean;
   summaryText?: string | null;
@@ -89,6 +93,8 @@ export function ChannelTab({
   getChannelComparisonMetrics,
   setBreakdownTotals,
   UnifiedBreakdownTable,
+  comparisonTotals,
+  comparisonType,
   onAISummaryClick,
   isAISummaryDisabled,
   summaryText,
@@ -185,6 +191,94 @@ export function ChannelTab({
               </div>
             </CardContent>
           </Card>
+
+          {/* Channel Summary Table with Comparison */}
+          {(() => {
+            const showComp = comparisonType && comparisonType !== 'none';
+            const ct = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            const bt = breakdownTotals[channel];
+            const effectiveTotals = (ct.cost === 0 && bt && bt.cost > 0)
+              ? { ...ct, cost: bt.cost, revenue: bt.revenue || ct.revenue, bookings: bt.bookings || ct.bookings, impressions: bt.impressions || ct.impressions, clicks: bt.clicks || ct.clicks }
+              : ct;
+            const derived = calculateDerivedMetrics(effectiveTotals);
+            const compData = showComp && comparisonTotals?.[channel];
+            const compDerived = compData ? calculateDerivedMetrics(compData) : null;
+
+            const PctBadge = ({ current, previous, isCost = false }: { current: number; previous: number; isCost?: boolean }) => {
+              const pct = calculatePercentChange(current, previous);
+              if (pct === null) return null;
+              const isPositive = pct >= 0;
+              const isGood = isCost ? !isPositive : isPositive;
+              return (
+                <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${isGood ? 'text-green-600' : 'text-red-600'}`}>
+                  {isPositive ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}
+                  {Math.abs(pct).toFixed(1)}%
+                </span>
+              );
+            };
+
+            const MetricCell = ({ current, comp, format, isCost = false }: { current: number; comp?: number; format?: string; isCost?: boolean }) => {
+              const formatted = format === 'currency_cpc'
+                ? formatNumber(current, 'currency', displayCurrency, 2)
+                : format === 'currency'
+                  ? formatNumber(current, 'currency', displayCurrency)
+                  : format === 'percent'
+                    ? `${current.toFixed(2)}%`
+                    : format === 'roas'
+                      ? `${current.toFixed(1)}x`
+                      : formatNumber(current);
+              return (
+                <TableCell className="text-right">
+                  <div>{formatted}</div>
+                  {comp !== undefined && showComp && <PctBadge current={current} previous={comp} isCost={isCost} />}
+                </TableCell>
+              );
+            };
+
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-medium">
+                    {channel.charAt(0).toUpperCase() + channel.slice(1)} Performance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="w-full overflow-x-auto">
+                    <Table className="min-w-max">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-right">Impressions</TableHead>
+                          <TableHead className="text-right">Clicks</TableHead>
+                          <TableHead className="text-right">CTR</TableHead>
+                          <TableHead className="text-right">Bookings</TableHead>
+                          <TableHead className="text-right">Conv. Rate</TableHead>
+                          <TableHead className="text-right">CPC</TableHead>
+                          <TableHead className="text-right">Cost</TableHead>
+                          <TableHead className="text-right">Revenue</TableHead>
+                          <TableHead className="text-right">ROAS</TableHead>
+                          <TableHead className="text-right">Cost of Sale</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow className="font-medium">
+                          <MetricCell current={derived.impressions} comp={compDerived?.impressions} />
+                          <MetricCell current={derived.clicks} comp={compDerived?.clicks} />
+                          <MetricCell current={derived.ctr} comp={compDerived?.ctr} format="percent" />
+                          <MetricCell current={derived.bookings} comp={compDerived?.bookings} />
+                          <MetricCell current={derived.conversionRate} comp={compDerived?.conversionRate} format="percent" />
+                          <MetricCell current={derived.cpc} comp={compDerived?.cpc} format="currency_cpc" isCost />
+                          <MetricCell current={derived.cost} comp={compDerived?.cost} format="currency" isCost />
+                          <MetricCell current={derived.revenue} comp={compDerived?.revenue} format="currency" />
+                          <MetricCell current={derived.roas} comp={compDerived?.roas} format="roas" />
+                          <MetricCell current={derived.costOfSale} comp={compDerived?.costOfSale} format="percent" isCost />
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
 
           {/* Unified Breakdown Table */}
           <Card>

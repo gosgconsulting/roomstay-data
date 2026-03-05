@@ -3711,6 +3711,8 @@ export default function SlideViewPage() {
                 getChannelComparisonMetrics={getChannelComparisonMetrics}
                 setBreakdownTotals={setBreakdownTotals}
                 UnifiedBreakdownTable={UnifiedBreakdownTable}
+                comparisonTotals={comparisonTotals}
+                comparisonType={comparisonType}
                 onAISummaryClick={slideType !== 'master-report' ? () => setIsAISummaryModalOpen(true) : undefined}
                 isAISummaryDisabled={!slideReportId}
                 summaryText={slideType !== 'master-report' ? (channel === 'metasearch' ? metasearchSummary?.summary_text : channel === 'sem' ? semSummary?.summary_text : socialSummary?.summary_text) : null}
