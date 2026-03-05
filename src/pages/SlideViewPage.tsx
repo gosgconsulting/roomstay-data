@@ -1161,14 +1161,15 @@ export default function SlideViewPage() {
     const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
     const viewIdToUse = urlViewId || shareViewId;
 
-    if (viewIdToUse && views.length > 0 && !isReadOnlyMode) {
+    if (viewIdToUse && views.length > 0) {
       // Check if viewId exists in views
       const view = views.find(v => v.id === viewIdToUse);
       if (view) {
-        // Enable read-only mode and apply the view
-        setIsReadOnlyMode(true);
+        // Apply the view (do NOT enable read-only mode for regular views)
         setSelectedViewId(viewIdToUse);
-        handleApplyView(viewIdToUse);
+        if (selectedViewId !== viewIdToUse) {
+          handleApplyView(viewIdToUse);
+        }
 
         // Clear the session storage after using it
         if (shareViewId) {
@@ -1190,7 +1191,7 @@ export default function SlideViewPage() {
       setIsReadOnlyMode(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, views.length, isReadOnlyMode, slideReportId]);
+  }, [searchParams, views.length, isReadOnlyMode, slideReportId, selectedViewId]);
 
   // monthlyDataRecords, isLoadingMonthlyData from reportPage
 
