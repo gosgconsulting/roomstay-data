@@ -38,6 +38,12 @@ export const transformDataRows = async (
       if (colIndex !== undefined && colIndex >= 0 && dimensionIdMap[mapping.column] && colIndex < row.length) {
         const rawValue = row[colIndex];
         const dimensionId = dimensionIdMap[mapping.column];
+        
+        // Skip if this dimensionId was already set by a prior column (first-write-wins).
+        // This prevents "Cost Local Currency" (text like "AUD") from overwriting
+        // "Cost(Local)" (the actual numeric value) when both map to the same dimensionId.
+        if (dimensionId in dimensionValues) return;
+        
         const dimensionType = mapping.newDimensionType || mapping.dimensionType || dimensionTypeMap[dimensionId] || 'text';
         const dateFormat = mapping.dateFormat;
         const value = parseValue(rawValue, dimensionType, dateFormat);
