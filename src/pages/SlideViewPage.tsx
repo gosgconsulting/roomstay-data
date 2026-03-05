@@ -1166,6 +1166,7 @@ export default function SlideViewPage() {
       const view = views.find(v => v.id === viewIdToUse);
       if (view) {
         // Apply the view (do NOT enable read-only mode for regular views)
+        if (isReadOnlyMode) setIsReadOnlyMode(false);
         setSelectedViewId(viewIdToUse);
         if (selectedViewId !== viewIdToUse) {
           handleApplyView(viewIdToUse);
