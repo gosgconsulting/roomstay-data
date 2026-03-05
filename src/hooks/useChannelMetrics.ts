@@ -233,6 +233,7 @@ export function useChannelMetrics({
       if (months && months.length > 0 && selectedYear !== 'all') {
         for (const [channel, channelData] of Object.entries(pivotData.channels)) {
           const agg = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+          let foundData = false;
           for (const m of months) {
             const mk = `${selectedYear}-${m.toString().padStart(2, '0')}`;
             const md = (channelData as any).monthly?.[mk];
@@ -242,9 +243,75 @@ export function useChannelMetrics({
               agg.cost += md.cost || 0;
               agg.revenue += md.revenue || 0;
               agg.bookings += md.bookings || 0;
+              foundData = true;
             }
           }
-          channelTotals[channel] = agg;
+          if (foundData && (agg.impressions > 0 || agg.clicks > 0 || agg.cost > 0 || agg.revenue > 0 || agg.bookings > 0)) {
+            channelTotals[channel] = agg;
+          } else {
+            // Fallback: try rawDataRows with date filtering
+            const rawDataRows = (channelData as any).rawDataRows || [];
+            if (rawDataRows.length > 0) {
+              const minMonth = Math.min(...months);
+              const maxMonth = Math.max(...months);
+              const yearNum = parseInt(selectedYear);
+              const rawDateRange = {
+                start: new Date(yearNum, minMonth - 1, 1),
+                end: new Date(yearNum, maxMonth, 0, 23, 59, 59),
+              };
+              const dateFilteredRows = filterRawDataRows(rawDataRows, {}, rawDateRange);
+              if (dateFilteredRows.length > 0) {
+                const dimensionMap = (channelData as any).dimensionMap || {};
+                const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+                const rawAgg: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                dateFilteredRows.forEach((row) => {
+                  const rowData = row.dimension_values || row;
+                  const getVal = (keys: string[]): number => {
+                    for (const key of keys) {
+                      const v = (rowData as any)[key];
+                      if (v !== undefined && v !== null) {
+                        const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+                        if (!isNaN(n)) return n;
+                      }
+                    }
+                    return 0;
+                  };
+                  rawAgg.impressions += getVal(getMetricKeys('impressions', nameToIdsMap));
+                  rawAgg.clicks += getVal(getMetricKeys('clicks', nameToIdsMap));
+                  rawAgg.cost += getVal(getMetricKeys('cost', nameToIdsMap));
+                  rawAgg.revenue += getVal(getMetricKeys('revenue', nameToIdsMap));
+                  rawAgg.bookings += getVal(getMetricKeys('bookings', nameToIdsMap));
+                });
+                channelTotals[channel] = rawAgg;
+              } else {
+                channelTotals[channel] = agg;
+              }
+            } else {
+              // Fallback: try breakdowns
+              const breakdowns = (channelData as any).breakdowns as Record<string, any[]> | undefined;
+              if (breakdowns) {
+                for (const dimRows of Object.values(breakdowns)) {
+                  if (Array.isArray(dimRows) && dimRows.length > 0) {
+                    const summed: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                    dimRows.forEach((r: any) => {
+                      summed.impressions += Number(r.impressions) || 0;
+                      summed.clicks += Number(r.clicks) || 0;
+                      summed.cost += Number(r.cost) || 0;
+                      summed.revenue += Number(r.revenue) || 0;
+                      summed.bookings += Number(r.bookings) || 0;
+                    });
+                    if (summed.impressions > 0 || summed.clicks > 0 || summed.cost > 0 || summed.revenue > 0 || summed.bookings > 0) {
+                      channelTotals[channel] = summed;
+                      break;
+                    }
+                  }
+                }
+              }
+              if (!channelTotals[channel]) {
+                channelTotals[channel] = (channelData as any).current || agg;
+              }
+            }
+          }
         }
         return channelTotals as unknown as ChannelMetrics;
       }
@@ -253,13 +320,71 @@ export function useChannelMetrics({
         const yearNum = parseInt(selectedYear);
         for (const [channel, channelData] of Object.entries(pivotData.channels)) {
           const yearlyData = (channelData as any).yearly?.[String(yearNum)];
-          channelTotals[channel] = yearlyData || {
-            impressions: 0,
-            clicks: 0,
-            cost: 0,
-            revenue: 0,
-            bookings: 0,
-          };
+          if (yearlyData && (yearlyData.impressions > 0 || yearlyData.clicks > 0 || yearlyData.cost > 0 || yearlyData.revenue > 0 || yearlyData.bookings > 0)) {
+            channelTotals[channel] = yearlyData;
+          } else {
+            // Fallback: try rawDataRows with year filtering
+            const rawDataRows = (channelData as any).rawDataRows || [];
+            if (rawDataRows.length > 0) {
+              const rawDateRange = {
+                start: new Date(yearNum, 0, 1),
+                end: new Date(yearNum, 11, 31, 23, 59, 59),
+              };
+              const dateFilteredRows = filterRawDataRows(rawDataRows, {}, rawDateRange);
+              if (dateFilteredRows.length > 0) {
+                const dimensionMap = (channelData as any).dimensionMap || {};
+                const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+                const rawAgg: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                dateFilteredRows.forEach((row) => {
+                  const rowData = row.dimension_values || row;
+                  const getVal = (keys: string[]): number => {
+                    for (const key of keys) {
+                      const v = (rowData as any)[key];
+                      if (v !== undefined && v !== null) {
+                        const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+                        if (!isNaN(n)) return n;
+                      }
+                    }
+                    return 0;
+                  };
+                  rawAgg.impressions += getVal(getMetricKeys('impressions', nameToIdsMap));
+                  rawAgg.clicks += getVal(getMetricKeys('clicks', nameToIdsMap));
+                  rawAgg.cost += getVal(getMetricKeys('cost', nameToIdsMap));
+                  rawAgg.revenue += getVal(getMetricKeys('revenue', nameToIdsMap));
+                  rawAgg.bookings += getVal(getMetricKeys('bookings', nameToIdsMap));
+                });
+                channelTotals[channel] = rawAgg;
+              } else {
+                channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              }
+            } else {
+              // Fallback: try breakdowns
+              const breakdowns = (channelData as any).breakdowns as Record<string, any[]> | undefined;
+              let found = false;
+              if (breakdowns) {
+                for (const dimRows of Object.values(breakdowns)) {
+                  if (Array.isArray(dimRows) && dimRows.length > 0) {
+                    const summed: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                    dimRows.forEach((r: any) => {
+                      summed.impressions += Number(r.impressions) || 0;
+                      summed.clicks += Number(r.clicks) || 0;
+                      summed.cost += Number(r.cost) || 0;
+                      summed.revenue += Number(r.revenue) || 0;
+                      summed.bookings += Number(r.bookings) || 0;
+                    });
+                    if (summed.impressions > 0 || summed.clicks > 0 || summed.cost > 0 || summed.revenue > 0 || summed.bookings > 0) {
+                      channelTotals[channel] = summed;
+                      found = true;
+                      break;
+                    }
+                  }
+                }
+              }
+              if (!found) {
+                channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              }
+            }
+          }
         }
         return channelTotals as unknown as ChannelMetrics;
       }
@@ -423,6 +548,7 @@ export function useChannelMetrics({
       for (const [channel, channelData] of Object.entries(pivotData.channels)) {
         const monthly = (channelData as any).monthly || {};
         const base: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+        let foundMonthly = false;
         for (const [monthKey, m] of Object.entries(monthly)) {
           const [y, mo] = monthKey.split('-').map(Number);
           const monthStart = new Date(y, mo - 1, 1);
@@ -434,6 +560,39 @@ export function useChannelMetrics({
             base.cost += metrics.cost ?? 0;
             base.revenue += metrics.revenue ?? 0;
             base.bookings += metrics.bookings ?? 0;
+            foundMonthly = true;
+          }
+        }
+        // Fallback: if no monthly data found, try rawDataRows with comparison date range
+        if (!foundMonthly || (base.impressions === 0 && base.clicks === 0 && base.cost === 0 && base.revenue === 0 && base.bookings === 0)) {
+          const rawDataRows = (channelData as any).rawDataRows || [];
+          if (rawDataRows.length > 0) {
+            const dateFilteredRows = filterRawDataRows(rawDataRows, {}, comparisonDateRange);
+            if (dateFilteredRows.length > 0) {
+              const dimensionMap = (channelData as any).dimensionMap || {};
+              const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+              const rawAgg: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              dateFilteredRows.forEach((row) => {
+                const rowData = row.dimension_values || row;
+                const getVal = (keys: string[]): number => {
+                  for (const key of keys) {
+                    const v = (rowData as any)[key];
+                    if (v !== undefined && v !== null) {
+                      const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+                      if (!isNaN(n)) return n;
+                    }
+                  }
+                  return 0;
+                };
+                rawAgg.impressions += getVal(getMetricKeys('impressions', nameToIdsMap));
+                rawAgg.clicks += getVal(getMetricKeys('clicks', nameToIdsMap));
+                rawAgg.cost += getVal(getMetricKeys('cost', nameToIdsMap));
+                rawAgg.revenue += getVal(getMetricKeys('revenue', nameToIdsMap));
+                rawAgg.bookings += getVal(getMetricKeys('bookings', nameToIdsMap));
+              });
+              channelTotals[channel] = rawAgg;
+              continue;
+            }
           }
         }
         channelTotals[channel] = base;
