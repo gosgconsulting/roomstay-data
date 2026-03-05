@@ -59,6 +59,7 @@ import { extractMinimalAIData } from "@/lib/extractMinimalAIData";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
+import { getChartAnchorDate } from "@/lib/monthUtils";
 import type { AccountReportIds } from "@/lib/accountReportIds";
 import {
   calculateDerivedMetrics,
@@ -1239,80 +1240,17 @@ export default function SlideViewPage() {
     return sourceData.filter(m => m.year === parseInt(selectedYear));
   }, [filteredData.monthlyData, slideType, dynamicMonthlyData, selectedYear]);
 
-  // Helper function to generate all months in a time range
-  const generateMonthsInTimeRange = useCallback((
-    timeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
-  ): { year: number; month: string }[] => {
-    const now = new Date();
-    const months: { year: number; month: string }[] = [];
 
-    let startDate: Date;
-    let endDate = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    if (timeRange === 'this_year') {
-      startDate = new Date(now.getFullYear(), 0, 1);
-    } else if (timeRange === 'last_12_months') {
-      startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-    } else if (timeRange === 'last_6_months') {
-      startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-    } else if (timeRange === 'last_3_months') {
-      startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-    } else {
-      return [];
-    }
-
-    // Generate all months from startDate to endDate (inclusive)
-    const current = new Date(startDate);
-    while (current <= endDate) {
-      months.push({
-        year: current.getFullYear(),
-        month: MONTH_NAMES[current.getMonth()],
-      });
-      // Move to next month
-      current.setMonth(current.getMonth() + 1);
-    }
-
-    return months;
-  }, []);
-
-  // Helper function to apply chartTimeRange filter (extracted to avoid duplication)
-  const applyChartTimeRangeFilter = useCallback(<T extends { year: number; month: string }>(
-    data: T[],
-    timeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
-  ): T[] => {
-    const now = new Date();
-
-    if (timeRange === 'this_year') {
-      return data.filter(m => m.year === now.getFullYear());
-    } else if (timeRange === 'last_12_months') {
-      const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-      return data.filter(m => {
-        const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
-        return monthDate >= cutoffDate;
-      });
-    } else if (timeRange === 'last_6_months') {
-      const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      return data.filter(m => {
-        const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
-        return monthDate >= cutoffDate;
-      });
-    } else if (timeRange === 'last_3_months') {
-      const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-      return data.filter(m => {
-        const monthDate = new Date(m.year, MONTH_NAMES.indexOf(m.month), 1);
-        return monthDate >= cutoffDate;
-      });
-    }
-
-    return data;
-  }, []);
+  // Compute anchor date from selected year/month for chart time range
+  const chartAnchorDate = useMemo(() => getChartAnchorDate(selectedYear, selectedMonth), [selectedYear, selectedMonth]);
 
   // Chart data helpers - using hooks
   const overviewChartData = useOverviewChartData(
     effectivePivotData,
     filterValues,
     filteredData.channelsWithFilters,
-    chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
+    chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months',
+    chartAnchorDate
   );
 
   // Channel-specific chart data (for individual channel tabs) - using hook
@@ -1320,12 +1258,13 @@ export default function SlideViewPage() {
     effectivePivotData,
     filterValues,
     filteredData.channelsWithFilters,
-    chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'
+    chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months',
+    chartAnchorDate
   );
 
   // Channel Revenue chart: prefer data from slide_report_channel_month_data (no edge function); applies filterValues via monthlyBreakdowns.
   const chartTimeRangeTyped = chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
-  const { data: channelChartDataFromTable } = useChannelChartDataFromTable(slideReportId, chartTimeRangeTyped, filterValues);
+  const { data: channelChartDataFromTable } = useChannelChartDataFromTable(slideReportId, chartTimeRangeTyped, filterValues, chartAnchorDate);
 
   // Overview Revenue chart: prefer slide_report_channel_month_data (filterValues applied when View changes)
   const effectiveOverviewChartData = useMemo(() => {
@@ -1333,20 +1272,20 @@ export default function SlideViewPage() {
       return buildOverviewChartDataFromChannelChartData(channelChartDataFromTable);
     }
     if (filteredData.monthlyData?.length > 0) {
-      return buildOverviewChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped);
+      return buildOverviewChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped, chartAnchorDate);
     }
     return overviewChartData;
-  }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, overviewChartData]);
+  }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, overviewChartData, chartAnchorDate]);
 
   const effectiveChannelChartData = useMemo(() => {
     if (channelChartDataFromTable && (channelChartDataFromTable.metasearch?.length > 0 || channelChartDataFromTable.sem?.length > 0 || channelChartDataFromTable.social?.length > 0)) {
       return channelChartDataFromTable;
     }
     if (filteredData.monthlyData?.length > 0) {
-      return buildChannelChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped);
+      return buildChannelChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped, chartAnchorDate);
     }
     return channelChartData;
-  }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, channelChartData]);
+  }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, channelChartData, chartAnchorDate]);
 
   // Get channel totals from monthly_data table (same source as SlideDataBrowser)
   // This is the correct source of truth for the data

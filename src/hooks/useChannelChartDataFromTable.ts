@@ -112,7 +112,8 @@ type Row = { channel: string; year: number; month: number; data: unknown };
 export function useChannelChartDataFromTable(
   slideReportId: string | null,
   chartTimeRange: ChartTimeRange,
-  filterValues: Record<string, Record<string, string[]>> | null = null
+  filterValues: Record<string, Record<string, string[]>> | null = null,
+  anchorDate?: Date
 ): {
   data: ChannelChartDataFromTable | null;
   isLoading: boolean;
@@ -161,8 +162,8 @@ export function useChannelChartDataFromTable(
     const rows = query.data;
     if (!rows?.length || !chartTimeRange) return null;
     const monthlyData = buildMonthlyDataFromRows(rows, filterValues ?? null);
-    return buildChannelChartDataFromMonthlyData(monthlyData, chartTimeRange);
-  }, [query.data, chartTimeRange, filterValues]);
+    return buildChannelChartDataFromMonthlyData(monthlyData, chartTimeRange, anchorDate);
+  }, [query.data, chartTimeRange, filterValues, anchorDate]);
 
   return {
     data,
