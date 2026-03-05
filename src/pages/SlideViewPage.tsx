@@ -3233,6 +3233,7 @@ export default function SlideViewPage() {
       // Use a small delay to allow the query to refetch, then find and select the new view
       setTimeout(() => {
         const updatedViews = queryClient.getQueryData<any[]>(['slide_report_views', 'list', slideReportId]) || [];
+
         const newView = updatedViews.find(v => v.name === viewName);
         if (newView) {
           setSelectedViewId(newView.id);
@@ -3242,7 +3243,7 @@ export default function SlideViewPage() {
       // Error toast is handled by the mutation
       console.error('Error saving view:', error);
     }
-  }, [slideReportId, slideReport, user, accountId, selectedYear, selectedMonth, comparisonType, chartTimeRange, priceCheckChartTimeRange, filterValues, createView, views, queryClient]);
+  }, [slideReportId, slideReport, user, accountId, selectedYear, selectedMonth, comparisonType, chartTimeRange, priceCheckChartTimeRange, filterValues, createView, queryClient]);
 
   // Update an existing view
   const handleUpdateView = useCallback(async (viewId: string) => {
@@ -3263,16 +3264,17 @@ export default function SlideViewPage() {
         comparison_type: comparisonType as 'none' | 'previous_period' | 'previous_year',
         chart_time_range: chartTimeRange,
         price_check_chart_time_range: priceCheckChartTimeRange,
-        filter_values: { ...filterValues }, // Deep copy to avoid mutations
+        filter_values: { ...filterValues },
       });
 
-      // The view will be automatically refetched by the query
       queryClient.invalidateQueries({ queryKey: ['slide_report_views', 'list', slideReportId] });
     } catch (error) {
-      // Error toast is handled by the mutation
       console.error('Error updating view:', error);
     }
   }, [slideReportId, slideReport, user, selectedYear, selectedMonth, comparisonType, chartTimeRange, priceCheckChartTimeRange, filterValues, updateView, queryClient]);
 
   // Apply a saved view
-  const handleApplyView = useCallback((view
+  const handleApplyView = useCallback((viewId: string | null) => {
+    if (!slideReportId) return;
+
+    const emptyFilters: Record<string, Record<string, string[]>> =
