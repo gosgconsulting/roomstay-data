@@ -1261,6 +1261,25 @@ export default function SlideViewPage() {
   const chartTimeRangeTyped = chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
   const { data: channelChartDataFromTable } = useChannelChartDataFromTable(slideReportId, chartTimeRangeTyped, filterValues, chartAnchorDate);
 
+  // Comparison chart data: use shifted anchor for the comparison period
+  const comparisonChartAnchorDate = useMemo(() => {
+    if (comparisonType === 'none' || !chartAnchorDate) return undefined;
+    const d = new Date(chartAnchorDate);
+    if (comparisonType === 'previous_period') {
+      d.setMonth(d.getMonth() - 1);
+    } else if (comparisonType === 'previous_year') {
+      d.setFullYear(d.getFullYear() - 1);
+    }
+    return d;
+  }, [comparisonType, chartAnchorDate]);
+
+  const { data: comparisonChannelChartDataFromTable } = useChannelChartDataFromTable(
+    comparisonType !== 'none' ? slideReportId : null,
+    chartTimeRangeTyped,
+    filterValues,
+    comparisonChartAnchorDate
+  );
+
   // Overview Revenue chart: prefer slide_report_channel_month_data (filterValues applied when View changes)
   const effectiveOverviewChartData = useMemo(() => {
     if (channelChartDataFromTable && (channelChartDataFromTable.metasearch?.length > 0 || channelChartDataFromTable.sem?.length > 0 || channelChartDataFromTable.social?.length > 0)) {
@@ -1281,6 +1300,17 @@ export default function SlideViewPage() {
     }
     return channelChartData;
   }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, channelChartData, chartAnchorDate]);
+
+  // Comparison chart data (overview + per-channel) - aligned to current period labels
+  const comparisonOverviewChartData = useMemo((): Array<{ label: string; total: number }> | null => {
+    if (comparisonType === 'none' || !comparisonChannelChartDataFromTable) return null;
+    return buildOverviewChartDataFromChannelChartData(comparisonChannelChartDataFromTable);
+  }, [comparisonType, comparisonChannelChartDataFromTable]);
+
+  const comparisonEffectiveChannelChartData = useMemo(() => {
+    if (comparisonType === 'none' || !comparisonChannelChartDataFromTable) return null;
+    return comparisonChannelChartDataFromTable;
+  }, [comparisonType, comparisonChannelChartDataFromTable]);
 
   // Get channel totals from monthly_data table (same source as SlideDataBrowser)
   // This is the correct source of truth for the data
@@ -3624,6 +3654,7 @@ export default function SlideViewPage() {
               currentTotals={currentTotals}
               breakdownTotals={breakdownTotals}
               overviewChartData={effectiveOverviewChartData}
+              comparisonChartData={comparisonOverviewChartData}
               chartTimeRange={chartTimeRange}
               setChartTimeRange={setChartTimeRange}
               selectedYear={selectedYear}
@@ -3638,6 +3669,8 @@ export default function SlideViewPage() {
               filteredData={filteredData}
               slideType={slideType}
               KPI_CARDS={KPI_CARDS}
+              comparisonTotals={comparisonTotals}
+              comparisonType={comparisonType}
               onAISummaryClick={slideType !== 'master-report' ? () => setIsAISummaryModalOpen(true) : undefined}
               isAISummaryDisabled={!slideReportId}
               summaryText={slideType !== 'master-report' ? (overviewSummary?.summary_text || null) : null}
@@ -3657,6 +3690,7 @@ export default function SlideViewPage() {
                 breakdownTotals={breakdownTotals}
                 currentTotals={currentTotals}
                 channelChartData={effectiveChannelChartData}
+                comparisonChannelChartData={comparisonEffectiveChannelChartData}
                 chartTimeRange={chartTimeRange}
                 setChartTimeRange={setChartTimeRange}
                 groupByDimension={groupByDimension}

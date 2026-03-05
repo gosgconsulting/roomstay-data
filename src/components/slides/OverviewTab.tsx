@@ -3,10 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Settings2, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { Settings2, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
-import { calculateDerivedMetrics, formatNumber } from "@/lib/slideViewHelpers";
+import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
 import { AISummaryButton } from "./AISummaryButton";
 import { AISummaryDisplay } from "./AISummaryDisplay";
 
@@ -21,6 +21,7 @@ interface OverviewTabProps {
   currentTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   breakdownTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   overviewChartData: Array<{ label: string; total: number }>;
+  comparisonChartData?: Array<{ label: string; total: number }> | null;
   chartTimeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
   setChartTimeRange: (range: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months') => void;
   selectedYear: string;
@@ -44,6 +45,8 @@ interface OverviewTabProps {
     color: string;
     format?: string;
   }>;
+  comparisonTotals?: Record<string, any> | null;
+  comparisonType?: string;
   onAISummaryClick?: () => void;
   isAISummaryDisabled?: boolean;
   summaryText?: string | null;
@@ -59,6 +62,19 @@ const hasAnyData = (totals: Record<string, { impressions: number; clicks: number
   );
 };
 
+function PercentChangeBadge({ current, previous, isCostMetric = false }: { current: number; previous: number; isCostMetric?: boolean }) {
+  const pct = calculatePercentChange(current, previous);
+  if (pct === null) return null;
+  const isPositive = pct >= 0;
+  const isGood = isCostMetric ? !isPositive : isPositive;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${isGood ? 'text-green-600' : 'text-red-600'}`}>
+      {isPositive ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}
+      {Math.abs(pct).toFixed(1)}%
+    </span>
+  );
+}
+
 export function OverviewTab({
   slideReportId,
   isSlideReportsLoading,
@@ -68,6 +84,7 @@ export function OverviewTab({
   currentTotals,
   breakdownTotals,
   overviewChartData,
+  comparisonChartData,
   chartTimeRange,
   setChartTimeRange,
   selectedYear,
@@ -82,10 +99,21 @@ export function OverviewTab({
   filteredData,
   slideType,
   KPI_CARDS,
+  comparisonTotals,
+  comparisonType,
   onAISummaryClick,
   isAISummaryDisabled,
   summaryText,
 }: OverviewTabProps) {
+  // Merge comparison data into chart data
+  const mergedChartData = overviewChartData.map((point, i) => ({
+    ...point,
+    comparisonTotal: comparisonChartData?.[i]?.total ?? undefined,
+  }));
+
+  const showComparison = comparisonType && comparisonType !== 'none';
+  const compLabel = comparisonType === 'previous_period' ? 'Previous Period' : 'Previous Year';
+
   return (
     <TabsContent value="overview" className="space-y-6">
       {/* Show setup prompt when no report exists yet */}
@@ -105,13 +133,12 @@ export function OverviewTab({
         </div>
       )}
 
-      {/* Show skeletons when loading - only show if we don't have pivot_data yet or actively loading */}
+      {/* KPI Cards */}
       {(isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData))) ? (
         renderKPICardsSkeleton()
       ) : slideReportId && slideReport?.pivot_data && hasAnyData(currentTotals) && renderKPICards(
         slideType === 'master-report' && Object.keys(currentTotals).length > 0
           ? (() => {
-              // Use currentTotals (filtered) so view/dimension filters apply to KPI cards
               const metasearchData = currentTotals.metasearch || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
               const semData = currentTotals.sem || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
               const socialData = currentTotals.social || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
@@ -123,8 +150,6 @@ export function OverviewTab({
                 bookings: (metasearchData.bookings || 0) + (semData.bookings || 0) + (socialData.bookings || 0),
               };
               const derived = calculateDerivedMetrics(totals);
-              
-              // Get comparison metrics from pivot_data overview
               const overviewCompMetrics = getOverviewComparisonMetrics();
               
               return [
@@ -166,11 +191,15 @@ export function OverviewTab({
           <CardContent>
             <div className="h-[250px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={overviewChartData}>
+                <AreaChart data={mergedChartData}>
                   <defs>
                     <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
                       <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="comparisonGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.15}/>
+                      <stop offset="95%" stopColor="#94a3b8" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
@@ -182,14 +211,29 @@ export function OverviewTab({
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '6px'
                     }}
-                    formatter={(value: any) => [formatNumber(value as number, 'currency'), 'Revenue']}
+                    formatter={(value: any, name: string) => [
+                      formatNumber(value as number, 'currency'),
+                      name === 'comparisonTotal' ? compLabel : 'Revenue'
+                    ]}
                   />
+                  {showComparison && comparisonChartData && (
+                    <Area 
+                      type="monotone" 
+                      dataKey="comparisonTotal" 
+                      stroke="#94a3b8" 
+                      strokeWidth={1.5}
+                      strokeDasharray="5 3"
+                      fill="url(#comparisonGradient)"
+                      name={compLabel}
+                    />
+                  )}
                   <Area 
                     type="monotone" 
                     dataKey="total" 
                     stroke="#8b5cf6" 
                     strokeWidth={2}
                     fill="url(#revenueGradient)"
+                    name="Revenue"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -198,7 +242,7 @@ export function OverviewTab({
         </Card>
       )}
 
-      {/* Breakdown Table */}
+      {/* Channel Performance Table */}
       {(isSlideReportsLoading || (slideReportId && isLoadingData)) ? (
         renderTableSkeleton()
       ) : (
@@ -226,27 +270,23 @@ export function OverviewTab({
                 </TableHeader>
                 <TableBody>
                   {(() => {
-                    // Use filtered channel totals so view/dimension filters apply to the table
                     const channels = ['metasearch', 'sem', 'social'];
                     const rows = channels.map(channel => {
                       const channelKey = channel as 'metasearch' | 'sem' | 'social';
                       const data = filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
                       const derived = calculateDerivedMetrics(data);
+                      const compData = showComparison && comparisonTotals?.[channelKey];
+                      const compDerived = compData ? calculateDerivedMetrics(compData) : null;
                       return {
                         report: channel.charAt(0).toUpperCase() + channel.slice(1),
                         ...derived,
+                        compDerived,
                       };
                     });
-                    // Filter out rows where all metrics are zero
                     const rowsWithData = rows.filter(row => 
-                      row.impressions > 0 || 
-                      row.clicks > 0 || 
-                      row.cost > 0 || 
-                      row.revenue > 0 || 
-                      row.bookings > 0
+                      row.impressions > 0 || row.clicks > 0 || row.cost > 0 || row.revenue > 0 || row.bookings > 0
                     );
 
-                    // Calculate totals only from rows with data
                     const totals = rowsWithData.reduce((acc, row) => ({
                       impressions: acc.impressions + row.impressions,
                       clicks: acc.clicks + row.clicks,
@@ -255,6 +295,40 @@ export function OverviewTab({
                       bookings: acc.bookings + row.bookings,
                     }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
                     const totalDerived = calculateDerivedMetrics(totals);
+
+                    // Aggregate comparison totals for the total row
+                    const totalCompDerived = showComparison && comparisonTotals ? (() => {
+                      const compTotals = channels.reduce((acc, ch) => {
+                        const c = comparisonTotals[ch];
+                        if (!c) return acc;
+                        return {
+                          impressions: acc.impressions + (c.impressions || 0),
+                          clicks: acc.clicks + (c.clicks || 0),
+                          cost: acc.cost + (c.cost || 0),
+                          revenue: acc.revenue + (c.revenue || 0),
+                          bookings: acc.bookings + (c.bookings || 0),
+                        };
+                      }, { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
+                      return calculateDerivedMetrics(compTotals);
+                    })() : null;
+
+                    const renderMetricCell = (current: number, comparison: number | undefined, format: 'number' | 'currency' | 'percent' | 'roas' = 'number', isCostMetric = false) => {
+                      const formatted = format === 'currency' 
+                        ? formatNumber(current, 'currency') 
+                        : format === 'percent' 
+                          ? `${current.toFixed(2)}%` 
+                          : format === 'roas' 
+                            ? `${current.toFixed(1)}x`
+                            : formatNumber(current);
+                      return (
+                        <TableCell className="text-right">
+                          <div>{formatted}</div>
+                          {comparison !== undefined && showComparison && (
+                            <PercentChangeBadge current={current} previous={comparison} isCostMetric={isCostMetric} />
+                          )}
+                        </TableCell>
+                      );
+                    };
 
                     return (
                       <>
@@ -269,32 +343,31 @@ export function OverviewTab({
                             {rowsWithData.map((row) => (
                               <TableRow key={row.report}>
                                 <TableCell className="font-medium">{row.report}</TableCell>
-                                <TableCell className="text-right">{formatNumber(row.impressions)}</TableCell>
-                                <TableCell className="text-right">{formatNumber(row.clicks)}</TableCell>
-                                <TableCell className="text-right">{row.ctr.toFixed(2)}%</TableCell>
-                                <TableCell className="text-right">{row.bookings.toFixed(2)}</TableCell>
-                                <TableCell className="text-right">{row.conversionRate.toFixed(2)}%</TableCell>
-                                <TableCell className="text-right">{formatNumber(row.cpc, 'currency', undefined, 2)}</TableCell>
-                                <TableCell className="text-right">{formatNumber(row.cost, 'currency')}</TableCell>
-                                <TableCell className="text-right">{formatNumber(row.revenue, 'currency')}</TableCell>
-                                <TableCell className="text-right">{row.roas.toFixed(1)}x</TableCell>
-                                <TableCell className="text-right">{row.costOfSale.toFixed(2)}%</TableCell>
+                                {renderMetricCell(row.impressions, row.compDerived?.impressions)}
+                                {renderMetricCell(row.clicks, row.compDerived?.clicks)}
+                                {renderMetricCell(row.ctr, row.compDerived?.ctr, 'percent')}
+                                {renderMetricCell(row.bookings, row.compDerived?.bookings)}
+                                {renderMetricCell(row.conversionRate, row.compDerived?.conversionRate, 'percent')}
+                                {renderMetricCell(row.cpc, row.compDerived?.cpc, 'currency', true)}
+                                {renderMetricCell(row.cost, row.compDerived?.cost, 'currency', true)}
+                                {renderMetricCell(row.revenue, row.compDerived?.revenue, 'currency')}
+                                {renderMetricCell(row.roas, row.compDerived?.roas, 'roas')}
+                                {renderMetricCell(row.costOfSale, row.compDerived?.costOfSale, 'percent', true)}
                               </TableRow>
                             ))}
-                            {/* Total Row - only show if there's at least one data row */}
                             {rowsWithData.length > 0 && (
                               <TableRow className="bg-muted/50 font-semibold border-t-2">
                                 <TableCell className="font-bold">Total</TableCell>
-                                <TableCell className="text-right">{formatNumber(totalDerived.impressions)}</TableCell>
-                                <TableCell className="text-right">{formatNumber(totalDerived.clicks)}</TableCell>
-                                <TableCell className="text-right">{totalDerived.ctr.toFixed(2)}%</TableCell>
-                                <TableCell className="text-right">{totalDerived.bookings.toFixed(2)}</TableCell>
-                                <TableCell className="text-right">{totalDerived.conversionRate.toFixed(2)}%</TableCell>
-                                <TableCell className="text-right">{formatNumber(totalDerived.cpc, 'currency', undefined, 2)}</TableCell>
-                                <TableCell className="text-right">{formatNumber(totalDerived.cost, 'currency')}</TableCell>
-                                <TableCell className="text-right">{formatNumber(totalDerived.revenue, 'currency')}</TableCell>
-                                <TableCell className="text-right">{totalDerived.roas.toFixed(1)}x</TableCell>
-                                <TableCell className="text-right">{totalDerived.costOfSale.toFixed(2)}%</TableCell>
+                                {renderMetricCell(totalDerived.impressions, totalCompDerived?.impressions)}
+                                {renderMetricCell(totalDerived.clicks, totalCompDerived?.clicks)}
+                                {renderMetricCell(totalDerived.ctr, totalCompDerived?.ctr, 'percent')}
+                                {renderMetricCell(totalDerived.bookings, totalCompDerived?.bookings)}
+                                {renderMetricCell(totalDerived.conversionRate, totalCompDerived?.conversionRate, 'percent')}
+                                {renderMetricCell(totalDerived.cpc, totalCompDerived?.cpc, 'currency', true)}
+                                {renderMetricCell(totalDerived.cost, totalCompDerived?.cost, 'currency', true)}
+                                {renderMetricCell(totalDerived.revenue, totalCompDerived?.revenue, 'currency')}
+                                {renderMetricCell(totalDerived.roas, totalCompDerived?.roas, 'roas')}
+                                {renderMetricCell(totalDerived.costOfSale, totalCompDerived?.costOfSale, 'percent', true)}
                               </TableRow>
                             )}
                           </>
