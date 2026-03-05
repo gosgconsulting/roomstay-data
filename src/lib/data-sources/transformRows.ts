@@ -39,17 +39,25 @@ export const transformDataRows = async (
         const rawValue = row[colIndex];
         const dimensionId = dimensionIdMap[mapping.column];
         
-        // When multiple columns map to the same dimensionId, prefer numeric values.
-        // This prevents text labels (e.g., "AUD") from taking priority over numeric values (e.g., 41.23).
+        // When multiple columns map to the same dimensionId, prefer the value with actual data.
         if (dimensionId in dimensionValues) {
           const existingValue = dimensionValues[dimensionId];
           const dimensionType = mapping.newDimensionType || mapping.dimensionType || dimensionTypeMap[dimensionId] || 'text';
           const dateFormat = mapping.dateFormat;
           const newParsed = parseValue(rawValue, dimensionType, dateFormat);
-          // Only overwrite if existing is non-numeric and new value is numeric
-          if (typeof existingValue === 'number' || typeof newParsed !== 'number') return;
-          // New value is numeric and existing is not — overwrite
-          dimensionValues[dimensionId] = newParsed;
+          if (newParsed === null || newParsed === undefined) return; // new value is empty, keep existing
+
+          const existingIsEmpty = existingValue === null || existingValue === undefined || existingValue === '' || existingValue === 0;
+          const existingIsNumeric = typeof existingValue === 'number';
+          const newIsNumeric = typeof newParsed === 'number';
+
+          // Overwrite if: existing is empty/zero and new has data,
+          // OR existing is non-numeric text and new is a real number > 0
+          if (existingIsEmpty && (newParsed !== 0 && newParsed !== '')) {
+            dimensionValues[dimensionId] = newParsed;
+          } else if (!existingIsNumeric && newIsNumeric && newParsed !== 0) {
+            dimensionValues[dimensionId] = newParsed;
+          }
           return;
         }
         
