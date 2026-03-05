@@ -319,21 +319,6 @@ export function OverviewTab({
         </Card>
       )}
 
-      {/* AI Summary */}
-      {slideReportId && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base font-medium">AI Summary</CardTitle>
-            <AISummaryButton
-              onClick={onAISummaryClick}
-              disabled={isAISummaryDisabled}
-            />
-          </CardHeader>
-          <CardContent>
-            <AISummaryDisplay summary={summaryText ?? ""} />
-          </CardContent>
-        </Card>
-      )}
     </TabsContent>
   );
 }
