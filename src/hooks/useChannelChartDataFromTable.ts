@@ -118,64 +118,55 @@ export function useChannelChartDataFromTable(
   isLoading: boolean;
   isSuccess: boolean;
 } {
-  // Query slide_report_channel_month_data (preferred, per-month granularity)
-  const monthQuery = useQuery({
+  // Single query: fetch month data first, fall back to year data if empty
+  const query = useQuery({
     queryKey: queryKeys.byReport(slideReportId || ''),
     queryFn: async (): Promise<Row[]> => {
       if (!slideReportId) return [];
-      const { data: rows, error } = await supabase
+
+      // Try month-level data first
+      const { data: monthRows, error: monthError } = await supabase
         .from('slide_report_channel_month_data')
         .select('channel, year, month, data')
         .eq('slide_report_id', slideReportId);
-      if (error) throw error;
-      return (rows || []) as Row[];
-    },
-    enabled: !!slideReportId && !!chartTimeRange,
-  });
 
-  // Fallback: query slide_report_channel_year_data and extract monthly data from year slices
-  const yearQuery = useQuery({
-    queryKey: ['channel_chart_data_from_year_table', slideReportId || ''],
-    queryFn: async (): Promise<Row[]> => {
-      if (!slideReportId) return [];
-      const { data: rows, error } = await supabase
+      if (!monthError && monthRows && monthRows.length > 0) {
+        return monthRows as Row[];
+      }
+
+      // Fallback: expand year-level data into per-month rows
+      const { data: yearRows, error: yearError } = await supabase
         .from('slide_report_channel_year_data')
         .select('channel, year, data')
         .eq('slide_report_id', slideReportId);
-      if (error) throw error;
-      // Expand year slices into per-month rows
-      const monthRows: Row[] = [];
-      for (const row of rows || []) {
+
+      if (yearError || !yearRows?.length) return [];
+
+      const expandedRows: Row[] = [];
+      for (const row of yearRows) {
         const sliceData = row.data as SliceData | null;
         if (!sliceData?.monthly) continue;
         for (const [monthKey] of Object.entries(sliceData.monthly)) {
           const [y, m] = monthKey.split('-').map(Number);
           if (!y || !m) continue;
-          // Create a synthetic month row with the full slice data so getRevenueForMonth can access monthlyBreakdowns
-          monthRows.push({
-            channel: row.channel,
-            year: y,
-            month: m,
-            data: sliceData,
-          });
+          expandedRows.push({ channel: row.channel, year: y, month: m, data: sliceData });
         }
       }
-      return monthRows;
+      return expandedRows;
     },
-    enabled: !!slideReportId && !!chartTimeRange && (monthQuery.isSuccess && (!monthQuery.data || monthQuery.data.length === 0)),
+    enabled: !!slideReportId && !!chartTimeRange,
   });
 
   const data = useMemo(() => {
-    // Prefer month data, fallback to year data
-    const rows = (monthQuery.data && monthQuery.data.length > 0) ? monthQuery.data : yearQuery.data;
+    const rows = query.data;
     if (!rows?.length || !chartTimeRange) return null;
     const monthlyData = buildMonthlyDataFromRows(rows, filterValues ?? null);
     return buildChannelChartDataFromMonthlyData(monthlyData, chartTimeRange);
-  }, [monthQuery.data, yearQuery.data, chartTimeRange, filterValues]);
+  }, [query.data, chartTimeRange, filterValues]);
 
   return {
     data,
-    isLoading: monthQuery.isLoading || (monthQuery.isSuccess && (!monthQuery.data || monthQuery.data.length === 0) && yearQuery.isLoading),
-    isSuccess: monthQuery.isSuccess || yearQuery.isSuccess,
+    isLoading: query.isLoading,
+    isSuccess: query.isSuccess,
   };
 }
