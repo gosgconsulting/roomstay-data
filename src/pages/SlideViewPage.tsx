@@ -1006,7 +1006,8 @@ export default function SlideViewPage() {
     dataStudioLoadDoneRef.current = true;
 
     // Don't block the UI — data is already loaded from cached pivot_data via useSlideReportPage.
-    // Instead, do a background refresh to pull latest from source files.
+    // Background refresh: resync all data sources (stores ALL raw rows in dimension_data).
+    // No refresh-slide-report needed — Data Studio reads raw rows directly.
     setDataStudioRefreshStatus('refreshing');
 
     const reportIds = (slideReport.report_ids || {}) as Record<string, string>;
@@ -1014,7 +1015,6 @@ export default function SlideViewPage() {
 
     (async () => {
       try {
-        // 1. Resync all data sources in parallel (not sequential)
         const { data: allSources, error: sourcesError } = await supabase
           .from('data_sources')
           .select('id, report_id')
@@ -1031,19 +1031,11 @@ export default function SlideViewPage() {
           console.warn(`[Data Studio] ${failedResyncs.length}/${resyncResults.length} resyncs failed, continuing...`);
         }
 
-        // 2. Refresh pivot computation
-        const { data: refreshResult, error: refreshErr } = await supabase.functions.invoke(
-          'refresh-slide-report',
-          { body: { slideReportId, years: [2024, 2025, 2026] } }
-        );
-        if (refreshErr) throw refreshErr;
-
-        // 3. Invalidate caches to pick up fresh data
+        // Invalidate caches to pick up fresh raw data (no pivot aggregation needed)
         queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
         queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
         queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
         queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
-        queryClient.invalidateQueries({ queryKey: ['slide_report_monthly_data', slideReportId] });
 
         setDataStudioRefreshStatus('done');
         toast({
@@ -3273,7 +3265,9 @@ export default function SlideViewPage() {
     []
   );
 
-   // When Refresh Data modal is open and step is 0: resync all data sources, then run refresh-slide-report.
+   // When Refresh Data modal is open and step is 0: resync all data sources.
+  // Data Studio: just resync sources (fetch ALL raw rows), skip pivot aggregation.
+  // Master Report: resync + run refresh-slide-report for monthly/yearly aggregation.
   useEffect(() => {
     if (!isRefreshModalOpen || refreshStep !== 0 || !slideReportId || !slideReport) return;
 
@@ -3336,44 +3330,57 @@ export default function SlideViewPage() {
         }
 
         setRefreshStepStatus((prev) => ({ ...prev, 1: 'complete' }));
-        setRefreshStep(2);
-        setRefreshStepStatus((prev) => ({ ...prev, 2: 'loading', 3: 'loading', 4: 'loading', 5: 'loading' }));
 
-        // Steps 2–5: Refresh slide report (compute pivot, store monthly, breakdowns, update report)
-        const { data: refreshResult, error: refreshErr } = await invokeWithRetry('refresh-slide-report', {
-          slideReportId,
-          years: [2024, 2025, 2026],
-        }, 3);
+        if (isDataStudio) {
+          // Data Studio: skip pivot aggregation — uses ALL raw rows from dimension_data directly
+          console.log('[RefreshData] Data Studio mode — skipping refresh-slide-report, using raw cached rows');
+          setRefreshStep(5);
+          setRefreshStepStatus((prev) => ({ ...prev, 2: 'complete', 3: 'complete', 4: 'complete', 5: 'complete' }));
 
-        if (refreshErr) {
-          const msg = refreshErr?.message || 'Unknown error';
-          const hint = msg.includes('Failed to send') ? ' Check your connection and try again.' : '';
-          throw new Error(`Refreshing report: ${msg}.${hint}`);
+          queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
+          queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
+          queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
+          queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
+        } else {
+          // Master Report: run full pivot aggregation (monthly/yearly)
+          setRefreshStep(2);
+          setRefreshStepStatus((prev) => ({ ...prev, 2: 'loading', 3: 'loading', 4: 'loading', 5: 'loading' }));
+
+          const { data: refreshResult, error: refreshErr } = await invokeWithRetry('refresh-slide-report', {
+            slideReportId,
+            years: [2024, 2025, 2026],
+          }, 3);
+
+          if (refreshErr) {
+            const msg = refreshErr?.message || 'Unknown error';
+            const hint = msg.includes('Failed to send') ? ' Check your connection and try again.' : '';
+            throw new Error(`Refreshing report: ${msg}.${hint}`);
+          }
+          if (!refreshResult?.success) {
+            throw new Error((refreshResult as any)?.error || 'Refresh failed');
+          }
+
+          setRefreshStepStatus((prev) => ({
+            ...prev,
+            2: 'complete',
+            3: 'complete',
+            4: 'complete',
+            5: 'complete',
+          }));
+
+          queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
+          queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
+          queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
+          queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
+          queryClient.invalidateQueries({ queryKey: ['slide_report_monthly_data', slideReportId] });
         }
-        if (!refreshResult?.success) {
-          throw new Error((refreshResult as any)?.error || 'Refresh failed');
-        }
-
-        setRefreshStepStatus((prev) => ({
-          ...prev,
-          2: 'complete',
-          3: 'complete',
-          4: 'complete',
-          5: 'complete',
-        }));
-
-        queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
-        queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
-        queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
-        queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
-        queryClient.invalidateQueries({ queryKey: ['slide_report_monthly_data', slideReportId] });
       } catch (e: any) {
         console.error('[RefreshData]', e);
         setRefreshError(e?.message || 'Refresh failed');
         setRefreshStepStatus((prev) => ({ ...prev, 1: prev[1] === 'loading' ? 'error' : prev[1], 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
       }
     })();
-  }, [isRefreshModalOpen, refreshStep, slideReportId, slideReport, queryClient, invokeWithRetry]);
+  }, [isRefreshModalOpen, refreshStep, slideReportId, slideReport, queryClient, invokeWithRetry, isDataStudio]);
 
   // ========== Budget edit handlers ==========
   const handleStartEditBudget = useCallback((month: string, channel: string | null, currentBudget: number) => {
