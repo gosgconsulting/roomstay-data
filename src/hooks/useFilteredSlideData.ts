@@ -328,11 +328,10 @@ export function useFilteredSlideData({
                 agg.revenue += md.revenue || 0;
                 agg.bookings += md.bookings || 0;
               } else {
-                // Fallback: aggregate from monthlyBreakdowns for this month key
+                // Fallback 1: aggregate from monthlyBreakdowns for this month key
                 const monthlyBreakdowns = (channelData as any).monthlyBreakdowns as Record<string, Record<string, any[]>> | undefined;
                 if (monthlyBreakdowns?.[mk]) {
                   const bdForMonth = monthlyBreakdowns[mk];
-                  // Pick the first available dimension's rows and sum them
                   for (const dimRows of Object.values(bdForMonth)) {
                     if (Array.isArray(dimRows) && dimRows.length > 0) {
                       const summed = sumBreakdownRows(dimRows as BreakdownRowLike[]);
@@ -347,13 +346,37 @@ export function useFilteredSlideData({
                 }
               }
             }
-            // If aggregation yielded no data, try yearly data as a last resort
+            // If month-level aggregation yielded no data, try fallbacks
             if (agg.impressions === 0 && agg.clicks === 0 && agg.cost === 0 && agg.revenue === 0 && agg.bookings === 0) {
-              const yearlyData = (channelData as any).yearly?.[selectedYear];
-              if (yearlyData) {
-                channelTotals[channel] = yearlyData;
+              // Fallback 2: aggregate from all-time breakdowns (matches BreakdownTableSection behavior)
+              const allTimeBreakdowns = (channelData as any).breakdowns as Record<string, BreakdownRowLike[]> | undefined;
+              if (allTimeBreakdowns) {
+                for (const dimRows of Object.values(allTimeBreakdowns)) {
+                  if (Array.isArray(dimRows) && dimRows.length > 0) {
+                    const summed = sumBreakdownRows(dimRows);
+                    if (summed.impressions > 0 || summed.clicks > 0 || summed.cost > 0 || summed.revenue > 0 || summed.bookings > 0) {
+                      channelTotals[channel] = summed;
+                      break;
+                    }
+                  }
+                }
+                if (!channelTotals[channel]) {
+                  // Fallback 3: yearly data
+                  const yearlyData = (channelData as any).yearly?.[selectedYear];
+                  if (yearlyData) {
+                    channelTotals[channel] = yearlyData;
+                  } else {
+                    // Fallback 4: current (date-range totals)
+                    channelTotals[channel] = (channelData as any).current || agg;
+                  }
+                }
               } else {
-                channelTotals[channel] = agg;
+                const yearlyData = (channelData as any).yearly?.[selectedYear];
+                if (yearlyData) {
+                  channelTotals[channel] = yearlyData;
+                } else {
+                  channelTotals[channel] = (channelData as any).current || agg;
+                }
               }
             } else {
               channelTotals[channel] = agg;
@@ -371,16 +394,27 @@ export function useFilteredSlideData({
         } else if (selectedYear !== 'all') {
           const yearNum = parseInt(selectedYear);
           const yearlyData = (channelData as any).yearly?.[String(yearNum)];
-          if (yearlyData) {
+          if (yearlyData && (yearlyData.impressions > 0 || yearlyData.clicks > 0 || yearlyData.cost > 0 || yearlyData.revenue > 0 || yearlyData.bookings > 0)) {
             channelTotals[channel] = yearlyData;
           } else {
-            channelTotals[channel] = {
-              impressions: 0,
-              clicks: 0,
-              cost: 0,
-              revenue: 0,
-              bookings: 0,
-            };
+            // Fallback: try all-time breakdowns or current
+            const allTimeBreakdowns = (channelData as any).breakdowns as Record<string, BreakdownRowLike[]> | undefined;
+            let found = false;
+            if (allTimeBreakdowns) {
+              for (const dimRows of Object.values(allTimeBreakdowns)) {
+                if (Array.isArray(dimRows) && dimRows.length > 0) {
+                  const summed = sumBreakdownRows(dimRows);
+                  if (summed.impressions > 0 || summed.clicks > 0 || summed.cost > 0 || summed.revenue > 0 || summed.bookings > 0) {
+                    channelTotals[channel] = summed;
+                    found = true;
+                    break;
+                  }
+                }
+              }
+            }
+            if (!found) {
+              channelTotals[channel] = (channelData as any).current || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            }
           }
         } else {
           channelTotals[channel] =
