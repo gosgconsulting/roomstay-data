@@ -23,6 +23,7 @@ import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { calculateDerivedMetrics, formatNumber, filterRawDataRows } from '@/lib/slideViewHelpers';
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
+import { parseSelectedMonths } from '@/lib/monthUtils';
 import type { SlideReportPivotData } from '@/types/slideReports';
 
 // Hardcoded KPI
@@ -111,13 +112,18 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
     }, [availableDimensions, groupBy, breakdownBy, onGroupByChange, onBreakdownByChange]);
 
     // Build monthKey for filtering by selected year/month
-    const monthKey = useMemo(() => {
+    // Supports multi-month selections like "July,August,September,October,November,December"
+    const parsedMonths = useMemo(() => {
       if (!selectedYear || selectedYear === 'all' || !selectedMonth || selectedMonth === 'all') {
-        return null; // Use aggregated data
+        return null;
       }
-      const monthNum = MONTH_NAMES.indexOf(selectedMonth) + 1;
-      return `${selectedYear}-${monthNum.toString().padStart(2, '0')}`;
+      return parseSelectedMonths(selectedMonth);
     }, [selectedYear, selectedMonth]);
+
+    const monthKey = useMemo(() => {
+      if (!parsedMonths || parsedMonths.length !== 1) return null;
+      return `${selectedYear}-${parsedMonths[0].toString().padStart(2, '0')}`;
+    }, [selectedYear, parsedMonths]);
 
     // Get breakdown data from pivotData based on selected dimension and month
     // Applies filterValues if they are set
@@ -128,30 +134,19 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
       const groupByName = groupByDim?.name || groupBy;
       const groupByDimId = groupByDim?.id || groupBy;
 
-      // Check if filters are actually applied for the selected channel (not "All" selected)
+      // Check if filters are actually applied for the selected channel
+      // IMPORTANT: Do NOT compare against filterDimensionValues to detect "all selected".
+      // When available values are lazily loaded and match the selected filter values exactly,
+      // the filter gets incorrectly treated as inactive, showing unfiltered totals.
       const hasFilters =
         selectedChannel &&
         selectedChannel !== 'overview' &&
         filterValues?.[selectedChannel]
-          ? Object.entries(filterValues[selectedChannel]).some(([dimensionId, selectedValues]) => {
+          ? Object.entries(filterValues[selectedChannel]).some(([, selectedValues]) => {
               if (!selectedValues || selectedValues.length === 0) {
-                return false; // Empty = "All" selected = no filter
+                return false; // Empty = no filter
               }
-              // Check if all available values are selected (also means "All" = no filter)
-              const availableValues =
-                filterDimensionValues?.[selectedChannel]?.[dimensionId] || [];
-              if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
-                // Check if they're the same set
-                const selectedSet = new Set(selectedValues);
-                const availableSet = new Set(availableValues);
-                if (
-                  selectedSet.size === availableSet.size &&
-                  [...selectedSet].every((v) => availableSet.has(v))
-                ) {
-                  return false; // All values selected = "All" = no filter
-                }
-              }
-              return true; // Subset selected = filter is applied
+              return true; // Has selected values = filter is applied
             })
           : false;
 
@@ -181,11 +176,13 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
 
           // Build date range if month/year is selected
           let dateRange: { start: Date; end: Date } | undefined;
-          if (monthKey) {
-            const [year, monthNum] = monthKey.split('-').map(Number);
+          if (parsedMonths && parsedMonths.length > 0 && selectedYear && selectedYear !== 'all') {
+            const yearNum = parseInt(selectedYear);
+            const minMonth = Math.min(...parsedMonths);
+            const maxMonth = Math.max(...parsedMonths);
             dateRange = {
-              start: new Date(year, monthNum - 1, 1),
-              end: new Date(year, monthNum, 0, 23, 59, 59),
+              start: new Date(yearNum, minMonth - 1, 1),
+              end: new Date(yearNum, maxMonth, 0, 23, 59, 59),
             };
           } else if (selectedYear && selectedYear !== 'all') {
             const yearNum = parseInt(selectedYear);
@@ -320,9 +317,9 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
       groupBy,
       availableDimensions,
       selectedChannel,
+      parsedMonths,
       monthKey,
       filterValues,
-      filterDimensionValues,
       selectedYear,
     ]);
 
@@ -348,21 +345,9 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
         selectedChannel &&
         selectedChannel !== 'overview' &&
         filterValues?.[selectedChannel]
-          ? Object.entries(filterValues[selectedChannel]).some(([dimensionId, selectedValues]) => {
+          ? Object.entries(filterValues[selectedChannel]).some(([, selectedValues]) => {
               if (!selectedValues || selectedValues.length === 0) {
                 return false;
-              }
-              const availableValues =
-                filterDimensionValues?.[selectedChannel]?.[dimensionId] || [];
-              if (availableValues.length > 0 && selectedValues.length === availableValues.length) {
-                const selectedSet = new Set(selectedValues);
-                const availableSet = new Set(availableValues);
-                if (
-                  selectedSet.size === availableSet.size &&
-                  [...selectedSet].every((v) => availableSet.has(v))
-                ) {
-                  return false;
-                }
               }
               return true;
             })
@@ -379,11 +364,13 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
 
         // Build date range if month is selected
         let dateRange: { start: Date; end: Date } | undefined;
-        if (monthKey) {
-          const [year, monthNum] = monthKey.split('-').map(Number);
+        if (parsedMonths && parsedMonths.length > 0 && selectedYear && selectedYear !== 'all') {
+          const yearNum = parseInt(selectedYear);
+          const minMonth = Math.min(...parsedMonths);
+          const maxMonth = Math.max(...parsedMonths);
           dateRange = {
-            start: new Date(year, monthNum - 1, 1),
-            end: new Date(year, monthNum, 0, 23, 59, 59),
+            start: new Date(yearNum, minMonth - 1, 1),
+            end: new Date(yearNum, maxMonth, 0, 23, 59, 59),
           };
         } else if (selectedYear && selectedYear !== 'all') {
           const yearNum = parseInt(selectedYear);
@@ -483,9 +470,9 @@ export const UnifiedBreakdownTable = React.memo<BreakdownTableSectionProps>(
       breakdownBy,
       availableDimensions,
       selectedChannel,
+      parsedMonths,
       monthKey,
       filterValues,
-      filterDimensionValues,
       selectedYear,
       groupBy,
     ]);
