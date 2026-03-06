@@ -243,6 +243,10 @@ export const filterRawDataRows = (
         if (isNaN(rowDate.getTime()) || !isWithinInterval(rowDate, dateRange)) {
           return false;
         }
+      } else {
+        // No date field found but dateRange is required — exclude this row
+        // to prevent unfiltered data from leaking through
+        return false;
       }
     }
 
