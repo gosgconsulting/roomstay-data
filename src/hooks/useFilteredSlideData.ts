@@ -142,9 +142,15 @@ export function useFilteredSlideData({
   }, [filterValues, filterDimensionValues]);
 
   // Get channels with active filters
+  // IMPORTANT: Do NOT pass filterDimensionValues here. When available values are
+  // lazily loaded and happen to match the selected values exactly (e.g. an Account
+  // dimension with only 2 values that are both selected), the filter gets treated
+  // as "select all = no filter" and unfiltered totals are shown.
+  // By omitting filterDimensionValues, any explicitly set filter values are always
+  // treated as active, preventing data from jumping when switching tabs.
   const channelsWithFilters = useMemo(() => {
-    return getChannelsWithFilters(filterValues, filterDimensionValues);
-  }, [filterValues, filterDimensionValues]);
+    return getChannelsWithFilters(filterValues);
+  }, [filterValues]);
 
   // Month key for breakdown fallback when a single month is selected (e.g. "2025-02")
   const monthKeyForBreakdowns = useMemo(() => {
@@ -186,17 +192,7 @@ export function useFilteredSlideData({
       const rawDataRows = (channelData as any).rawDataRows || [];
       const dimensionMap = (channelData as any).dimensionMap || {};
 
-      if (channel === 'sem') {
-        console.log(`[useFilteredSlideData] SEM debug:`, {
-          hasChannelFilters,
-          rawDataRowsCount: rawDataRows.length,
-          filterKeys: Object.keys(channelFilterValues),
-          filterValues: channelFilterValues,
-          dimensionMapKeys: Object.keys(dimensionMap),
-          monthlyKeys: Object.keys((channelData as any).monthly || {}),
-          hasBreakdowns: !!(channelData as any).breakdowns,
-        });
-      }
+
 
       // If this channel has filters, filter rawDataRows and re-aggregate
       if (hasChannelFilters && rawDataRows.length > 0) {
@@ -296,15 +292,8 @@ export function useFilteredSlideData({
             }
           });
 
-          if (channel === 'sem') {
-            console.log(`[useFilteredSlideData] SEM filtered result:`, {
-              filteredRowsCount: filteredRows.length,
-              totalRawRows: rawDataRows.length,
-              revenue: metrics.revenue,
-              cost: metrics.cost,
-              impressions: metrics.impressions,
-            });
-          }
+
+
           channelTotals[channel] = metrics;
         } else {
           channelTotals[channel] = {
@@ -333,11 +322,6 @@ export function useFilteredSlideData({
         filteredRawRows[channel] = [];
       } else {
         // This channel has no filters - use pre-computed data (fast path)
-        if (channel === 'sem') {
-          console.log(`[useFilteredSlideData] SEM NO FILTERS path - using pre-computed data`, {
-            selectedMonth, selectedYear, rawDataRowsCount: rawDataRows.length,
-          });
-        }
         filteredRawRows[channel] = rawDataRows; // Store all rows for consistency
 
         if (selectedMonth && selectedMonth !== 'all') {
