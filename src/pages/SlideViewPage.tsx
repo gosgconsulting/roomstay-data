@@ -29,7 +29,7 @@ import { useComparisonMetrics, useChannelComparisonMetrics } from "@/hooks/useCo
 import { useKPICards, useReportKPICards } from "@/hooks/useKPICards";
 import { useOverviewChartData, useAllChannelChartData } from "@/hooks/useChartData";
 import { useChannelChartDataFromTable } from "@/hooks/useChannelChartDataFromTable";
-import { buildOverviewChartDataFromMonthlyData, buildOverviewChartDataFromChannelChartData, buildChannelChartDataFromMonthlyData } from "@/lib/chartDataCalculations";
+import { buildOverviewChartDataFromMonthlyData, buildOverviewChartDataFromChannelChartData, buildChannelChartDataFromMonthlyData, generateMonthsInTimeRange } from "@/lib/chartDataCalculations";
 import { useBudgetData, useBudgetMonthlyData } from "@/hooks/useBudgetData";
 import { calculateReportBreakdown, calculateReportTotal } from "@/lib/metricsCalculations";
 import { normalizeBudgetValue, type ChannelBudgets } from "@/lib/budgetCalculations";
@@ -1314,16 +1314,55 @@ export default function SlideViewPage() {
     return channelChartData;
   }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, channelChartData, chartAnchorDate]);
 
-  // Comparison chart data (overview + per-channel) - aligned to current period labels
+  // Comparison chart data (overview + per-channel)
+  // Build from pivotData.channels[ch].monthly (same source as KPI comparison totals)
+  // to ensure chart and KPI cards are always consistent.
+  // Falls back to slide_report_channel_month_data table if pivotData has no comparison-period data.
+  const comparisonChartDataFromPivot = useMemo((): Record<'metasearch' | 'sem' | 'social', Array<{ month: string; revenue: number }>> | null => {
+    if (comparisonType === 'none' || !comparisonChartAnchorDate) return null;
+
+    // Build comparison period monthly data from pivotData
+    const channels: ('metasearch' | 'sem' | 'social')[] = ['metasearch', 'sem', 'social'];
+    const monthsInRange = generateMonthsInTimeRange(chartTimeRangeTyped, comparisonChartAnchorDate);
+    if (!monthsInRange.length) return null;
+
+    let hasAnyData = false;
+    const result: Record<string, Array<{ month: string; revenue: number }>> = { metasearch: [], sem: [], social: [] };
+
+    // Also build the current period months so we can use their labels
+    const currentMonths = generateMonthsInTimeRange(chartTimeRangeTyped, chartAnchorDate);
+
+    for (const ch of channels) {
+      const channelData = effectivePivotData?.channels?.[ch];
+      const monthly = (channelData as any)?.monthly as Record<string, { revenue?: number }> | undefined;
+
+      result[ch] = monthsInRange.map(({ year, month }, idx) => {
+        const monthIndex = MONTH_NAMES.indexOf(month);
+        const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+        const rev = monthly?.[monthKey]?.revenue ?? 0;
+        if (rev > 0) hasAnyData = true;
+        // Use current period label so chart aligns correctly
+        const currentLabel = currentMonths[idx]
+          ? `${currentMonths[idx].month.slice(0, 3)} ${currentMonths[idx].year.toString().slice(-2)}`
+          : `${month.slice(0, 3)} ${year.toString().slice(-2)}`;
+        return { month: currentLabel, revenue: rev };
+      });
+    }
+
+    return hasAnyData ? result as Record<'metasearch' | 'sem' | 'social', Array<{ month: string; revenue: number }>> : null;
+  }, [comparisonType, effectivePivotData, chartTimeRangeTyped, comparisonChartAnchorDate, chartAnchorDate]);
+
   const comparisonOverviewChartData = useMemo((): Array<{ label: string; total: number }> | null => {
-    if (comparisonType === 'none' || !comparisonChannelChartDataFromTable) return null;
-    return buildOverviewChartDataFromChannelChartData(comparisonChannelChartDataFromTable);
-  }, [comparisonType, comparisonChannelChartDataFromTable]);
+    if (comparisonType === 'none') return null;
+    const src = comparisonChartDataFromPivot ?? comparisonChannelChartDataFromTable;
+    if (!src) return null;
+    return buildOverviewChartDataFromChannelChartData(src);
+  }, [comparisonType, comparisonChartDataFromPivot, comparisonChannelChartDataFromTable]);
 
   const comparisonEffectiveChannelChartData = useMemo(() => {
-    if (comparisonType === 'none' || !comparisonChannelChartDataFromTable) return null;
-    return comparisonChannelChartDataFromTable;
-  }, [comparisonType, comparisonChannelChartDataFromTable]);
+    if (comparisonType === 'none') return null;
+    return comparisonChartDataFromPivot ?? comparisonChannelChartDataFromTable ?? null;
+  }, [comparisonType, comparisonChartDataFromPivot, comparisonChannelChartDataFromTable]);
 
   // Get channel totals from monthly_data table (same source as SlideDataBrowser)
   // This is the correct source of truth for the data
