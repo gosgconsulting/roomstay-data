@@ -59,7 +59,7 @@ import { extractMinimalAIData } from "@/lib/extractMinimalAIData";
 import { isWithinInterval } from "date-fns";
 import { aggregateMetrics } from "@/components/AISummaryPivotTable";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
-import { getChartAnchorDate } from "@/lib/monthUtils";
+import { getChartAnchorDate, buildMultiMonthDateRange, parseSelectedMonths } from "@/lib/monthUtils";
 import type { AccountReportIds } from "@/lib/accountReportIds";
 import {
   calculateDerivedMetrics,
@@ -165,6 +165,11 @@ const UnifiedBreakdownTable = ({
     return `${selectedYear}-${monthNum.toString().padStart(2, '0')}`;
   }, [selectedYear, selectedMonth]);
 
+  // Build multi-month date range for breakdown table filtering
+  const breakdownDateRange = useMemo(() => {
+    return buildMultiMonthDateRange(selectedYear || 'all', selectedMonth || 'all');
+  }, [selectedYear, selectedMonth]);
+
   // Get breakdown data from pivotData based on selected dimension and month
   // Applies filterValues if they are set. When displayDataFromApi and apiBreakdowns are set, use API data (no heavy calc).
   // When group-by is e.g. Link Type and breakdown-by is Hotel, row totals must respect the Hotel filter: recompute from filtered expanded rows.
@@ -260,20 +265,13 @@ const UnifiedBreakdownTable = ({
           ? (filterValues?.[channel] || {})
           : {};
 
-        // Build date range if month/year is selected
-        let dateRange: { start: Date; end: Date } | undefined;
-        if (monthKey) {
+        // Use precise multi-month date range (e.g. Jul-Dec) instead of full year
+        let dateRange = breakdownDateRange;
+        if (!dateRange && monthKey) {
           const [year, monthNum] = monthKey.split('-').map(Number);
-          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
           dateRange = {
             start: new Date(year, monthNum - 1, 1),
             end: new Date(year, monthNum, 0, 23, 59, 59),
-          };
-        } else if (selectedYear && selectedYear !== 'all') {
-          const yearNum = parseInt(selectedYear);
-          dateRange = {
-            start: new Date(yearNum, 0, 1),
-            end: new Date(yearNum, 11, 31, 23, 59, 59),
           };
         }
 
@@ -337,6 +335,29 @@ const UnifiedBreakdownTable = ({
         if (monthKey && channelData.monthlyBreakdowns?.[monthKey]) {
           // Use month-specific breakdown data
           breakdownData = channelData.monthlyBreakdowns[monthKey][groupByName] || [];
+        } else if (!monthKey && selectedMonth && selectedMonth !== 'all' && selectedYear && selectedYear !== 'all' && channelData.monthlyBreakdowns) {
+          // Multi-month: aggregate monthly breakdowns for each selected month
+          const months = parseSelectedMonths(selectedMonth);
+          if (months && months.length > 0) {
+            const aggregated: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
+            for (const m of months) {
+              const mk = `${selectedYear}-${String(m).padStart(2, '0')}`;
+              const monthRows = channelData.monthlyBreakdowns[mk]?.[groupByName] || [];
+              monthRows.forEach((row: any) => {
+                const name = row.name || 'Unknown';
+                if (!aggregated[name]) aggregated[name] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                aggregated[name].impressions += row.impressions || 0;
+                aggregated[name].clicks += row.clicks || 0;
+                aggregated[name].cost += row.cost || 0;
+                aggregated[name].revenue += row.revenue || 0;
+                aggregated[name].bookings += row.bookings || 0;
+              });
+            }
+            breakdownData = Object.entries(aggregated).map(([name, metrics]) => ({ name, ...metrics }));
+          }
+          if (breakdownData.length === 0 && channelData.breakdowns) {
+            breakdownData = channelData.breakdowns[groupByName] || [];
+          }
         } else if (channelData.breakdowns) {
           // Fall back to aggregated breakdowns
           breakdownData = channelData.breakdowns[groupByName] || [];
@@ -390,7 +411,7 @@ const UnifiedBreakdownTable = ({
       });
 
     return result;
-  }, [displayDataFromApi, apiBreakdowns, pivotData, groupBy, breakdownBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear]);
+  }, [displayDataFromApi, apiBreakdowns, pivotData, groupBy, breakdownBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear, selectedMonth, breakdownDateRange]);
 
   // Get breakdown data for expanded row (also uses month-specific data)
   // This should show breakdown data ONLY for the expanded parent row value
