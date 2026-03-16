@@ -23,6 +23,7 @@ import { ReportsSidebarDemo } from "./components/ReportsSidebarDemo";
 import DevPage from "./pages/DevPage";
 import PriceWidgetPage from "./pages/PriceWidgetPage";
 import PriceWidgetDetailPage from "./pages/PriceWidgetDetailPage";
+import Integrations from "./pages/Integrations";
 
 const queryClient = new QueryClient();
 
@@ -55,6 +56,7 @@ const App = () => (
           <Route path="/tools/report/:accountId/:summaryId" element={<AISummaryPage />} />
           <Route path="/demo/sidebar" element={<ReportsSidebarDemo />} />
           <Route path="/dev" element={<DevPage />} />
+          <Route path="/integrations" element={<Integrations />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
           <Route path="/shared/reports/:slug" element={<SharedAISummary />} />
           <Route path="/:slug" element={<SharedReport />} />

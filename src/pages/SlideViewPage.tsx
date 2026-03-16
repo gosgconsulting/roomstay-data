@@ -61,6 +61,7 @@ import { aggregateMetrics } from "@/components/AISummaryPivotTable";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
 import { getChartAnchorDate, buildMultiMonthDateRange, parseSelectedMonths } from "@/lib/monthUtils";
 import type { AccountReportIds } from "@/lib/accountReportIds";
+import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
 import {
   calculateDerivedMetrics,
   hasActiveFilters,
@@ -3355,77 +3356,34 @@ export default function SlideViewPage() {
     []
   );
 
-   // When Refresh Data modal is open and step is 0: resync all data sources.
-  // Data Studio: just resync sources (fetch ALL raw rows), skip pivot aggregation.
-  // Master Report: resync + run refresh-slide-report for monthly/yearly aggregation.
+   // When Refresh Data modal is open and step is 0: run orchestrated refresh workflow (resync + optional refresh-slide-report).
+  // Data Studio: workflow resyncs only (skipRefresh), then client recomputes pivot and updates slide_reports.
+  // Master Report: workflow resyncs and runs refresh-slide-report.
   useEffect(() => {
     if (!isRefreshModalOpen || refreshStep !== 0 || !slideReportId || !slideReport) return;
+
+    const workflowAccountId = accountId || (slideReport.account_id as string);
+    if (!workflowAccountId) {
+      setRefreshError('Missing account ID');
+      setRefreshStepStatus((prev) => ({ ...prev, 1: 'error', 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
+      return;
+    }
 
     setRefreshStep(1);
     setRefreshStepStatus((prev) => ({ ...prev, 1: 'loading' }));
 
     (async () => {
-      const reportIds = (slideReport.report_ids || {}) as Record<string, string>;
-      const channelReportIds = [
-        reportIds.metasearch,
-        reportIds.sem,
-        reportIds.social,
-      ].filter(Boolean) as string[];
-
       try {
-        // Step 1: Resync data sources — skip sources synced within last hour, run in parallel, tolerate timeouts
-        const { data: allSources, error: sourcesError } = await supabase
-          .from('data_sources')
-          .select('id, report_id, last_synced_at')
-          .in('report_id', channelReportIds);
-
-        if (sourcesError) throw sourcesError;
-
-        const ONE_HOUR_AGO = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-        const sourcesToResync = (allSources || []).filter((ds: any) => {
-          // Data Studio: always force resync from source
-          if (isDataStudio) return true;
-          // Skip if synced within the last hour (for non-Data Studio)
-          if (ds.last_synced_at && ds.last_synced_at > ONE_HOUR_AGO) {
-            console.log(`[RefreshData] Skipping resync for ${ds.id} — synced recently at ${ds.last_synced_at}`);
-            return false;
-          }
-          return true;
+        await runRefreshWorkflow({
+          accountId: workflowAccountId,
+          slideReportId,
+          clearFirst: false,
+          skipRefresh: isDataStudio,
         });
-
-        if (sourcesToResync.length > 0) {
-          console.log(`[RefreshData] Resyncing ${sourcesToResync.length} data sources in parallel (skipped ${(allSources || []).length - sourcesToResync.length} recently synced)`);
-          
-          // Run all resyncs in parallel with individual timeout handling
-          const resyncResults = await Promise.allSettled(
-            sourcesToResync.map(async (ds: any) => {
-              const { data: resyncResult, error: resyncError } = await invokeWithRetry('resync-data-source', { dataSourceId: ds.id }, 3);
-              if (resyncError) {
-                console.warn(`[RefreshData] Resync failed for ${ds.id}:`, resyncError?.message);
-                return { id: ds.id, success: false, error: resyncError?.message };
-              }
-              if (!resyncResult?.success) {
-                console.warn(`[RefreshData] Resync returned failure for ${ds.id}:`, resyncResult?.error);
-                return { id: ds.id, success: false, error: resyncResult?.error };
-              }
-              return { id: ds.id, success: true };
-            })
-          );
-
-          // Log results but don't fail the whole process — proceed with refresh even if some resyncs failed
-          const failures = resyncResults.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value?.success));
-          if (failures.length > 0) {
-            console.warn(`[RefreshData] ${failures.length}/${sourcesToResync.length} resyncs failed, continuing with refresh anyway`);
-          }
-        } else {
-          console.log('[RefreshData] All data sources recently synced, skipping resync step');
-        }
 
         setRefreshStepStatus((prev) => ({ ...prev, 1: 'complete' }));
 
         if (isDataStudio) {
-          // Data Studio: resync done, now recompute pivot data from fresh source
-          console.log('[RefreshData] Data Studio mode — recomputing pivot data from fresh source');
           setRefreshStep(2);
           setRefreshStepStatus((prev) => ({ ...prev, 2: 'loading', 3: 'loading', 4: 'loading', 5: 'loading' }));
 
@@ -3456,24 +3414,7 @@ export default function SlideViewPage() {
           queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
           queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
         } else {
-          // Master Report: run full pivot aggregation (monthly/yearly)
           setRefreshStep(2);
-          setRefreshStepStatus((prev) => ({ ...prev, 2: 'loading', 3: 'loading', 4: 'loading', 5: 'loading' }));
-
-          const { data: refreshResult, error: refreshErr } = await invokeWithRetry('refresh-slide-report', {
-            slideReportId,
-            years: [2024, 2025, 2026],
-          }, 3);
-
-          if (refreshErr) {
-            const msg = refreshErr?.message || 'Unknown error';
-            const hint = msg.includes('Failed to send') ? ' Check your connection and try again.' : '';
-            throw new Error(`Refreshing report: ${msg}.${hint}`);
-          }
-          if (!refreshResult?.success) {
-            throw new Error((refreshResult as any)?.error || 'Refresh failed');
-          }
-
           setRefreshStepStatus((prev) => ({
             ...prev,
             2: 'complete',
@@ -3488,13 +3429,13 @@ export default function SlideViewPage() {
           queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
           queryClient.invalidateQueries({ queryKey: ['slide_report_monthly_data', slideReportId] });
         }
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error('[RefreshData]', e);
-        setRefreshError(e?.message || 'Refresh failed');
+        setRefreshError(e instanceof Error ? e.message : 'Refresh failed');
         setRefreshStepStatus((prev) => ({ ...prev, 1: prev[1] === 'loading' ? 'error' : prev[1], 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
       }
     })();
-  }, [isRefreshModalOpen, refreshStep, slideReportId, slideReport, queryClient, invokeWithRetry, isDataStudio]);
+  }, [isRefreshModalOpen, refreshStep, slideReportId, slideReport, queryClient, isDataStudio, accountId]);
 
   // ========== Budget edit handlers ==========
   const handleStartEditBudget = useCallback((month: string, channel: string | null, currentBudget: number) => {

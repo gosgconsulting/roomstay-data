@@ -20,6 +20,7 @@ import { AddAICardModal } from "@/components/AddAICardModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
 import { resyncReportViews } from "@/lib/resync-report-views";
+import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import { DataSourcesListModal } from "@/components/DataSourcesListModal";
 import { DimensionsListModal } from "@/components/DimensionsListModal";
@@ -412,60 +413,40 @@ export default function ReportDashboard() {
 
   const handleClearAndResync = async () => {
     if (!accountId) return;
-    
+
     if (!window.confirm('This will clear all stored data and resync from source. Continue?')) {
       return;
     }
-    
+
     try {
       toast({
-        title: "Clearing data...",
-        description: "Please wait while we clear stored data.",
+        title: "Clearing and resyncing...",
+        description: "Please wait while we clear and resync data.",
       });
-      
-      const { data, error } = await supabase.functions.invoke('clear-and-resync', {
-        body: { accountId, reportId }
+
+      const result = await runRefreshWorkflow({
+        accountId,
+        reportId: reportId ?? undefined,
+        clearFirst: true,
       });
-      
-      if (error) throw error;
-      
-      // console.log('[CLEAR-RESYNC] Clear result:', data);
-      
-      toast({
-        title: "Data cleared",
-        description: `Cleared data for ${data.clearedReports || 0} reports. Resyncing...`,
-      });
-      
-      // Invalidate all caches
+
       queryClient.invalidateQueries();
-      
-      // Trigger resync for each data source
-      const { data: dataSources } = await supabase
-        .from('data_sources')
-        .select('id, name')
-        .eq('report_id', reportId);
-      
-      if (dataSources && dataSources.length > 0) {
-        for (const ds of dataSources) {
-          console.log(`[CLEAR-RESYNC] Resyncing data source: ${ds.name}`);
-          await supabase.functions.invoke('resync-data-source', {
-            body: { dataSourceId: ds.id }
-          });
-        }
-        
-        toast({
-          title: "Resync complete",
-          description: "Data has been cleared and resynced from source.",
-        });
-      }
-      
-      // Refresh the page data
       refreshData();
+
+      const resynced = result.resynced ?? 0;
+      const hasResyncErrors = (result.resyncErrors?.length ?? 0) > 0;
+      toast({
+        title: hasResyncErrors ? "Resync completed with errors" : "Resync complete",
+        description: hasResyncErrors
+          ? `Cleared and resynced ${resynced} data source(s). Some sources failed.`
+          : "Data has been cleared and resynced from source.",
+        variant: hasResyncErrors ? "destructive" : "default",
+      });
     } catch (error) {
       console.error('[CLEAR-RESYNC] Error:', error);
       toast({
         title: "Error",
-        description: "Failed to clear and resync data.",
+        description: error instanceof Error ? error.message : "Failed to clear and resync data.",
         variant: "destructive",
       });
     }
