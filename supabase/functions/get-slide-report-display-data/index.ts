@@ -295,7 +295,7 @@ function aggregateFromRows(
 function hasChannelFilters(filterValues: Record<string, string[] | undefined>): boolean {
   if (!filterValues || Object.keys(filterValues).length === 0) return false;
   for (const selected of Object.values(filterValues)) {
-    if (selected && selected.length >= 0) return true;
+    if (selected && selected.length > 0) return true;
   }
   return false;
 }
@@ -562,6 +562,7 @@ Deno.serve(async (req) => {
       if (standardMetricIds.Cost) nameToId['Cost'] = standardMetricIds.Cost;
 
       let rawRows: Record<string, unknown>[] = [];
+      let dateDimId: string | null = null;
       let query = supabase
         .from('slide_report_channel_raw_rows')
         .select('rows, dimension_map')
@@ -586,7 +587,22 @@ Deno.serve(async (req) => {
 
       if (rawRows.length === 0 && reportIds[ch]) {
         const reportId = reportIds[ch];
-        const dateDimId = Object.entries(idToName).find(([, n]) => n === 'Date' || n === 'date')?.[0] ?? null;
+        // When slide_report_channel_raw_rows is empty, build dimension map from dimensions table so we have dateDimId and can aggregate Cost/Revenue
+        if (Object.keys(idToName).length === 0) {
+          const { data: dims } = await supabase.from('dimensions').select('id, name').eq('report_id', reportId);
+          if (dims?.length) {
+            for (const d of dims) {
+              idToName[d.id] = d.name ?? d.id;
+            }
+            for (const [id, name] of Object.entries(idToName)) {
+              if (name) nameToId[name] = id;
+            }
+            const stdIds = resolveStandardMetricIds(idToName);
+            if (stdIds.Revenue) nameToId['Revenue'] = stdIds.Revenue;
+            if (stdIds.Cost) nameToId['Cost'] = stdIds.Cost;
+          }
+        }
+        dateDimId = Object.entries(idToName).find(([, n]) => n === 'Date' || n === 'date')?.[0] ?? null;
         if (dateDimId) {
           const { data: dimRows } = await supabase.rpc('get_dimension_data_by_report_and_date', {
             p_report_id: reportId,
@@ -608,6 +624,7 @@ Deno.serve(async (req) => {
         const r = (row as { dimension_values?: Record<string, unknown> }).dimension_values || row;
         const rec = r as Record<string, unknown>;
         let dateValue: unknown = rec.Date ?? rec.date ?? rec.Day ?? rec.day;
+        if (dateValue == null && dateDimId) dateValue = rec[dateDimId];
         if (dateValue == null) {
           for (const [, val] of Object.entries(rec)) {
             if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {

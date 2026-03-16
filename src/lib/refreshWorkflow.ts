@@ -1,11 +1,14 @@
 /**
  * Client for the run-refresh-workflow Edge Function.
  * Single entry point for clear + resync + optional refresh-slide-report.
+ * Retries on transient "Failed to send request" errors so Data Studio and Master Report refresh complete.
  */
 
 import { supabase } from '@/integrations/supabase/client';
 
 const FUNCTION_NAME = 'run-refresh-workflow';
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 2000;
 
 export interface RunRefreshWorkflowParams {
   accountId: string;
@@ -27,20 +30,49 @@ export interface RunRefreshWorkflowResult {
   message?: string;
 }
 
+function isRetryableError(err: { message?: string } | null): boolean {
+  const msg = err?.message ?? '';
+  return (
+    msg.includes('Failed to send') ||
+    msg.includes('fetch') ||
+    msg.includes('network') ||
+    msg.includes('ECONNRESET') ||
+    msg.includes('timeout')
+  );
+}
+
 export async function runRefreshWorkflow(
   params: RunRefreshWorkflowParams
 ): Promise<RunRefreshWorkflowResult> {
-  const { data, error } = await supabase.functions.invoke(FUNCTION_NAME, {
-    body: params,
-  });
+  let lastData: unknown = null;
+  let lastError: { message?: string } | null = null;
 
-  if (error) {
-    throw new Error(data?.error ?? error.message ?? 'run-refresh-workflow failed');
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const { data, error } = await supabase.functions.invoke(FUNCTION_NAME, {
+      body: params,
+    });
+
+    lastData = data;
+    lastError = error;
+
+    if (!error) {
+      if (data && typeof data === 'object' && (data as RunRefreshWorkflowResult).error && !(data as RunRefreshWorkflowResult).success) {
+        throw new Error(String((data as RunRefreshWorkflowResult).error));
+      }
+      return data as RunRefreshWorkflowResult;
+    }
+
+    if (attempt < MAX_RETRIES && isRetryableError(error)) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      continue;
+    }
+
+    throw new Error(
+      (lastData as { error?: string })?.error ?? error?.message ?? 'run-refresh-workflow failed'
+    );
   }
 
-  if (data?.error && !data?.success) {
-    throw new Error(String(data.error));
-  }
-
-  return data as RunRefreshWorkflowResult;
+  throw new Error(
+    (lastData as { error?: string })?.error ?? lastError?.message ?? 'run-refresh-workflow failed'
+  );
 }

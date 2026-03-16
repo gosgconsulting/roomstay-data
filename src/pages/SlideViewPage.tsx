@@ -3431,7 +3431,11 @@ export default function SlideViewPage() {
         }
       } catch (e: unknown) {
         console.error('[RefreshData]', e);
-        setRefreshError(e instanceof Error ? e.message : 'Refresh failed');
+        const msg = e instanceof Error ? e.message : 'Refresh failed';
+        const hint = msg.includes('Failed to send') || msg.includes('Edge Function')
+          ? ' Check your connection and try again. If it persists, ensure run-refresh-workflow is deployed.'
+          : '';
+        setRefreshError(msg + hint);
         setRefreshStepStatus((prev) => ({ ...prev, 1: prev[1] === 'loading' ? 'error' : prev[1], 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
       }
     })();

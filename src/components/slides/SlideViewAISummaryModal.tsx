@@ -14,6 +14,7 @@ import { Sparkles, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { extractMinimalAIData } from "@/lib/extractMinimalAIData";
+import { invokeGenerateAISummary } from "@/lib/generate-ai-summary-client";
 import type { MinimalAIData } from "@/lib/extractMinimalAIData";
 import type { ComparisonOption } from "@/components/GenerateAISummaryModal";
 import type { SlideReportView } from "@/types/slideReports";
@@ -203,30 +204,16 @@ export function SlideViewAISummaryModal({
           comparisonType: requestBody.comparisonType,
         });
 
-        // Use supabase.functions.invoke for proper authentication
-        const { data: result, error: invokeError } = await supabase.functions.invoke('generate-ai-summary', {
-          body: requestBody,
-        });
-
-        if (invokeError) {
-          console.error("Error calling AI function:", invokeError);
-          const errorMessage = invokeError.message || invokeError.toString();
-          if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
-            toast.error("Authentication error: Please refresh the page and try again");
-          } else {
-            toast.error(`API error: ${errorMessage}`);
-          }
-          useAlgorithm = true;
-        } else if (result?.error) {
-          console.error("AI function error:", result.error);
-          toast.error(`AI error: ${result.error}`);
-          useAlgorithm = true;
-        } else {
-          aiSummary = result.summary || result.executiveSummary || null;
-        }
+        const result = await invokeGenerateAISummary(requestBody);
+        aiSummary = result.summary ?? result.executiveSummary ?? null;
       } catch (error) {
-        console.error("Network error calling AI function, using algorithm fallback:", error);
-        toast.error(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error("Error calling AI function, using algorithm fallback:", error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+          toast.error("Authentication error: Please refresh the page and try again");
+        } else {
+          toast.error(`API error: ${errorMessage}`);
+        }
         useAlgorithm = true;
       }
 
