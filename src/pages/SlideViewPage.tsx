@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useSlideReportPage } from "@/hooks/useSlideReportPage";
-import { isMetasearchJan2026, getJan2026BreakdownRowsForTable } from "@/hooks/useMetasearchJan2026RawRows";
+import { isMetasearchJan2026, getJan2026BreakdownRowsForTable } from "@/lib/metasearchJan2026Utils";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
 import { useEditSourceModal } from "@/hooks/useEditSourceModal";
 import { useDataLoadingCache } from "@/hooks/useDataLoadingCache";

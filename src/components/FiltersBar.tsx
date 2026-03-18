@@ -16,7 +16,7 @@ import { useToast } from "@/components/ui/use-toast";
 import PerformanceSettingsModal from "@/components/PerformanceSettingsModal";
 import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 import { useUser } from "@/lib/auth";
-import { useFiltersSourceData } from "@/hooks/useFiltersSourceData";
+import { useCachedSourceData } from "@/hooks/dataSources/useCachedSourceData";
 import { extractMultipleDimensionValues } from "@/lib/filters/extractDimensionValues";
 
 import { 
@@ -107,12 +107,13 @@ export const FiltersBar = ({
   const { data: userData } = useUser();
   const user = userData?.user || null;
 
-  // Fetch source data for extracting filter values directly from Google Sheets/CSV
-  const { 
-    transformedRows: sourceRows, 
-    dimensionIdMap,
-    isLoading: sourceDataLoading 
-  } = useFiltersSourceData(reportId, accountId);
+  // Fetch source data for extracting filter values from cached dimension_data
+  const {
+    data: cachedSourceData,
+    isLoading: sourceDataLoading,
+  } = useCachedSourceData(reportId);
+  const sourceRows = cachedSourceData?.transformedRows ?? [];
+  const dimensionIdMap: Record<string, string> = {}; // dimension_data rows are already keyed by dimension ID
 
   // Initialize selected reports to all by default
   useEffect(() => {

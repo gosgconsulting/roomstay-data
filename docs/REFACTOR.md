@@ -74,6 +74,84 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 
 ## Progress tracker
 
+### Phase 6 — Data source unification + canonical Data Studio fetch path (HIGH)
+
+> **Goal:** One canonical way to add data sources (CSV, Google Sheets) with dimension mapping; one canonical way to fetch/sync data into Data Studio. No parallel live-fetch + DB-cache paths running simultaneously.
+
+- [x] **6-F1** — Collapse three parallel data-fetch hooks into one canonical path (reads `dimension_data`; live fetch only on manual sync trigger)
+  - `useDataStudioRawRows.ts` already reads `dimension_data` — kept as canonical; no live-fetch path remains
+  - Deleted `useFiltersSourceData.ts`; `FiltersBar` migrated to `useCachedSourceData`
+  - Canonical: `useCachedSourceData` reads `dimension_data`; `useSourceData` / `fetchSourceData` used only during sync
+- [x] **6-F2** — Removed `useSlideReportChannelData` from `useSlideReportPage`; deleted `useSlideReportChannelData.ts` + `slideReportChannelDataMerge.ts`; `effectivePivotData` now reads only from `dataStudioRawRows` (dimension_data)
+- [x] **6-F3** — Moved constants/utils from `useMetasearchJan2026RawRows.ts` to `src/lib/metasearchJan2026Utils.ts`; deleted hooks file; updated `ChannelTab` + `SlideViewPage` imports
+- [x] **6-F4** — `usePerformanceData` already deleted in prior phase; confirmed zero imports
+- [x] **6-F5** — Deleted `CSVImportChoiceModal.tsx`, `DataSourcesListModal.tsx`, `MappingModal.tsx`; `ReportDashboard` "Data sources" button now navigates to `/tools/data-sources`; CSV flow in `DashboardHeader` bypasses choice modal and goes directly to `UnifiedDataSourceModal`; `EditMappingModal` remains as the single mapping step
+- [x] **6-F6** — Removed `handleCreateBookingReport`, `handleCreatePriceCheckReport`, state vars, and UI buttons from `DataSourcesPage`
+- [ ] **6-DB1** — Document `dimension_data` as the single read path for Data Studio; update DB section
+- [ ] **6-DB2** — Verify `resync-data-source` edge function is the sole writer to `dimension_data`; document in DB section
+
+> **What changed (Phase 6):** Deleted `useFiltersSourceData.ts`, `useSlideReportChannelData.ts`, `slideReportChannelDataMerge.ts`, `useMetasearchJan2026RawRows.ts` (hook), `CSVImportChoiceModal.tsx`, `DataSourcesListModal.tsx`, `MappingModal.tsx`. Created `src/lib/metasearchJan2026Utils.ts`. Migrated `FiltersBar` → `useCachedSourceData`, `useSlideReportPage` → single `dataStudioRawRows` path, `ReportDashboard` → navigate to `DataSourcesPage`. Build: `npm run build` ✓ exit 0. Lint: `npm run lint` ✓ 0 errors.
+
+### Phase 7 — Legacy pivot cache deprecation + edge function cleanup (HIGH)
+
+> **Goal:** Stop all writes to legacy `slide_report_*` pivot cache tables; remove the edge functions that serve them; Data Studio reads `dimension_data` directly.
+
+- [x] **7-EF1** — `refresh-slide-report` already gated by `SLIDE_REPORT_CACHE_ENABLED` in `run-refresh-workflow`; returns 410 when env var is false. No direct frontend callers.
+- [x] **7-EF2** — `refresh-slide-report-channel` has no frontend callers; only called by `refresh-slide-report` (already gated). Gated transitively.
+- [x] **7-EF3** — `get-slide-report-data` already has `SLIDE_REPORT_CACHE_ENABLED` gate at top of handler; returns 410 when disabled.
+- [ ] **7-EF4** — `get-slide-report-display-data` still actively called by `useSlideReportDisplayData.ts` (used in `SlideViewPage`). **DEFERRED** — cannot retire until Data Studio fully replaces master-report display path.
+- [x] **7-EF5** — `get-consolidated-performance-data` has zero frontend callers; confirmed distinct from `get-performance-data` (different parameter shape). Added 410 deprecation gate.
+- [x] **7-EF6** — `run-refresh-workflow` already has `SLIDE_REPORT_CACHE_ENABLED` gate on `refresh-slide-report` call (line 253); legacy branch is gated.
+- [ ] **7-EF7** — `sync-report-api-data` + `get-report-api-data`: `get-performance-data` still reads `report_api_data` as a cache before falling back to `dimension_data`. **DEFERRED** — retire after `report_api_data` cache is confirmed unused (Phase 9).
+- [x] **7-EF8** — `migrate-sheet-data`: one-time migration complete. Added 410 deprecation gate.
+- [ ] **7-EF9** — `clear-and-resync`: still called from `run-refresh-workflow` when `clearFirst=true`; `ReportDashboard` passes `clearFirst: true`. **DEFERRED** — retire after `clearFirst` path is removed from frontend.
+- [x] **7-EF10** — `apply-vlookup-mappings`: zero frontend callers; logic absorbed into `resync-data-source`. Added 410 deprecation gate.
+- [x] **7-F1** — `slideReportChannelDataMerge.ts` already deleted in Phase 6.
+- [ ] **7-F2** — `refreshPivotDataHelpers.ts` still used by `AISummaryPage.tsx`. **DEFERRED**.
+- [ ] **7-F3** — `slideReportPivotComputation.ts` still used by `SlideViewPage` + `useSlideReports`. **DEFERRED**.
+- [ ] **7-F4** — `slideRefreshHelpers.ts` still used by `SlideViewPage`. **DEFERRED**.
+- [ ] **7-F5** — `useSlideReportSummaries` reads `slide_report_summaries` for per-tab AI summaries in slide view; `ai_summary_cards` is a separate feature. **DEFERRED** — these serve different purposes.
+- [ ] **7-DB1** — Add `deprecated_at` timestamps to legacy pivot tables (additive migration). **DEFERRED** — DB migration needed.
+- [ ] **7-DB2** — `report_api_data` still written by `sync-report-api-data` and read by `get-performance-data`. **DEFERRED** — document after EF7 is confirmed.
+
+> **What changed (Phase 7):** Added 410 deprecation gates to `apply-vlookup-mappings`, `migrate-sheet-data`, `get-consolidated-performance-data`. Confirmed `run-refresh-workflow` already gates `refresh-slide-report` via `SLIDE_REPORT_CACHE_ENABLED`. Confirmed `get-slide-report-data` already gated. Deferred: `get-slide-report-display-data` (active), `sync-report-api-data`/`get-report-api-data` (active cache), `clear-and-resync` (active via `clearFirst`), frontend lib files (all still used). Build: `npm run build` ✓ exit 0.
+
+### Phase 8 — Duplicate frontend hooks + view settings unification (MED)
+
+> **Goal:** One view-settings table (`report_views`); remove `slide_report_views` reads from the Data Studio path; consolidate resync utilities.
+
+- [ ] **8-F1** — Unify view settings: `report_views` is canonical; audit all `slide_report_views` reads in frontend
+  - `useSlideReportViews` reads `slide_report_views` — migrate to `report_views` or document why both are needed
+  - `budgets.view_id` FK references `slide_report_views` — document migration path
+- [ ] **8-F2** — Consolidate resync utilities:
+  - `src/lib/resync-dimensions.ts` (flat file) — verify if superseded by `src/lib/resync-all-dimensions/` folder
+  - `src/lib/resync-all-dimensions.ts` (flat orchestrator) — verify if superseded by folder-based implementation
+  - Keep: `src/lib/resync-all-dimensions/` (folder, modular) as canonical
+- [ ] **8-F3** — Audit `data-loading-fix.ts` — verify if logic absorbed into canonical data loading; delete if unused
+- [ ] **8-F4** — Audit `large-dataset-optimizer.ts` — verify if superseded by `useCachedSourceData` batched fetch; delete if unused
+- [ ] **8-F5** — Audit `monthly_dimension_data` table — determine which edge function writes it and whether it is still needed; document or deprecate
+- [ ] **8-F6** — Audit `aggregated_breakdown_data` table — determine writer + consumers; document or deprecate
+- [ ] **8-DB1** — Document `slide_report_views` deprecation path; confirm `report_views` is the only view-settings table going forward
+
+### Phase 9 — DB table drops + final edge function removal (LOW — after proof)
+
+> **Goal:** Drop confirmed-unused legacy tables after all reads/writes have been removed and verified. Additive-only until each table passes the full "Used in current stack?" checklist.
+
+- [ ] **9-DB1** — Drop `sheet_data` (after verifying zero frontend reads and zero edge function writes)
+- [ ] **9-DB2** — Drop `slide_report_channel_year_data` (after Phase 7 edge function removal)
+- [ ] **9-DB3** — Drop `slide_report_channel_month_data` (after Phase 7)
+- [ ] **9-DB4** — Drop `slide_report_channel_raw_rows` (after Phase 7)
+- [ ] **9-DB5** — Drop `slide_report_monthly_data` (after Phase 7)
+- [ ] **9-DB6** — Drop `slide_report_summaries` (after Phase 7-F5)
+- [ ] **9-DB7** — Drop `slide_report_views` (after Phase 8-F1 migration complete)
+- [ ] **9-DB8** — Drop `report_api_data` (after Phase 7-EF7 confirmed)
+- [ ] **9-DB9** — Drop `monthly_dimension_data` (after Phase 8-F5 confirmed)
+- [ ] **9-DB10** — Drop `aggregated_breakdown_data` (after Phase 8-F6 confirmed)
+
+> Each drop requires the full "Used in current stack?" checklist to be satisfied before execution. No destructive migrations without backup.
+
+---
+
 ### Phase 1 — Verify DB integrity + mapping references (HIGH)
 
 - [x] Audit `report_views` / slide views for **broken dimension references**
@@ -129,6 +207,22 @@ Verification notes:
 
 - `npm run build` ✅ (2026-03-18)
 - `npm run lint` ✅ (2026-03-18, warnings only)
+
+### 2026-03-18 (Supabase unification: canonical storage/fetch)
+
+- **Canonical DB source of truth:** `dimension_data` (typed, dimension-id keyed rows).
+- **Documented canonical vs legacy tables:** added “Canonical data model (single unified version)” section under Database.
+- **Deprecated slide-report persistence:** added runtime gates to disable slide cache writers/readers by default (set `SLIDE_REPORT_CACHE_ENABLED=true` to allow temporarily):
+  - `supabase/functions/refresh-slide-report`
+  - `supabase/functions/refresh-slide-report-channel`
+  - `supabase/functions/run-refresh-workflow` (blocks `slideReportId` refresh when gate is off)
+  - `supabase/functions/get-slide-report-data`
+  - `supabase/functions/get-slide-report-display-data`
+- **Unified Data Studio row source:** `src/hooks/useDataStudioRawRows.ts` now reads from `dimension_data` (no origin Google Sheets/CSV fetch path).
+- **Removed deprecated hook:** deleted `src/hooks/performanceTable/usePerformanceData.ts` (no remaining imports).
+- **Aligned edge dimension precedence with frontend:** `supabase/functions/get-performance-data/index.ts` now loads dimensions with canonical precedence (account > custom (report-scoped or null) > global, plus legacy report_id safety include).
+- **DB guardrails (additive migration):** added `supabase/migrations/20260318090000_dimension_data_indexes_and_slide_deprecation.sql`:\n  - indexes: `idx_dimension_data_report_row_number`, `idx_dimension_data_report_data_source`\n  - `deprecated_at` columns on `slide_report_*` tables.
+- **Checks run:**\n  - `npm run build` ✅ (2026-03-18)\n  - `npm run lint` ✅ (2026-03-18, warnings only)
 
 ---
 
@@ -335,6 +429,35 @@ Only after all above are checked, proceed to deletion.
 - [ ] **D3** — No destructive migrations for account removal; only additive (e.g. indexes) or application-level “ignore multiple accounts” until product confirms.
 - [ ] **D4** — slide_reports: document which report name/type is canonical for “Data Studio”; optional cleanup migration to merge or rename Master Report → Data Studio (only after B4/B5 and backup).
 
+### E. Data sources + Data Studio unification (Phase 6)
+
+- [ ] **E1** - Collapse `useDataStudioRawRows`, `useFiltersSourceData`, `useSourceData` into one canonical fetch path via `useCachedSourceData` (reads `dimension_data`).
+- [ ] **E2** - Remove `useSlideReportChannelData` (reads legacy `slide_report_channel_*` tables).
+- [ ] **E3** - Remove `useMetasearchJan2026RawRows` (hardcoded one-off hook).
+- [ ] **E4** - Consolidate data source creation modals: keep `DataSourceSelectionModal` + `UnifiedDataSourceModal` + `ColumnMappingStep`; delete `CSVImportChoiceModal`, `DataSourcesListModal`; audit `MappingModal` vs `EditMappingModal`.
+- [ ] **E5** - Remove inline report-creation logic from `DataSourcesPage` (`handleCreateBookingReport`, `handleCreatePriceCheckReport`).
+
+### F. Legacy pivot cache + edge function cleanup (Phase 7)
+
+- [ ] **F1** - Retire `refresh-slide-report`, `refresh-slide-report-channel`, `get-slide-report-data`, `get-slide-report-display-data` edge functions (already gated; remove gate + function after confirming Data Studio covers all use cases).
+- [ ] **F2** - Audit and retire `get-consolidated-performance-data`, `sync-report-api-data`, `get-report-api-data`, `migrate-sheet-data`, `clear-and-resync`, `apply-vlookup-mappings`.
+- [ ] **F3** - Delete `slideReportChannelDataMerge.ts`, `refreshPivotDataHelpers.ts`, `slideReportPivotComputation.ts` after Phase 6 hook removal.
+- [ ] **F4** - Migrate `useSlideReportSummaries` to `ai_summary_cards` if applicable; remove `slide_report_summaries` reads.
+
+### G. View settings + resync consolidation (Phase 8)
+
+- [ ] **G1** - Unify view settings: `report_views` canonical; migrate `slide_report_views` reads; document `budgets.view_id` FK migration path.
+- [ ] **G2** - Consolidate resync utilities: `resync-all-dimensions/` folder is canonical; delete flat `resync-dimensions.ts` and `resync-all-dimensions.ts` after verification.
+- [ ] **G3** - Audit and delete `data-loading-fix.ts`, `large-dataset-optimizer.ts` if superseded.
+- [ ] **G4** - Document or deprecate `monthly_dimension_data`, `aggregated_breakdown_data` tables.
+
+### H. DB table drops (Phase 9 - after proof)
+
+- [ ] **H1** - Drop `sheet_data` after zero-consumer verification.
+- [ ] **H2** - Drop `slide_report_channel_year_data`, `slide_report_channel_month_data`, `slide_report_channel_raw_rows`, `slide_report_monthly_data` after Phase 7 edge function removal.
+- [ ] **H3** - Drop `slide_report_summaries`, `slide_report_views` after Phase 7-8 migration.
+- [ ] **H4** - Drop `report_api_data`, `monthly_dimension_data`, `aggregated_breakdown_data` after Phase 7-8 confirmation.
+
 ---
 
 ## SOP phases (standard operating procedure)
@@ -409,6 +532,71 @@ Only after all above are checked, proceed to deletion.
 | 5.3 | No destructive drop of `accounts` or removal of `account_id` from reports/slide_reports until explicitly approved. | Only additive or application-level changes. |
 | 5.4 | Optional: migration or script to rename/merge “Master Report” → “Data Studio” in slide_reports (after B4/B5, with backup). | Document in REFACTOR.md; run only if agreed. |
 
+### SOP 6 - Phase E: Data source unification + canonical Data Studio fetch path
+
+**Goal:** One canonical data-fetch path (reads `dimension_data`); one unified data source creation flow.
+
+| Step | Action | Verification |
+|------|--------|--------------|
+| 6.1 | Verify `useDataStudioRawRows` consumers; migrate to `useCachedSourceData`; delete `useDataStudioRawRows.ts`. | No imports remain. |
+| 6.2 | Verify `useFiltersSourceData` consumers; migrate to `useCachedSourceData`; delete `useFiltersSourceData.ts`. | No imports remain. |
+| 6.3 | Verify `useSlideReportChannelData` consumers; remove from `useSlideReportPage`; delete file. | Build/lint pass. |
+| 6.4 | Verify `useMetasearchJan2026RawRows` consumers; delete file. | No imports remain. |
+| 6.5 | Audit `CSVImportChoiceModal` and `DataSourcesListModal`; delete if unused. | No imports remain. |
+| 6.6 | Audit `MappingModal` vs `EditMappingModal` vs `ColumnMappingStep`; consolidate to one mapping step. | Single mapping component. |
+| 6.7 | Remove `handleCreateBookingReport` / `handleCreatePriceCheckReport` from `DataSourcesPage`. | DataSourcesPage has no inline report creation. |
+| 6.8 | Run `npm run build` and `npm run lint`; fix regressions. Update REFACTOR.md. | Build/lint pass. |
+
+**Rollback:** Restore deleted hooks; revert DataSourcesPage.
+
+### SOP 7 - Phase F: Legacy pivot cache + edge function cleanup
+
+**Goal:** Stop all writes to legacy `slide_report_*` tables; retire the edge functions that serve them.
+
+| Step | Action | Verification |
+|------|--------|--------------|
+| 7.1 | Confirm Data Studio reads `dimension_data` for all use cases (channel data, monthly breakdowns). | No remaining reads of `slide_report_channel_*` or `slide_report_monthly_data` in frontend. |
+| 7.2 | Remove `SLIDE_REPORT_CACHE_ENABLED` gate from `refresh-slide-report` and `refresh-slide-report-channel`; mark functions as retired (return 410 or delete). | Functions no longer write to cache tables. |
+| 7.3 | Retire `get-slide-report-data` and `get-slide-report-display-data` (return 410 or delete). | No frontend callers. |
+| 7.4 | Audit `get-consolidated-performance-data`; delete if redundant with `get-performance-data`. | One performance data edge function. |
+| 7.5 | Audit `run-refresh-workflow`; remove `slideReportId` branch; keep `resync-data-source` orchestration only. | Workflow only triggers `resync-data-source`. |
+| 7.6 | Audit `sync-report-api-data` / `get-report-api-data`; retire if `get-performance-data` reads `dimension_data` directly. | `report_api_data` no longer written. |
+| 7.7 | Retire `migrate-sheet-data`, `clear-and-resync`, `apply-vlookup-mappings` after verification. | No callers; safe to remove. |
+| 7.8 | Delete `slideReportChannelDataMerge.ts`, `refreshPivotDataHelpers.ts`, `slideReportPivotComputation.ts`. | Build/lint pass. |
+| 7.9 | Run `npm run build` and `npm run lint`; fix regressions. Update REFACTOR.md. | Build/lint pass. |
+
+**Rollback:** Restore edge function gates; restore deleted lib files.
+
+### SOP 8 - Phase G: View settings + resync consolidation
+
+**Goal:** One view-settings table (`report_views`); one resync utility path.
+
+| Step | Action | Verification |
+|------|--------|--------------|
+| 8.1 | Audit `useSlideReportViews` reads of `slide_report_views`; migrate to `report_views` or document why both needed. | Single view-settings read path. |
+| 8.2 | Document `budgets.view_id` FK migration path (additive; no destructive change yet). | REFACTOR.md DB section updated. |
+| 8.3 | Verify `resync-dimensions.ts` (flat) is superseded by `resync-all-dimensions/` folder; delete flat file. | No imports of flat file. |
+| 8.4 | Verify `resync-all-dimensions.ts` (flat orchestrator) is superseded; delete if so. | No imports. |
+| 8.5 | Audit `data-loading-fix.ts` and `large-dataset-optimizer.ts`; delete if superseded. | No imports. |
+| 8.6 | Document `monthly_dimension_data` and `aggregated_breakdown_data` writer + consumers; add to deprecation list if unused. | DB section updated. |
+| 8.7 | Run `npm run build` and `npm run lint`; fix regressions. Update REFACTOR.md. | Build/lint pass. |
+
+**Rollback:** Restore deleted files.
+
+### SOP 9 - Phase H: DB table drops (after proof)
+
+**Goal:** Drop confirmed-unused legacy tables. Each requires full `Used in current stack?` checklist.
+
+| Step | Action | Verification |
+|------|--------|--------------|
+| 9.1 | For each candidate table: run `Used in current stack?` checklist (no frontend reads, no edge writes, no tests, no migrations depend on it). | All checklist items pass. |
+| 9.2 | Take DB backup or snapshot before any DROP. | Backup confirmed. |
+| 9.3 | Write additive migration with `DROP TABLE IF EXISTS` for confirmed tables. | Migration runs cleanly on staging. |
+| 9.4 | Run `npm run build` and `npm run lint`; verify types.ts no longer references dropped tables. | Build/lint pass. |
+| 9.5 | Update REFACTOR.md with evidence. | Doc updated. |
+
+**Rollback:** Restore from backup; revert migration.
+
 ---
 
 ## Database
@@ -417,6 +605,60 @@ Only after all above are checked, proceed to deletion.
 
 - **User ↔ account:** Data is linked to the user via Supabase auth. The app assumes **one account per user** for the post-login experience: resolve `accountId` as the first (or only) row in `accounts` where `user_id = session.user.id`. Schema remains `accounts.user_id`; no FK change required.
 - **Reports / slide_reports:** Still keyed by `account_id` (and optionally report_id). No removal of `account_id` from tables without explicit product and migration plan.
+
+### Canonical data model (single unified version)
+
+**Goal:** one canonical storage + one canonical fetch path for Data Studio / PerformanceTable.
+
+#### Canonical tables (keep; source of truth)
+
+- **`dimension_data`** (canonical fact rows)
+  - **Shape**: `(report_id, data_source_id, row_number, dimension_values jsonb)`
+  - **Meaning**: one row = one spreadsheet/CSV row after mapping and type-parsing; keys in `dimension_values` are **dimension IDs**.
+  - **Writer**: `supabase/functions/resync-data-source/**`
+  - **Primary readers**:
+    - Frontend: `src/hooks/dataSources/useCachedSourceData.ts`
+    - Edge: `supabase/functions/get-performance-data/index.ts`
+  - **Existing guardrail**: `dimension_data_report_source_row_key` unique index on `(report_id, data_source_id, row_number)` (prevents doubled rows).
+
+- **`dimensions`** (canonical dimension registry)
+  - **Precedence rule**: account > custom > global (dedupe by name).
+  - **Used by**: frontend `src/lib/dimensionLoader.ts`, edge ingestion `supabase/functions/resync-data-source/utils/dimensions.ts`, view repair `src/lib/performanceTable/viewSettingsMapper.ts`.
+
+- **`report_views`** (canonical user view settings)
+  - **Stores**: visible columns / group-by / breakdown selections; must be repaired by name when IDs drift.
+  - **Reader/writer**: `src/hooks/performanceTable/usePerformanceTableViews.ts`
+
+#### Secondary caches (optional; keep for now but not canonical)
+
+- **`report_api_data`** (optional acceleration cache)
+  - **Meaning**: precomputed slices of performance rows for “current/comparison” periods.
+  - **Writer**: `supabase/functions/sync-report-api-data/index.ts` (and `auto-sync-data-sources`)
+  - **Reader**: `supabase/functions/get-performance-data/index.ts` may use it as a fast path.
+  - **Note**: cache can be regenerated from `dimension_data`; it is not a source of truth.
+
+#### Legacy / to deprecate (stop writing; migrate reads; delete only after proof)
+
+- **`sheet_data`** (legacy raw sheet rows)
+  - **Meaning**: raw row_data keyed by column names (pre-mapping).
+  - **Canonical replacement**: `dimension_data` (post-mapping, typed, dimension-id keyed).
+  - **Action**: keep for now; do not expand usage; plan removal after verifying no consumers.
+
+- **Slide-report cache tables** (`slide_report_*`)
+  - Examples:
+    - `slide_report_channel_year_data`
+    - `slide_report_channel_month_data`
+    - `slide_report_channel_raw_rows`
+    - `slide_report_monthly_data`
+    - `slide_report_summaries`, `slide_report_views`, `slide_reports`
+  - **Meaning**: precomputed/persisted pivot outputs and UI state for the legacy slide report system.
+  - **Direction**: deprecate and stop writing new cache rows; unify to a single Data Studio report flow using `dimension_data`.
+  - **Action**: gate edge functions that write these tables; keep endpoints temporarily for backward compatibility.
+
+### “One unified report” policy (product decision)
+
+- We do **not** want multiple parallel report systems (report dashboard + slide reports + cached pivots).
+- Target: **one canonical Data Studio report per account** whose rows live in `dimension_data`.
 
 ### Safe migrations (additive only unless noted)
 

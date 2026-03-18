@@ -5,6 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const SLIDE_REPORT_CACHE_ENABLED = Deno.env.get('SLIDE_REPORT_CACHE_ENABLED') === 'true';
+
 // Channel to Report ID mapping for Brady Hotels
 const CHANNEL_REPORT_IDS: Record<string, string> = {
   metasearch: '2eff17d0-38de-4d5d-a15b-69ad13788c92',
@@ -62,6 +64,12 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  if (!SLIDE_REPORT_CACHE_ENABLED) {
+    return new Response(JSON.stringify({
+      error: 'get-slide-report-data is deprecated and disabled (set SLIDE_REPORT_CACHE_ENABLED=true to allow).',
+    }), { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
   try {

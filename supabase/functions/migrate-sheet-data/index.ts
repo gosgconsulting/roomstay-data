@@ -11,6 +11,14 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // DEPRECATED: migrate-sheet-data is a one-time migration function (sheet_data → dimension_data).
+  // Migration is complete. Remove this function after confirming sheet_data table is dropped (Phase 9).
+  console.warn('[MIGRATE-SHEET-DATA] DEPRECATED: one-time migration is complete. This function is retired.');
+  return new Response(
+    JSON.stringify({ success: false, error: 'DEPRECATED: migrate-sheet-data is retired. Migration from sheet_data to dimension_data is complete.' }),
+    { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

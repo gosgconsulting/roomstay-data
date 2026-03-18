@@ -9,6 +9,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+const SLIDE_REPORT_CACHE_ENABLED = Deno.env.get('SLIDE_REPORT_CACHE_ENABLED') === 'true';
+
 type ChartTimeRange = 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
 
 interface RequestBody {
@@ -334,6 +336,13 @@ Deno.serve(async (req) => {
     });
   }
   const cors = getCorsHeaders(req);
+
+  if (!SLIDE_REPORT_CACHE_ENABLED) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Slide report display API is deprecated and disabled (set SLIDE_REPORT_CACHE_ENABLED=true to allow).' }),
+      { status: 410, headers: { ...cors, 'Content-Type': 'application/json' } }
+    );
+  }
 
   const userId = getUserIdFromJwt(req);
   const bearer = req.headers.get('authorization')?.startsWith('Bearer ') ? req.headers.get('authorization')!.slice(7) : null;

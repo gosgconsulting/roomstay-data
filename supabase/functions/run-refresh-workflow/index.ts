@@ -18,6 +18,8 @@ const getCorsHeaders = (req?: Request) => {
   return headers;
 };
 
+const SLIDE_REPORT_CACHE_ENABLED = Deno.env.get('SLIDE_REPORT_CACHE_ENABLED') === 'true';
+
 async function validateAuth(req: Request): Promise<boolean> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
@@ -248,6 +250,17 @@ Deno.serve(async (req: Request) => {
     }
 
     if (slideReportId && !skipRefresh) {
+      if (!SLIDE_REPORT_CACHE_ENABLED) {
+        return jsonResponse({
+          success: false,
+          error: 'Slide report refresh is deprecated and disabled (set SLIDE_REPORT_CACHE_ENABLED=true to allow).',
+          cleared,
+          resynced: resyncedCount,
+          resyncErrors: resyncErrors.length > 0 ? resyncErrors : undefined,
+          refreshSuccess: false,
+        }, 410, cors);
+      }
+
       const { ok, data } = await invokeEdgeFunction(
         supabaseUrl,
         serviceRoleKey,

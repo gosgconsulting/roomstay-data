@@ -13,7 +13,6 @@ import type { User } from "@supabase/supabase-js";
 import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
 import { useDataStudioRawRows } from "@/hooks/useDataStudioRawRows";
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
-import { useSlideReportChannelData } from "@/hooks/useSlideReportChannelData";
 import { useSlideReportDisplayData } from "@/hooks/useSlideReportDisplayData";
 import { useSlideReportSummaries, type SlideReportSummary } from "@/hooks/useSlideReportSummaries";
 import { getAccountReportIds, clearAccountReportIdsCache, type AccountReportIds } from "@/lib/accountReportIds";
@@ -176,16 +175,11 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   }, [accountId, user?.id, slideReports, isSlideReportsLoading, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social, searchParams, availableChannels]);
 
   const { data: slideReport } = useSlideReport(slideReportId);
-  const { data: channelDataFromTables } = useSlideReportChannelData(
-    slideReportId,
-    slideReport?.date_range ?? null
-  );
 
-  // Data Studio: fetch raw rows from sources (only mode after Phase B)
-  const isDataStudio = true;
+  // Data Studio: fetch raw rows from dimension_data (canonical DB cache)
   const { data: dataStudioResult } = useDataStudioRawRows(
     slideReport,
-    isDataStudio && !!slideReportId,
+    !!slideReportId,
   );
   const dataStudioRawRows = dataStudioResult?.rawRows;
   const dataStudioDimensionMaps = dataStudioResult?.dimensionMaps;
@@ -193,55 +187,24 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   const effectivePivotData = useMemo((): SlideReportPivotData | null => {
     const base = slideReport?.pivot_data as SlideReportPivotData | null;
     if (!base) return null;
-    const fromTables = channelDataFromTables ?? null;
-    if (!fromTables || Object.keys(fromTables).length === 0) {
-      // Even without table data, inject raw rows for Data Studio
-      if (dataStudioRawRows && Object.keys(dataStudioRawRows).length > 0) {
-        const channels: SlideReportPivotData['channels'] = { ...base.channels };
-        for (const [ch, rows] of Object.entries(dataStudioRawRows)) {
-          if (channels[ch]) {
-            const freshDimMap = dataStudioDimensionMaps?.[ch] || {};
-            channels[ch] = {
-              ...channels[ch],
-              rawDataRows: rows,
-              dimensionMap: Object.keys(freshDimMap).length > 0 ? freshDimMap : channels[ch].dimensionMap,
-            };
-          }
-        }
-        return { ...base, channels };
-      }
+    if (!dataStudioRawRows || Object.keys(dataStudioRawRows).length === 0) {
       return base;
     }
     const channels: SlideReportPivotData['channels'] = { ...base.channels };
-    for (const [ch, tableChannel] of Object.entries(fromTables)) {
+    for (const [ch, rows] of Object.entries(dataStudioRawRows)) {
       const baseChannel = base.channels?.[ch];
-      const tableFilterValues = tableChannel.filterUniqueValues && Object.keys(tableChannel.filterUniqueValues).length > 0
-        ? tableChannel.filterUniqueValues
-        : undefined;
-      const baseFilterValues = baseChannel?.filterUniqueValues && Object.keys(baseChannel.filterUniqueValues).length > 0
-        ? baseChannel.filterUniqueValues
-        : undefined;
-      // Data Studio: prefer raw rows from source over empty pivot rawDataRows
-      const rawRows = dataStudioRawRows?.[ch]
-        ?? baseChannel?.rawDataRows
-        ?? tableChannel.rawDataRows
-        ?? [];
-      // Data Studio: prefer fresh dimension maps from source fetch
       const freshDimMap = dataStudioDimensionMaps?.[ch] || {};
-      const dimMap = Object.keys(freshDimMap).length > 0
-        ? freshDimMap
-        : (baseChannel?.dimensionMap && Object.keys(baseChannel.dimensionMap).length > 0)
-          ? baseChannel.dimensionMap
-          : (tableChannel.dimensionMap || {});
       channels[ch] = {
-        ...tableChannel,
-        rawDataRows: rawRows,
-        dimensionMap: dimMap,
-        filterUniqueValues: tableFilterValues ?? baseFilterValues ?? {},
+        ...(baseChannel || {}),
+        rawDataRows: rows,
+        dimensionMap: Object.keys(freshDimMap).length > 0
+          ? freshDimMap
+          : (baseChannel?.dimensionMap || {}),
+        filterUniqueValues: baseChannel?.filterUniqueValues || {},
       };
     }
     return { ...base, channels };
-  }, [slideReport?.pivot_data, channelDataFromTables, dataStudioRawRows, dataStudioDimensionMaps]);
+  }, [slideReport?.pivot_data, dataStudioRawRows, dataStudioDimensionMaps]);
 
   const filteredData = useSlideReportDisplayData({
     pivotData: effectivePivotData,

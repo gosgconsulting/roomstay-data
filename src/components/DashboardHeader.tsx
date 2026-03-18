@@ -3,8 +3,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Plus, Share2, Settings, FileSpreadsheet, BarChart3, Edit, Trash2, Pencil, Database, Clock } from "lucide-react";
 import { DataSourceSelectionModal } from "./DataSourceSelectionModal";
-import { DataSourcesListModal } from "./DataSourcesListModal";
-import { CSVImportChoiceModal } from "./CSVImportChoiceModal";
 import { UnifiedDataSourceModal } from "./UnifiedDataSourceModal";
 import { DimensionsListModal } from "./DimensionsListModal";
 import { DimensionModal } from "./DimensionModal";
@@ -68,8 +66,6 @@ export function DashboardHeader({
   const [showUnifiedDataSourceModal, setShowUnifiedDataSourceModal] = useState(false);
   const [selectedSourceType, setSelectedSourceType] = useState<'google_sheets' | 'csv_url'>('google_sheets');
   
-  const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
-  const [showCSVImportChoiceModal, setShowCSVImportChoiceModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
   const [showDimensionModal, setShowDimensionModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -646,16 +642,6 @@ export function DashboardHeader({
       {/* Header UI hidden - using new topbar in ReportDashboard */}
       
       {/* Modals */}
-      <DataSourcesListModal
-        open={showDataSourcesListModal}
-        onOpenChange={setShowDataSourcesListModal}
-        reportId={currentReport?.id || ""}
-        accountId={accountId}
-        onAddNew={() => setShowDataSourceSelectionModal(true)}
-        onDataSync={onDataSync}
-        onRefreshData={onRefreshData}
-      />
-
       <DimensionsListModal
         open={showDimensionsListModal}
         onOpenChange={setShowDimensionsListModal}
@@ -778,28 +764,13 @@ export function DashboardHeader({
       />
 
 
-      <CSVImportChoiceModal
-        open={showCSVImportChoiceModal}
-        onOpenChange={setShowCSVImportChoiceModal}
-        onSelectUpload={() => {
-          toast({
-            title: "Coming soon",
-            description: "Upload from local CSV will be available shortly.",
-          });
-        }}
-        onSelectURL={() => {
-          setShowCSVImportChoiceModal(false);
-          handleSourceTypeSelect('csv_url');
-        }}
-      />
-
       <DataSourceSelectionModal
         open={showDataSourceSelectionModal}
         onOpenChange={setShowDataSourceSelectionModal}
         onSelectGoogleSheets={() => handleSourceTypeSelect('google_sheets')}
         onSelectCSV={() => {
           setShowDataSourceSelectionModal(false);
-          setShowCSVImportChoiceModal(true);
+          handleSourceTypeSelect('csv_url');
         }}
         onSelectAPI={() => {
           toast({

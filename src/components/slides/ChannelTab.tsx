@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
-import { JAN_2026_BREAKDOWN_DIMENSIONS } from "@/hooks/useMetasearchJan2026RawRows";
+import { JAN_2026_BREAKDOWN_DIMENSIONS } from "@/lib/metasearchJan2026Utils";
 import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
 import { AISummaryButton } from "./AISummaryButton";
 import { AISummaryDisplay } from "./AISummaryDisplay";

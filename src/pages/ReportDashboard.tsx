@@ -22,7 +22,6 @@ import { resyncAllDimensions } from "@/lib/resync-all-dimensions";
 import { resyncReportViews } from "@/lib/resync-report-views";
 import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
-import { DataSourcesListModal } from "@/components/DataSourcesListModal";
 import { DimensionsListModal } from "@/components/DimensionsListModal";
 import { ReportModal } from "@/components/ReportModal";
 import { CreateAISummaryModal } from "@/components/CreateAISummaryModal";
@@ -84,8 +83,6 @@ export default function ReportDashboard() {
     setChartMetrics((prev) => prev.map((m, i) => (i === index ? metric : m)));
   };
 
-  // NEW: local modals for Looker-style controls
-  const [showDataSourcesListModal, setShowDataSourcesListModal] = useState(false);
   const [showDimensionsListModal, setShowDimensionsListModal] = useState(false);
 
   // Derive current report name
@@ -569,7 +566,7 @@ export default function ReportDashboard() {
                       variant="outline"
                       size="sm"
                       className="gap-2"
-                      onClick={() => setShowDataSourcesListModal(true)}
+                      onClick={() => navigate(accountId ? `/tools/data-sources/${accountId}` : '/tools/data-sources')}
                     >
                       <Database className="h-4 w-4" />
                       Data sources
@@ -717,17 +714,6 @@ export default function ReportDashboard() {
             onOpenChange={setShowAPIBuilderModal}
             mode="api"
             initialReportId={reportId || undefined}
-          />
-
-          {/* Looker-style modals triggered from title area */}
-          <DataSourcesListModal
-            open={showDataSourcesListModal}
-            onOpenChange={setShowDataSourcesListModal}
-            reportId={reportId || ""}
-            accountId={accountId}
-            onAddNew={() => navigate(`/tools/data?reportId=${reportId}`)}
-            onDataSync={() => refreshData()}
-            onRefreshData={() => refreshData()}
           />
 
           <DimensionsListModal

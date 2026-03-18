@@ -8,6 +8,63 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
+async function loadDimensionsCanonical(
+  supabase: any,
+  params: { accountId?: string; userId?: string; reportId?: string }
+): Promise<any[]> {
+  const { accountId, userId, reportId } = params;
+
+  const dims: any[] = [];
+
+  // 1) Account scope
+  if (accountId) {
+    const { data, error } = await supabase
+      .from('dimensions')
+      .select('id, name, type, scope, account_id, report_id')
+      .eq('scope', 'account')
+      .eq('account_id', accountId);
+    if (!error && data) dims.push(...data);
+  }
+
+  // 2) Custom scope (report-scoped or global-to-user)
+  if (userId) {
+    let q = supabase
+      .from('dimensions')
+      .select('id, name, type, scope, account_id, report_id')
+      .eq('scope', 'custom')
+      .eq('user_id', userId);
+
+    if (reportId) q = q.or(`report_id.is.null,report_id.eq.${reportId}`);
+    else q = q.is('report_id', null);
+
+    const { data, error } = await q;
+    if (!error && data) dims.push(...data);
+  }
+
+  // 3) Global scope
+  {
+    const { data, error } = await supabase
+      .from('dimensions')
+      .select('id, name, type, scope, account_id, report_id')
+      .eq('scope', 'global');
+    if (!error && data) dims.push(...data);
+  }
+
+  // Legacy safety: include any dimensions explicitly tied to the report (avoid breaking older data)
+  if (reportId) {
+    const { data, error } = await supabase
+      .from('dimensions')
+      .select('id, name, type, scope, account_id, report_id')
+      .eq('report_id', reportId);
+    if (!error && data) {
+      const existingIds = new Set(dims.map((d: any) => d.id));
+      dims.push(...data.filter((d: any) => !existingIds.has(d.id)));
+    }
+  }
+
+  return dims;
+}
+
 // @ts-ignore - Deno global is provided by the Edge Functions runtime
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -79,23 +136,7 @@ Deno.serve(async (req) => {
             const [dimensionsResult] = await Promise.all([
               // Load dimensions
               (async () => {
-                let dims: any[] = [];
-                if (accountId) {
-                  const { data } = await supabase.from('dimensions').select('id, name, type, scope, account_id, report_id').eq('scope', 'account').eq('account_id', accountId);
-                  dims = [...dims, ...(data || [])];
-                }
-                if (userId) {
-                  const { data } = await supabase.from('dimensions').select('id, name, type, scope, account_id, report_id').eq('scope', 'custom').eq('user_id', userId);
-                  dims = [...dims, ...(data || [])];
-                }
-                const { data: global } = await supabase.from('dimensions').select('id, name, type, scope, account_id, report_id').eq('scope', 'global');
-                dims = [...dims, ...(global || [])];
-                if (reportId) {
-                  const { data: report } = await supabase.from('dimensions').select('id, name, type, scope, account_id, report_id').eq('report_id', reportId);
-                  const existingIds = new Set(dims.map(d => d.id));
-                  dims = [...dims, ...(report?.filter(d => !existingIds.has(d.id)) || [])];
-                }
-                return dims;
+                return loadDimensionsCanonical(supabase, { accountId, userId, reportId });
               })()
             ]);
 
@@ -213,69 +254,7 @@ Deno.serve(async (req) => {
     let allDimensions: any[] = [];
     
     try {
-      // 1. Load account-specific dimensions if accountId is provided
-      if (accountId) {
-        const { data: accountDimensions, error: accountError } = await supabase
-          .from('dimensions')
-          .select('id, name, type, scope, account_id, report_id')
-          .eq('scope', 'account')
-          .eq('account_id', accountId);
-        
-        if (accountError) {
-          console.error('[GET-PERFORMANCE-DATA] Error loading account dimensions:', accountError);
-        } else {
-          allDimensions = [...allDimensions, ...(accountDimensions || [])];
-          console.log(`[GET-PERFORMANCE-DATA] Loaded ${accountDimensions?.length || 0} account dimensions`);
-        }
-      }
-      
-      // 2. Load custom dimensions if userId is provided
-      if (userId) {
-        const { data: customDimensions, error: customError } = await supabase
-          .from('dimensions')
-          .select('id, name, type, scope, account_id, report_id')
-          .eq('scope', 'custom')
-          .eq('user_id', userId);
-        
-        if (customError) {
-          console.error('[GET-PERFORMANCE-DATA] Error loading custom dimensions:', customError);
-        } else {
-          allDimensions = [...allDimensions, ...(customDimensions || [])];
-          console.log(`[GET-PERFORMANCE-DATA] Loaded ${customDimensions?.length || 0} custom dimensions`);
-        }
-      }
-      
-      // 3. Load global dimensions (always)
-      const { data: globalDimensions, error: globalError } = await supabase
-        .from('dimensions')
-        .select('id, name, type, scope, account_id, report_id')
-        .eq('scope', 'global');
-      
-      if (globalError) {
-        console.error('[GET-PERFORMANCE-DATA] Error loading global dimensions:', globalError);
-      } else {
-        allDimensions = [...allDimensions, ...(globalDimensions || [])];
-        console.log(`[GET-PERFORMANCE-DATA] Loaded ${globalDimensions?.length || 0} global dimensions`);
-      }
-      
-      // 4. Load report-specific dimensions if reportId is provided
-      if (reportId) {
-        const { data: reportDimensions, error: reportError } = await supabase
-          .from('dimensions')
-          .select('id, name, type, scope, account_id, report_id')
-          .eq('report_id', reportId);
-        
-        if (reportError) {
-          console.error('[GET-PERFORMANCE-DATA] Error loading report dimensions:', reportError);
-        } else {
-          // Add any report dimensions that aren't already in the list
-          const existingIds = new Set(allDimensions.map(d => d.id));
-          const newReportDimensions = (reportDimensions || []).filter(d => !existingIds.has(d.id));
-          
-          allDimensions = [...allDimensions, ...newReportDimensions];
-          console.log(`[GET-PERFORMANCE-DATA] Loaded ${newReportDimensions.length} additional report dimensions`);
-        }
-      }
+      allDimensions = await loadDimensionsCanonical(supabase, { accountId, userId, reportId });
       
       // If we have multiple reportIds, load dimensions for all of them
       if (reportIds && reportIds.length > 0) {

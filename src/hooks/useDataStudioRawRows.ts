@@ -1,15 +1,14 @@
 /**
- * Hook to fetch ALL raw rows directly from Google Sheets/CSV sources for Data Studio.
- * This bypasses Supabase caching entirely - always fetches fresh from source.
+ * Hook to fetch ALL rows for Data Studio from Supabase-cached dimension_data.
+ * This keeps Data Studio on the single canonical row store (dimension_data).
  * Groups rows by channel based on the slide report's report_ids mapping.
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { fetchSourceData } from '@/hooks/dataSources/useSourceData';
 import { getUser } from '@/lib/auth';
 import type { SlideReport } from '@/types/slideReports';
-import type { DataSource } from '@/lib/data-sources/types';
+import type { CachedDataRow } from '@/hooks/dataSources/useCachedSourceData';
 
 interface ChannelRawRows {
   [channel: string]: Record<string, any>[];
@@ -22,23 +21,6 @@ interface ChannelDimensionMaps {
 export interface DataStudioSourceResult {
   rawRows: ChannelRawRows;
   dimensionMaps: ChannelDimensionMaps;
-}
-
-/**
- * Fetch data source config for a given report ID
- */
-async function getDataSourcesForReport(reportId: string): Promise<DataSource[]> {
-  const { data, error } = await supabase
-    .from('data_sources')
-    .select('*')
-    .eq('report_id', reportId)
-    .order('created_at', { ascending: true });
-
-  if (error || !data || data.length === 0) return [];
-  return data.map(d => ({
-    ...d,
-    column_mappings: d.column_mappings as any,
-  } as DataSource));
 }
 
 /**
@@ -59,8 +41,36 @@ async function buildDimensionNameMap(dimensionIds: string[]): Promise<Record<str
   return map;
 }
 
+async function fetchDimensionDataBatched(reportId: string): Promise<CachedDataRow[]> {
+  const allRows: CachedDataRow[] = [];
+  const batchSize = 1000;
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('dimension_data')
+      .select('id, dimension_values, data_source_id, row_number')
+      .eq('report_id', reportId)
+      .order('row_number', { ascending: true })
+      .range(offset, offset + batchSize - 1);
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      allRows.push(...(data as CachedDataRow[]));
+      offset += batchSize;
+      hasMore = data.length === batchSize;
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allRows;
+}
+
 /**
- * Hook to fetch raw rows directly from Google Sheets/CSV for each channel.
+ * Hook to fetch raw rows from dimension_data for each channel.
  * Returns rows grouped by channel name (metasearch, sem, social) with dimension_values as top-level keys.
  */
 export function useDataStudioRawRows(
@@ -68,7 +78,6 @@ export function useDataStudioRawRows(
   enabled: boolean = false,
 ) {
   const reportIds = (slideReport?.report_ids || {}) as Record<string, string>;
-  const accountId = slideReport?.account_id;
 
   return useQuery({
     queryKey: ['data-studio-raw-rows', slideReport?.id, reportIds],
@@ -86,39 +95,27 @@ export function useDataStudioRawRows(
 
         const startTime = performance.now();
 
-        // 1. Get all data source configs for this report
-        const dataSources = await getDataSourcesForReport(channelReportId);
-        if (dataSources.length === 0) {
-          console.warn(`[DataStudio] No data source found for ${channel} (report ${channelReportId})`);
-          return { channel, rows: [] as any[], dimMap: {} };
+        // 1) Fetch cached rows from dimension_data
+        const cachedRows = await fetchDimensionDataBatched(channelReportId);
+
+        // 2) Convert to raw row shape used by the Data Studio UI
+        const allRawRows = cachedRows.map((row) => ({
+          ...(row.dimension_values || {}),
+          _row_number: row.row_number,
+        }));
+
+        // 3) Build a dimensionId -> dimensionName map (sample keys to avoid huge IN clauses)
+        const sampleSize = 200;
+        const sampled = cachedRows.slice(0, sampleSize);
+        const dimIds = new Set<string>();
+        for (const row of sampled) {
+          const dv = (row.dimension_values || {}) as Record<string, unknown>;
+          for (const id of Object.keys(dv)) dimIds.add(id);
         }
-
-        // 2. Fetch from ALL data sources and merge rows
-        let allRawRows: any[] = [];
-        let mergedDimNameMap: Record<string, string> = {};
-
-        for (const dataSource of dataSources) {
-          try {
-            const sourceResult = await fetchSourceData(dataSource, user.id, accountId || undefined);
-
-            // Build dimension name map
-            const dimensionIds = Object.values(sourceResult.dimensionIdMap);
-            const dimNameMap = await buildDimensionNameMap(dimensionIds);
-            Object.assign(mergedDimNameMap, dimNameMap);
-
-            // Convert transformedRows to rawDataRows format
-            const rawRows = sourceResult.transformedRows.map((row: any) => ({
-              ...(row.dimension_values || {}),
-              _row_number: row.row_number,
-            }));
-            allRawRows = allRawRows.concat(rawRows);
-          } catch (err) {
-            console.warn(`[DataStudio] Failed to fetch source ${dataSource.name} for ${channel}:`, err);
-          }
-        }
+        const mergedDimNameMap = await buildDimensionNameMap(Array.from(dimIds));
 
         const duration = Math.round(performance.now() - startTime);
-        console.log(`[DataStudio] ${channel}: ${allRawRows.length} rows from ${dataSources.length} source(s) in ${duration}ms`);
+        console.log(`[DataStudio] ${channel}: ${allRawRows.length} cached rows in ${duration}ms`);
 
         return { channel, rows: allRawRows, dimMap: mergedDimNameMap };
       });

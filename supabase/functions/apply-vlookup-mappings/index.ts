@@ -22,6 +22,14 @@ Deno.serve(async (req) => {
     });
   }
 
+  // DEPRECATED: apply-vlookup-mappings is retired. VLOOKUP logic is now absorbed
+  // into resync-data-source. Remove this function after confirming no callers remain.
+  console.warn('[VLOOKUP-APPLY] DEPRECATED: this function is retired. Use resync-data-source instead.');
+  return new Response(
+    JSON.stringify({ success: false, error: 'DEPRECATED: apply-vlookup-mappings is retired. Use resync-data-source.' }),
+    { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+
   try {
     console.log('[VLOOKUP-APPLY] Parsing request body');
     const body = await req.json();

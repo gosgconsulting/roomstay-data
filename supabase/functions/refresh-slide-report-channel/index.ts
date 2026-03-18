@@ -74,6 +74,8 @@ interface ErrorResponse {
   details?: any;
 }
 
+const SLIDE_REPORT_CACHE_ENABLED = Deno.env.get('SLIDE_REPORT_CACHE_ENABLED') === 'true';
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -82,6 +84,16 @@ Deno.serve(async (req) => {
   
   // Get CORS headers for this request
   const corsHeaders = getCorsHeaders(req);
+
+  if (!SLIDE_REPORT_CACHE_ENABLED) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Slide report cache refresh is deprecated and disabled (set SLIDE_REPORT_CACHE_ENABLED=true to allow).',
+      } as ErrorResponse),
+      { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');

@@ -17,6 +17,14 @@ Deno.serve(async (req) => {
     });
   }
 
+  // DEPRECATED: get-consolidated-performance-data has no frontend callers.
+  // Functionality is covered by get-performance-data. Remove after Phase 9.
+  console.warn('[GET-CONSOLIDATED-PERFORMANCE-DATA] DEPRECATED: no frontend callers. Use get-performance-data instead.');
+  return new Response(
+    JSON.stringify({ success: false, error: 'DEPRECATED: get-consolidated-performance-data is retired. Use get-performance-data.' }),
+    { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+
   try {
     const body = await req.json();
     const {

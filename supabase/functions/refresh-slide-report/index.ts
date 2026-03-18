@@ -78,6 +78,8 @@ interface ErrorResponse {
   details?: any;
 }
 
+const SLIDE_REPORT_CACHE_ENABLED = Deno.env.get('SLIDE_REPORT_CACHE_ENABLED') === 'true';
+
 /**
  * Validate request: allow x-api-key header OR valid auth (Bearer = service role key or user JWT from frontend).
  * When REFRESH_SLIDE_REPORT_API_KEY is set, requires one of: x-api-key, Bearer service role, or Bearer user JWT.
@@ -132,6 +134,17 @@ Deno.serve(async (req) => {
   
   // Get CORS headers for this request
   const corsHeaders = getCorsHeaders(req);
+
+  if (!SLIDE_REPORT_CACHE_ENABLED) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Slide report cache refresh is deprecated and disabled (set SLIDE_REPORT_CACHE_ENABLED=true to allow).',
+        step: 0,
+      } as ErrorResponse),
+      { status: 410, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    );
+  }
 
   if (!(await validateRequestAuth(req))) {
     const expectedApiKey = Deno.env.get('REFRESH_SLIDE_REPORT_API_KEY');
