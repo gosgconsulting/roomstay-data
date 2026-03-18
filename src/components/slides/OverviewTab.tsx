@@ -1,4 +1,3 @@
-import { TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -107,7 +106,7 @@ export function OverviewTab({
   const compLabel = comparisonType === 'previous_period' ? 'Previous Period' : 'Previous Year';
 
   return (
-    <TabsContent value="overview" className="space-y-6">
+    <div className="space-y-6">
       {/* Show setup prompt when no report exists yet */}
       {!slideReportId && !isSlideReportsLoading && (
         <div className="flex flex-col items-center justify-center py-16 space-y-4">
@@ -125,50 +124,50 @@ export function OverviewTab({
         </div>
       )}
 
-      {/* KPI Cards */}
-      {(isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData))) ? (
+      {/* KPI Cards — show when report id exists (data from dimension_data); do not require slideReport so tab is never blank */}
+      {(isSlideReportsLoading || (slideReportId && isLoadingData)) ? (
         renderKPICardsSkeleton()
-      ) : slideReportId && slideReport?.pivot_data && hasAnyData(currentTotals) && renderKPICards(
-        Object.keys(currentTotals).length > 0
-          ? (() => {
-              // Prefer breakdownTotals (from table rows) over currentTotals (from pivot cache)
-              const getEffective = (ch: string) => {
-                const bt = breakdownTotals[ch];
-                const ct = currentTotals[ch] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-                return (bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0)) ? bt : ct;
-              };
-              const metasearchData = getEffective('metasearch');
-              const semData = getEffective('sem');
-              const socialData = getEffective('social');
-              const totals = {
-                impressions: (metasearchData.impressions || 0) + (semData.impressions || 0) + (socialData.impressions || 0),
-                clicks: (metasearchData.clicks || 0) + (semData.clicks || 0) + (socialData.clicks || 0),
-                cost: (metasearchData.cost || 0) + (semData.cost || 0) + (socialData.cost || 0),
-                revenue: (metasearchData.revenue || 0) + (semData.revenue || 0) + (socialData.revenue || 0),
-                bookings: (metasearchData.bookings || 0) + (semData.bookings || 0) + (socialData.bookings || 0),
-              };
-              const derived = calculateDerivedMetrics(totals);
-              const overviewCompMetrics = getOverviewComparisonMetrics();
-              
-              return [
-                { label: "IMPRESSIONS", key: "impressions", value: derived.impressions, icon: Eye, color: "text-pink-600", comparison: overviewCompMetrics?.impressions },
-                { label: "CLICKS", key: "clicks", value: derived.clicks, icon: MousePointer, color: "text-purple-600", comparison: overviewCompMetrics?.clicks },
-                { label: "CTR", key: "ctr", value: derived.ctr, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.ctr },
-                { label: "BOOKINGS", key: "bookings", value: derived.bookings, icon: ShoppingCart, color: "text-orange-600", comparison: overviewCompMetrics?.bookings },
-                { label: "CONVERSION RATE", key: "conversionRate", value: derived.conversionRate, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.conversionRate },
-                { label: "CPC", key: "cpc", value: derived.cpc, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cpc },
-                { label: "COST", key: "cost", value: derived.cost, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cost },
-                { label: "REVENUE", key: "revenue", value: derived.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency", comparison: overviewCompMetrics?.revenue },
-                { label: "ROAS", key: "roas", value: derived.roas, icon: TrendingUp, color: "text-green-600", format: "roas", comparison: overviewCompMetrics?.roas },
-                { label: "COST OF SALE", key: "costOfSale", value: derived.costOfSale, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.costOfSale },
-              ];
-            })()
-          : KPI_CARDS,
-        getOverviewComparisonMetrics()
-      )}
+      ) : slideReportId ? (
+        renderKPICards(
+          Object.keys(currentTotals).length > 0
+            ? (() => {
+                const getEffective = (ch: string) => {
+                  const bt = breakdownTotals[ch];
+                  const ct = currentTotals[ch] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+                  return (bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0)) ? bt : ct;
+                };
+                const metasearchData = getEffective('metasearch');
+                const semData = getEffective('sem');
+                const socialData = getEffective('social');
+                const totals = {
+                  impressions: (metasearchData.impressions || 0) + (semData.impressions || 0) + (socialData.impressions || 0),
+                  clicks: (metasearchData.clicks || 0) + (semData.clicks || 0) + (socialData.clicks || 0),
+                  cost: (metasearchData.cost || 0) + (semData.cost || 0) + (socialData.cost || 0),
+                  revenue: (metasearchData.revenue || 0) + (semData.revenue || 0) + (socialData.revenue || 0),
+                  bookings: (metasearchData.bookings || 0) + (semData.bookings || 0) + (socialData.bookings || 0),
+                };
+                const derived = calculateDerivedMetrics(totals);
+                const overviewCompMetrics = getOverviewComparisonMetrics();
+                return [
+                  { label: "IMPRESSIONS", key: "impressions", value: derived.impressions, icon: Eye, color: "text-pink-600", comparison: overviewCompMetrics?.impressions },
+                  { label: "CLICKS", key: "clicks", value: derived.clicks, icon: MousePointer, color: "text-purple-600", comparison: overviewCompMetrics?.clicks },
+                  { label: "CTR", key: "ctr", value: derived.ctr, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.ctr },
+                  { label: "BOOKINGS", key: "bookings", value: derived.bookings, icon: ShoppingCart, color: "text-orange-600", comparison: overviewCompMetrics?.bookings },
+                  { label: "CONVERSION RATE", key: "conversionRate", value: derived.conversionRate, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.conversionRate },
+                  { label: "CPC", key: "cpc", value: derived.cpc, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cpc },
+                  { label: "COST", key: "cost", value: derived.cost, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cost },
+                  { label: "REVENUE", key: "revenue", value: derived.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency", comparison: overviewCompMetrics?.revenue },
+                  { label: "ROAS", key: "roas", value: derived.roas, icon: TrendingUp, color: "text-green-600", format: "roas", comparison: overviewCompMetrics?.roas },
+                  { label: "COST OF SALE", key: "costOfSale", value: derived.costOfSale, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.costOfSale },
+                ];
+              })()
+            : KPI_CARDS,
+          getOverviewComparisonMetrics()
+        )
+      ) : null}
 
-      {/* Monthly Results Chart */}
-      {(isSlideReportsLoading || (slideReportId && (isLoadingData || (!slideReport?.pivot_data && isLoadingMonthlyData)))) ? (
+      {/* Monthly Results Chart — show when report loaded; data from dimension_data */}
+      {(isSlideReportsLoading || (slideReportId && (isLoadingData || isLoadingMonthlyData))) ? (
         renderChartSkeleton()
       ) : (
         <Card>
@@ -389,6 +388,6 @@ export function OverviewTab({
         </Card>
       )}
 
-    </TabsContent>
+    </div>
   );
 }

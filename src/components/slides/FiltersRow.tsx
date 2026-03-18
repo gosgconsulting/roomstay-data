@@ -179,8 +179,8 @@ export function FiltersRow({
         </div>
       )}
 
-      {/* Channel Filter Dropdowns - Show when on channel tabs */}
-      {selectedTab !== "overview" && selectedTab !== "budget" && (() => {
+      {/* Channel Filter Dropdowns - Disabled: filters were not working reliably; removed per user request */}
+      {false && selectedTab !== "overview" && selectedTab !== "budget" && (() => {
         const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
         const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
         const localFilterConfig = filterConfigs?.[currentChannel];

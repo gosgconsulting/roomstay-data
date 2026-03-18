@@ -3,7 +3,7 @@
  * views, account report IDs, view budgets, and mutations.
  */
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -12,7 +12,7 @@ import { useDataStudioRawRows } from "@/hooks/useDataStudioRawRows";
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useFilteredSlideData } from "@/hooks/useFilteredSlideData";
 import { getAccountReportIds, clearAccountReportIdsCache, type AccountReportIds } from "@/lib/accountReportIds";
-import type { SlideReport, SlideReportPivotData, SlideReportView } from "@/types/slideReports";
+import type { SlideReport, SlideReportPivotData, SlideReportView, SlideReportConfiguration, SlideReportDateRange } from "@/types/slideReports";
 import type { ChannelMetrics } from "@/types/slideReports";
 import type { BreakdownRow } from "@/types/slideReports";
 import type { ChannelBudgets } from "@/lib/budgetCalculations";
@@ -104,6 +104,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   } = params;
 
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
+  const creatingReportRef = useRef(false);
 
   const { data: slideReports, isLoading: isSlideReportsLoading } = useSlideReports(accountId || null);
 
@@ -131,29 +132,69 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     return channels;
   }, [accountReportIds]);
 
+  const createSlideReportMutation = useCreateSlideReport();
+
   useEffect(() => {
     const loadOrCreateSlideReport = async () => {
       if (!accountId || !user) return;
-      if (!accountReportIds.sem && !accountReportIds.social && !accountReportIds.metasearch) return;
       if (isSlideReportsLoading) return;
 
-      try {
-        const allReports = slideReports || [];
+      const allReports = slideReports || [];
 
-        // Data Studio: prefer report named "Data Studio", else any active report
-        const dataStudioReport = allReports
-          .filter(r => r.name === 'Data Studio' && r.is_active)
-          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
-        if (dataStudioReport) {
-          setSlideReportId(dataStudioReport.id);
-          return;
-        }
-        const existingReport = allReports.find(r => r.is_active);
-        if (existingReport) {
-          setSlideReportId(existingReport.id);
-        }
+      // Data Studio: prefer report named "Data Studio", else any active report
+      const dataStudioReport = allReports
+        .filter((r: SlideReport) => r.name === 'Data Studio' && r.is_active)
+        .sort((a: SlideReport, b: SlideReport) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
+      if (dataStudioReport) {
+        setSlideReportId(dataStudioReport.id);
+        return;
+      }
+      const existingReport = allReports.find((r: SlideReport) => r.is_active);
+      if (existingReport) {
+        setSlideReportId(existingReport.id);
+        return;
+      }
+
+      // No slide report exists: auto-create Data Studio so the page is never blank
+      const hasAnyReportId = accountReportIds.metasearch || accountReportIds.sem || accountReportIds.social;
+      if (!hasAnyReportId) return;
+      if (creatingReportRef.current) return;
+      creatingReportRef.current = true;
+
+      try {
+        const reportIds: Record<string, string> = {};
+        if (accountReportIds.metasearch) reportIds.metasearch = accountReportIds.metasearch;
+        if (accountReportIds.sem) reportIds.sem = accountReportIds.sem;
+        if (accountReportIds.social) reportIds.social = accountReportIds.social;
+
+        const validChannels = Object.keys(reportIds) as ('metasearch' | 'sem' | 'social')[];
+        const configuration: SlideReportConfiguration = {
+          selectedChannels: validChannels,
+          selectedValueDimensionIds: [],
+          channelConfigs: Object.fromEntries(validChannels.map(ch => [ch, { dimensionId: null, selectedValues: [] }])),
+          breakdownConfigs: Object.fromEntries(validChannels.map(ch => [ch, { breakdownDimensionIds: [] }])),
+          filterConfigs: Object.fromEntries(validChannels.map(ch => [ch, { filterDimensionIds: [] }])),
+        };
+        const dateRange: SlideReportDateRange = {
+          year: new Date().getFullYear(),
+          month: 'January',
+          from: new Date().toISOString().split('T')[0],
+          to: new Date().toISOString().split('T')[0],
+        };
+
+        const newReport = await createSlideReportMutation.mutateAsync({
+          name: 'Data Studio',
+          account_id: accountId,
+          user_id: user.id,
+          configuration,
+          report_ids: reportIds,
+          date_range: dateRange,
+        });
+        setSlideReportId((newReport as { id: string }).id);
       } catch (error) {
-        console.error('Error loading slide report:', error);
+        console.error('Error auto-creating Data Studio slide report:', error);
+      } finally {
+        creatingReportRef.current = false;
       }
     };
 
@@ -172,6 +213,30 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
 
   const effectivePivotData = useMemo((): SlideReportPivotData | null => {
     const base = slideReport?.pivot_data as SlideReportPivotData | null;
+    const emptyMetrics: ChannelMetrics = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+    const emptyBudget: SlideReportPivotData['budget'] = { monthly: [], totals: { totalBudget: 0, totalActual: 0, variance: 0 } };
+
+    // When pivot_data is null (post-refactor: canonical data is in dimension_data), build from raw rows
+    // so that tabs and charts get data instead of a blank page.
+    if (!base && dataStudioRawRows && Object.keys(dataStudioRawRows).length > 0) {
+      const channels: SlideReportPivotData['channels'] = {};
+      for (const [ch, rows] of Object.entries(dataStudioRawRows)) {
+        const dimMap = dataStudioDimensionMaps?.[ch] || {};
+        channels[ch] = {
+          current: emptyMetrics,
+          monthly: {},
+          breakdowns: {},
+          rawDataRows: rows,
+          dimensionMap: dimMap,
+        };
+      }
+      return {
+        overview: { current: emptyMetrics, monthly: {}, yearly: {} },
+        channels,
+        budget: emptyBudget,
+      };
+    }
+
     if (!base) return null;
     if (!dataStudioRawRows || Object.keys(dataStudioRawRows).length === 0) {
       return base;
@@ -207,7 +272,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
 
   const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);
 
-  const createSlideReport = useCreateSlideReport();
   const updateSlideReport = useUpdateSlideReport();
   const createView = useCreateSlideReportView();
   const updateView = useUpdateSlideReportView();
@@ -278,7 +342,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     isLoadingViewBudgets,
     isLoadingMonthlyData,
     needEditSourceForMasterReport,
-    createSlideReport,
+    createSlideReport: createSlideReportMutation,
     updateSlideReport,
     createView,
     updateView,

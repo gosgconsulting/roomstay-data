@@ -30,6 +30,24 @@ const GROSS_PROFIT_RATE = 0.15;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _calculateGrossProfit = (revenue: number, cost: number) => revenue * GROSS_PROFIT_RATE - cost;
 
+/** Get value from row by dimension ID or by matching dimension name in dimensionMap (row keys are dimension IDs) */
+function getDimensionValueFromRow(
+  rowData: Record<string, unknown>,
+  dimensionMap: Record<string, string>,
+  dimensionId: string,
+  dimensionName: string
+): string | undefined {
+  const byId = rowData[dimensionId];
+  if (byId !== undefined && byId !== null && String(byId).trim() !== '') return String(byId);
+  const nameLower = String(dimensionName).toLowerCase().trim();
+  const entry = Object.entries(dimensionMap).find(
+    ([, name]) => name && String(name).toLowerCase().trim() === nameLower
+  );
+  if (!entry) return undefined;
+  const val = rowData[entry[0]];
+  return val !== undefined && val !== null ? String(val) : undefined;
+}
+
 interface Dimension {
   id: string;
   name: string;
@@ -97,21 +115,34 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
     comparisonChannelTotals,
     comparisonType,
   }) => {
-    // Auto-select defaults when dimensions are available
+    // Auto-select defaults when dimensions are available.
+    // groupBy / breakdownBy may be a dimension ID (UUID) or a lowercase name hint (e.g. 'hotel', 'account').
+    // Resolution order: exact ID match → case-insensitive name match → first available dimension.
     useEffect(() => {
-      if (availableDimensions.length > 0) {
-        if (!availableDimensions.find((d) => d.id === groupBy)) {
-          onGroupByChange(availableDimensions[0].id);
-        }
-        if (
-          !availableDimensions.find((d) => d.id === breakdownBy) ||
-          breakdownBy === groupBy
-        ) {
-          const differentDim = availableDimensions.find((d) => d.id !== groupBy);
-          if (differentDim) {
-            onBreakdownByChange(differentDim.id);
-          }
-        }
+      if (availableDimensions.length === 0) return;
+
+      const resolveId = (hint: string, exclude?: string): string => {
+        // Exact UUID match
+        const exact = availableDimensions.find((d) => d.id === hint);
+        if (exact && exact.id !== exclude) return exact.id;
+        // Name match (case-insensitive)
+        const byName = availableDimensions.find(
+          (d) => d.name.toLowerCase() === hint.toLowerCase() && d.id !== exclude
+        );
+        if (byName) return byName.id;
+        // Fallback: first dim that isn't excluded
+        const fallback = availableDimensions.find((d) => d.id !== exclude);
+        return fallback?.id ?? availableDimensions[0].id;
+      };
+
+      const resolvedGroupBy = resolveId(groupBy);
+      if (resolvedGroupBy !== groupBy) {
+        onGroupByChange(resolvedGroupBy);
+      }
+
+      const resolvedBreakdownBy = resolveId(breakdownBy, resolvedGroupBy);
+      if (resolvedBreakdownBy !== breakdownBy || breakdownBy === resolvedGroupBy) {
+        onBreakdownByChange(resolvedBreakdownBy);
       }
     }, [availableDimensions, groupBy, breakdownBy, onGroupByChange, onBreakdownByChange]);
 
@@ -143,7 +174,9 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
     const groupedData = useMemo(() => {
       if (!pivotData?.channels) return [];
 
-      const groupByDim = availableDimensions.find((d) => d.id === groupBy);
+      const groupByDim =
+        availableDimensions.find((d) => d.id === groupBy) ??
+        availableDimensions.find((d) => d.name.toLowerCase() === String(groupBy).toLowerCase());
       const groupByName = groupByDim?.name || groupBy;
       const groupByDimId = groupByDim?.id || groupBy;
 
@@ -182,9 +215,11 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
           const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, breakdownDateRange ?? undefined);
 
           const groupedRows: Record<string, any[]> = {};
+          const dimensionMap = (channelData as any).dimensionMap || {};
           filteredRows.forEach((row) => {
-            const rowData = row.dimension_values || row;
-            const groupValue = rowData[groupByDimId] || rowData[groupByName] || 'Unknown';
+            const rowData = (row.dimension_values || row) as Record<string, unknown>;
+            const groupValue =
+              getDimensionValueFromRow(rowData, dimensionMap, groupByDimId, groupByName) ?? 'Unknown';
             const normalizedGroupValue = String(groupValue).trim();
 
             if (normalizedGroupValue && normalizedGroupValue !== 'Unknown') {
@@ -195,7 +230,6 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
             }
           });
 
-          const dimensionMap = (channelData as any).dimensionMap || {};
           const metricNameToIdMap: Record<string, string> = {};
           Object.entries(dimensionMap as Record<string, string>).forEach(
             ([dimensionId, dimensionName]) => {
@@ -299,11 +333,15 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
     const getExpandedBreakdownData = useMemo(() => {
       if (!expandedRow || !pivotData?.channels || !breakdownBy) return [];
 
-      const groupByDim = availableDimensions.find((d) => d.id === groupBy);
+      const groupByDim =
+        availableDimensions.find((d) => d.id === groupBy) ??
+        availableDimensions.find((d) => d.name.toLowerCase() === String(groupBy).toLowerCase());
       const groupByDimId = groupByDim?.id || groupBy;
       const groupByName = groupByDim?.name || groupBy;
 
-      const breakdownByDim = availableDimensions.find((d) => d.id === breakdownBy);
+      const breakdownByDim =
+        availableDimensions.find((d) => d.id === breakdownBy) ??
+        availableDimensions.find((d) => d.name.toLowerCase() === String(breakdownBy).toLowerCase());
       const breakdownByName = breakdownByDim?.name || breakdownBy;
       const breakdownByDimId = breakdownByDim?.id || breakdownBy;
 
@@ -340,17 +378,19 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
           filteredRows = filterRawDataRows(rawDataRows, {}, breakdownDateRange);
         }
 
+        const dimensionMap = (channelData as any).dimensionMap || {};
         const rowsForExpandedRow = filteredRows.filter((row: any) => {
-          const rowData = row.dimension_values || row;
-          const rowGroupValue = rowData[groupByDimId] || rowData[groupByName];
-          return String(rowGroupValue || '').trim() === String(expandedRow).trim();
+          const rowData = (row.dimension_values || row) as Record<string, unknown>;
+          const rowGroupValue =
+            getDimensionValueFromRow(rowData, dimensionMap, groupByDimId, groupByName) ?? '';
+          return String(rowGroupValue).trim() === String(expandedRow).trim();
         });
 
         const groupedRows: Record<string, any[]> = {};
         rowsForExpandedRow.forEach((row: any) => {
-          const rowData = row.dimension_values || row;
+          const rowData = (row.dimension_values || row) as Record<string, unknown>;
           const breakdownValue =
-            rowData[breakdownByDimId] || rowData[breakdownByName] || 'Unknown';
+            getDimensionValueFromRow(rowData, dimensionMap, breakdownByDimId, breakdownByName) ?? 'Unknown';
           const normalizedBreakdownValue = String(breakdownValue).trim();
 
           if (normalizedBreakdownValue && normalizedBreakdownValue !== 'Unknown') {
@@ -361,7 +401,6 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
           }
         });
 
-        const dimensionMap = (channelData as any).dimensionMap || {};
         const metricNameToIdMap: Record<string, string> = {};
         Object.entries(dimensionMap as Record<string, string>).forEach(
           ([dimensionId, dimensionName]) => {

@@ -89,6 +89,64 @@ Root cause: `slide_report.configuration` was saved with **global** dimension IDs
 
 ---
 
+### Breakdown Analysis table fix (2026-03-18)
+
+- [x] **BD-1** — Fixed "Data Studio" `slide_report.configuration` for Roomstay account (`ce7528cc`): replaced global dimension IDs with account-scoped IDs in `breakdownConfigs`, `filterConfigs`, `channelConfigs`, and `selectedValueDimensionIds`. Root cause: config was saved with global IDs but `dimension_data` rows are keyed by account-scoped IDs.
+- [x] **BD-2** — Made `groupByDimension` / `breakdownByDimension` per-channel (was a single shared string). New state: `Record<channel, string>` with smart defaults — `metasearch → hotel`, `sem → account`, `social → account`.
+- [x] **BD-3** — Updated `BreakdownTableSection` auto-select logic: resolves dimension name hints (e.g. `'hotel'`, `'account'`) to actual IDs using case-insensitive name match before falling back to `availableDimensions[0]`.
+- [x] **BD-4** — Moved `DEFAULT_GROUPBY` / `DEFAULT_BREAKDOWNBY` constants outside the component to avoid re-creation on every render.
+
+**Account-scoped dimension IDs used (Roomstay `3998a594`):**
+- Hotel: `093ac487-dd90-4466-9972-ac51d110e91e`
+- Account: `277ec940-a91b-4c95-b1e2-4a8fd5814d04`
+- Campaign: `745b7d51-76be-4042-bc88-790fc53de865`
+- Link Type: `6c553ea6-e3bb-4946-bb56-069d39a3c5c0`
+- Channel: `970c0d99-7ec4-48db-893c-15957122b9cc`
+- Market: `febc1239-37e9-47db-bccc-77763d95c598`
+- Device: `6955d48a-0425-48f6-b77a-31aa11dc8eb3`
+- Ad Group: `b864ad95-3b65-4610-a8ef-cba9cebabf5b`
+
+**Verification:** `npm run build` ✅ exit 0
+
+---
+
+### End-to-end reports / blank page fix (2026-03-18)
+
+- [x] **E2E-1** — Auto-create Data Studio `slide_report` when account has data sources but no slide report: in `useSlideReportPage`, when `slide_reports` list is empty and `accountReportIds` has at least one channel, create a "Data Studio" slide report and set `slideReportId` so the report page is never blank.
+- [x] **E2E-2** — Loading and empty states in `SlideViewPage`: show full-screen "Loading your account…" when `isResolvingAccount`; show "No account" card when user is logged in but has no account; show "Setting up Data Studio…" when report is being auto-created; show "Get started" + link to Data Sources when account has no data sources (so no report is created).
+
+**Verification:** `npm run build` ✅ (exit 0)
+
+---
+
+### Breakdown Analysis: Group by / settings not showing or saving (2026-03-18)
+
+- [x] **BA-1** — Load breakdown dimensions when switching to a channel tab: effect now includes `selectedTab` so SEM/Social/Metasearch tab loads its breakdown dimensions even if not in `selectedChannels` yet.
+- [x] **BA-2** — Fallback when saved config IDs don’t match loaded dimensions: if `breakdownConfigs[channel].breakdownDimensionIds` has IDs but `breakdownDimensions[channel]` doesn’t (e.g. scope mismatch), fetch those dimensions by ID from `dimensions` and merge so Group by / Breakdown by dropdowns get options.
+- [x] **BA-3** — Dimension Settings Apply feedback: success toast when settings are saved, destructive toast on failure.
+- [x] **BA-4** — ChannelTab empty state: message updated to “Use the ⋯ menu above to choose which dimensions are available for Group by / Breakdown by.” (no longer references Edit Source).
+
+**Verification:** `npm run build` ✅ (exit 0)
+
+---
+
+### Remove channel filters + fix breakdown table data (2026-03-18)
+
+- [x] **RF-1** — Channel filter dropdowns (FILTER: …) removed from FiltersRow; they were not working reliably (disabled via `false &&` so they no longer render). View selector and date range remain.
+- [x] **RF-2** — Breakdown table now resolves Group by / Breakdown by from raw rows correctly: raw rows are keyed by dimension **ID** (UUID); added `getDimensionValueFromRow()` to look up by ID then by dimension name via `dimensionMap`, and resolve group/breakdown dimension by name (case-insensitive) when only a name hint is passed so the table shows data instead of "No breakdown data available".
+
+**Verification:** `npm run build` ✅ (exit 0)
+
+---
+
+### Blank report tabs fix (2026-03-18)
+
+- [x] **TAB-1** — OverviewTab and ChannelTab were requiring `slideReport?.pivot_data` to show content; after refactor data comes from `dimension_data` (effectivePivotData), so pivot_data can be null and tabs stayed in skeleton/blank. Fixed by: show content when report is loaded and not loading (`isSlideReportsLoading` / `isLoadingData` only); show KPIs when `slideReportId && slideReport` (render with zeros if no data). Chart skeleton condition in OverviewTab updated to drop `!slideReport?.pivot_data`.
+
+**Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors)
+
+---
+
 ### Next steps
 
 - [ ] **NS-1** — Audit `run-refresh-workflow` edge function: remove legacy `slideReportId` refresh branch; keep only `resync-data-source` orchestration.
@@ -248,8 +306,8 @@ _None currently._
 
 ## Verification baseline
 
-Last verified: **2026-03-18** (post Looker Studio Refactor)
+Last verified: **2026-03-18** (post blank-page / E2E reports fix)
 
-- `npm run build` ✅ (exit 0, 6.96s)
-- `npm run lint` — not re-run post-refactor (pre-existing warnings only)
-- `npm run test -- --run` — not re-run post-refactor (49 tests passing pre-refactor)
+- `npm run build` ✅ (exit 0)
+- `npm run lint` — not re-run (pre-existing warnings only)
+- E2E reports: Data Studio (/) and shared reports; loading/empty states prevent blank page when account or report is missing

@@ -70,6 +70,11 @@ import {
 } from "@/lib/slideViewHelpers";
 import type { RawDataRow, MetricData } from "@/types/slideView";
 
+// Default groupBy / breakdownBy dimension name hints per channel.
+// These are resolved to actual IDs by BreakdownTableSection once dimensions load.
+const DEFAULT_GROUPBY: Record<string, string> = { metasearch: 'hotel', sem: 'account', social: 'account' };
+const DEFAULT_BREAKDOWNBY: Record<string, string> = { metasearch: 'link_type', sem: 'campaign', social: 'campaign' };
+
 export default function SlideViewPage() {
   const { accountId: urlAccountId, slideId } = useParams<{ accountId?: string; slideId?: string }>();
   const navigate = useNavigate();
@@ -114,9 +119,19 @@ export default function SlideViewPage() {
   const [comparisonType, setComparisonType] = useState("none");
   const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
   const [priceCheckChartTimeRange, setPriceCheckChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
-  // Breakdown table dimensions (declared early so useFilteredSlideData can prefer groupBy for KPI = table total)
-  const [groupByDimension, setGroupByDimension] = useState<string>('hotel');
-  const [breakdownByDimension, setBreakdownByDimension] = useState<string>('link_type');
+  // Per-channel breakdown table dimensions.
+  // Defaults: metasearch → Hotel, sem → Account, social → Account.
+  // Name hints are resolved to actual IDs by BreakdownTableSection once dimensions load.
+  const [groupByDimension, setGroupByDimensionRaw] = useState<Record<string, string>>({
+    metasearch: 'hotel', sem: 'account', social: 'account',
+  });
+  const [breakdownByDimension, setBreakdownByDimensionRaw] = useState<Record<string, string>>({
+    metasearch: 'link_type', sem: 'campaign', social: 'campaign',
+  });
+  const setGroupByDimension = (channel: string, value: string) =>
+    setGroupByDimensionRaw(prev => ({ ...prev, [channel]: value }));
+  const setBreakdownByDimension = (channel: string, value: string) =>
+    setBreakdownByDimensionRaw(prev => ({ ...prev, [channel]: value }));
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null); // Selected view ID (null = Master, 'unsaved' = Unsaved)
   // Filter state (declared early for useSlideReportPage)
   const [filterValues, setFilterValues] = useState({
@@ -206,8 +221,8 @@ export default function SlideViewPage() {
     selectedTab,
     comparisonType,
     chartTimeRange,
-    groupByDimensionId: groupByDimension,
-    breakdownByDimensionId: breakdownByDimension,
+    groupByDimensionId: groupByDimension[selectedTab] || groupByDimension['metasearch'],
+    breakdownByDimensionId: breakdownByDimension[selectedTab] || breakdownByDimension['metasearch'],
     selectedViewId,
     dynamicChannelTotals,
     displayCurrency: undefined,
@@ -1265,8 +1280,17 @@ export default function SlideViewPage() {
         id: slideReportId,
         configuration,
       } as any);
+      toast({
+        title: "Settings saved",
+        description: "Breakdown and filter dimension settings have been saved.",
+      });
     } catch (e) {
       console.error("Failed to persist dimension settings", e);
+      toast({
+        title: "Failed to save",
+        description: "Could not save dimension settings. Please try again.",
+        variant: "destructive",
+      });
     }
   }, [slideReport?.configuration, slideReportId, updateSlideReport, user]);
 
@@ -1947,17 +1971,48 @@ export default function SlideViewPage() {
     }
   }, [modalStep, isEditSourceOpen, selectedChannels]);
 
-  // Load breakdown dimensions on page load for display in the table dropdowns
+  // Load breakdown dimensions on page load and when switching to a channel tab
   useEffect(() => {
-    if (slideReportId && selectedChannels.length > 0) {
-      selectedChannels.forEach(channel => {
-        if (breakdownDimensions[channel].length === 0 && !loadingBreakdownDimensions[channel]) {
-          loadBreakdownDimensionsForChannel(channel);
-        }
-      });
+    if (!slideReportId) return;
+    const channelsToLoad = new Set(selectedChannels);
+    if (selectedTab === 'metasearch' || selectedTab === 'sem' || selectedTab === 'social') {
+      channelsToLoad.add(selectedTab);
     }
+    channelsToLoad.forEach((channel: 'metasearch' | 'sem' | 'social') => {
+      if ((breakdownDimensions[channel]?.length ?? 0) === 0 && !loadingBreakdownDimensions[channel]) {
+        loadBreakdownDimensionsForChannel(channel);
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slideReportId, selectedChannels]);
+  }, [slideReportId, selectedChannels, selectedTab]);
+
+  // When we have saved breakdown config IDs but loaded dimensions don't include them (e.g. ID scope mismatch),
+  // fetch those dimensions by ID so Group by / Breakdown by dropdowns can show options
+  useEffect(() => {
+    const channelKeys: ('metasearch' | 'sem' | 'social')[] = ['metasearch', 'sem', 'social'];
+    channelKeys.forEach(async (channel) => {
+      const configIds = breakdownConfigs[channel]?.breakdownDimensionIds ?? [];
+      if (configIds.length === 0) return;
+      const existing = breakdownDimensions[channel] ?? [];
+      const existingIds = new Set(existing.map((d) => d.id));
+      const missingIds = configIds.filter((id) => !existingIds.has(id));
+      if (missingIds.length === 0) return;
+
+      const { data: dims } = await supabase
+        .from('dimensions')
+        .select('id, name, type')
+        .in('id', missingIds);
+
+      if (dims?.length) {
+        setBreakdownDimensions((prev) => {
+          const current = prev[channel] ?? [];
+          const byId = new Map(current.map((d) => [d.id, d]));
+          dims.forEach((d: { id: string; name: string; type: string }) => byId.set(d.id, d));
+          return { ...prev, [channel]: Array.from(byId.values()) };
+        });
+      }
+    });
+  }, [breakdownConfigs, breakdownDimensions]);
 
   // Handle dimension change
   const handleDimensionChange = (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
@@ -2900,6 +2955,70 @@ export default function SlideViewPage() {
   // ========== AI Summary ==========
   // AI Summary feature removed (full removal)
 
+  // ========== Loading & empty states (prevent blank page) ==========
+  if (isResolvingAccount) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading your account…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && !accountId) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>No account</CardTitle>
+            <CardDescription>
+              Your user is not linked to an account. Please contact your administrator or sign in with a different account.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => navigate("/auth")}>
+              Sign out
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const hasAnyDataSource = !!(accountReportIds.metasearch || accountReportIds.sem || accountReportIds.social);
+  if (accountId && !slideReportId && !isSlideReportsLoading) {
+    if (hasAnyDataSource) {
+      return (
+        <div className="flex h-screen items-center justify-center bg-background">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Setting up Data Studio…</p>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle>Get started</CardTitle>
+            <CardDescription>
+              Add a data source (Google Sheets or CSV) to see your Data Studio report. You can connect sources from the Data Sources page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => navigate(accountId ? `/tools/data-sources/${accountId}` : "/tools/data-sources")}>
+              <Database className="h-4 w-4 mr-2" />
+              Go to Data Sources
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // ========== JSX Return ==========
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -3046,12 +3165,12 @@ export default function SlideViewPage() {
                 comparisonChannelChartData={comparisonEffectiveChannelChartData}
                 chartTimeRange={chartTimeRange}
                 setChartTimeRange={setChartTimeRange}
-                groupByDimension={groupByDimension}
-                breakdownByDimension={breakdownByDimension}
+                groupByDimension={groupByDimension[channel] || DEFAULT_GROUPBY[channel] || 'account'}
+                breakdownByDimension={breakdownByDimension[channel] || DEFAULT_BREAKDOWNBY[channel] || 'campaign'}
                 expandedRow={expandedRow}
                 setExpandedRow={setExpandedRow}
-                setGroupByDimension={setGroupByDimension}
-                setBreakdownByDimension={setBreakdownByDimension}
+                setGroupByDimension={(val) => setGroupByDimension(channel, val)}
+                setBreakdownByDimension={(val) => setBreakdownByDimension(channel, val)}
                 selectedYear={selectedYear}
                 selectedMonth={selectedMonth}
                 customDateRange={customDateRange}

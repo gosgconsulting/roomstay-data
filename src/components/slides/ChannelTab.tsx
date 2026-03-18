@@ -1,4 +1,3 @@
-import { TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -104,8 +103,9 @@ export function ChannelTab({
   const hasComparison = !!compData && compData.length > 0;
 
   return (
-    <TabsContent value={channel} className="space-y-6">
-      {isSlideReportsLoading || (slideReportId && (!slideReport?.pivot_data || isLoadingData)) ? (
+    <div className="space-y-6">
+      {/* Show content when report is loaded; data comes from dimension_data (pivotData prop), not slide_report.pivot_data */}
+      {isSlideReportsLoading || (slideReportId && isLoadingData) ? (
         renderKPICardsSkeleton()
       ) : (
         <>
@@ -207,7 +207,7 @@ export function ChannelTab({
                   return (
                     <div className="text-center py-8 text-muted-foreground">
                       <p>No breakdown dimensions configured.</p>
-                      <p className="text-sm mt-2">Configure breakdown dimensions in Edit Source → Breakdown Dimensions step.</p>
+                      <p className="text-sm mt-2">Use the ⋯ menu above to choose which dimensions are available for Group by / Breakdown by.</p>
                     </div>
                   );
                 }
@@ -247,6 +247,6 @@ export function ChannelTab({
           </Card>
         </>
       )}
-    </TabsContent>
+    </div>
   );
 }
