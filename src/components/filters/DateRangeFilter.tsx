@@ -100,7 +100,14 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
       setPhase('picking-end');
     } else {
       // Second click — set end (swap if needed), complete selection
-      const from = pendingRange?.from!;
+      const from = pendingRange?.from;
+      if (!from) {
+        // Defensive: if state got reset, treat this as a first click.
+        setPendingRange({ from: day, to: undefined });
+        setHoverDate(undefined);
+        setPhase('picking-end');
+        return;
+      }
       const [start, end] = isAfter(day, from) ? [from, day] : [day, from];
       setPendingRange({ from: start, to: end });
       setHoverDate(undefined);

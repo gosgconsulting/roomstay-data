@@ -527,7 +527,8 @@ export const CreateShareLinkModal = ({
       } else if (selectedViewId) {
         // Fallback: If view is selected, load filters from view
         try {
-          const { data: view } = await (supabase.from("slide_report_views" as any) as any)
+          const { data: view } = await supabase
+            .from("views")
             .select("filter_values")
             .eq("id", selectedViewId)
             .single();

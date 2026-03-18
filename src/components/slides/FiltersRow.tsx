@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BookmarkPlus, Trash2, Search, ChevronRight, Loader2 } from "lucide-react";
+import { BookmarkPlus, Trash2, Search, ChevronRight, Loader2, MoreHorizontal } from "lucide-react";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
 import { parseSelectedMonths, enforceConsecutive, formatSelectedMonths, slideSelectionToDateRange, dateRangeToSlideSelection, deriveSlideDatePreset, dateRangeFromPreset, derivePresetFromDateRange } from "@/lib/monthUtils";
@@ -64,6 +64,7 @@ interface FiltersRowProps {
   filterValuesLoading: Record<string, Record<string, boolean>>;
   setFilterValuesLoading: (loading: Record<string, Record<string, boolean>> | ((prev: Record<string, Record<string, boolean>>) => Record<string, Record<string, boolean>>)) => void;
   loadFilterDimensionValues: (channel: 'metasearch' | 'sem' | 'social', filterDimId: string) => Promise<string[]>;
+  onOpenFilterSettings?: (channel: 'metasearch' | 'sem' | 'social') => void;
 }
 
 export function FiltersRow({
@@ -102,9 +103,15 @@ export function FiltersRow({
   filterValuesLoading,
   setFilterValuesLoading,
   loadFilterDimensionValues,
+  onOpenFilterSettings,
 }: FiltersRowProps) {
+  const isChannelTab = selectedTab !== "overview" && selectedTab !== "budget";
+  const currentChannelForSettings = isChannelTab ? selectedTab as 'metasearch' | 'sem' | 'social' : null;
+
   return (
-    <div className="flex items-end justify-start gap-6">
+    <div className="flex items-end justify-between gap-6">
+      {/* Left: filters */}
+      <div className="flex items-end gap-6 flex-1 min-w-0">
       {/* View selector - Show when on overview tab */}
       {selectedTab === "overview" && (
         <div className="flex items-center gap-3">
@@ -517,7 +524,7 @@ export function FiltersRow({
 
       {/* Date Filters - Show on all tabs except Budget */}
       {selectedTab !== "budget" && (
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 shrink-0">
           <DateRangeFilter
             dateRange={customDateRange ?? slideSelectionToDateRange(selectedYear, selectedMonth)}
             datePreset={customDateRange ? derivePresetFromDateRange(customDateRange) : deriveSlideDatePreset(selectedYear, selectedMonth)}
@@ -576,6 +583,20 @@ export function FiltersRow({
             showCompare
           />
         </div>
+      )}
+      </div>{/* end left */}
+
+      {/* Right: 3-dot filter settings button — channel tabs only */}
+      {isChannelTab && onOpenFilterSettings && currentChannelForSettings && (
+        <button
+          type="button"
+          onClick={() => onOpenFilterSettings(currentChannelForSettings)}
+          className="h-8 w-8 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center shrink-0 self-end mb-0.5"
+          title="Configure filter dimensions"
+          aria-label="Configure filter dimensions"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
       )}
     </div>
   );

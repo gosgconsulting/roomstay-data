@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -55,13 +55,12 @@ export function DimensionSettingsModal({
 
   // Reset draft on open/mode/channel changes so Cancel truly reverts.
   // (Dialog is reused for both filters + breakdowns.)
-  useMemo(() => {
+  useEffect(() => {
     if (!open) return;
     setActiveChannel(initialChannel);
     setQuery("");
     setDraft(value);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, mode, initialChannel]);
+  }, [open, mode, initialChannel, value]);
 
   const options = useMemo(() => {
     const list =

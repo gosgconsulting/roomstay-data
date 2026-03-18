@@ -31,19 +31,17 @@ import { useOverviewChartData, useAllChannelChartData } from "@/hooks/useChartDa
 import { useChannelChartDataFromRawRows } from "@/hooks/useChannelChartDataFromRawRows";
 import { buildOverviewChartDataFromMonthlyData, buildOverviewChartDataFromChannelChartData, buildChannelChartDataFromMonthlyData, generateMonthsInTimeRange } from "@/lib/chartDataCalculations";
 import { useBudgetData, useBudgetMonthlyData } from "@/hooks/useBudgetData";
-import { calculateReportBreakdown, calculateReportTotal } from "@/lib/metricsCalculations";
-import { normalizeBudgetValue, type ChannelBudgets } from "@/lib/budgetCalculations";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "@/hooks/use-toast";
 import { SlideReport, SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange, BreakdownRow, ChannelMetrics } from "@/types/slideReports";
 import { useUser } from "@/lib/auth";
-import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
 import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
 import { RefreshStepIndicator, ChannelTabsList, DimensionValuesList } from "@/components/slides/EditSourceModal";
 import { EditSourceModal } from "@/components/slides/EditSourceModal/EditSourceModal";
 import { ShareModal } from "@/components/ShareModal";
 import { ReportSidebar } from "@/components/slides/ReportSidebar";
 import { FiltersRow } from "@/components/slides/FiltersRow";
+import { DimensionSettingsModal, type DimensionSettingsMode, type DimensionSettingsModalValue } from "@/components/slides/DimensionSettingsModal";
 import { ComparisonBanner } from "@/components/slides/ComparisonBanner";
 
 import { OverviewTab } from "@/components/slides/OverviewTab";
@@ -1208,6 +1206,69 @@ export default function SlideViewPage() {
     sem: { filterDimensionIds: [] },
     social: { filterDimensionIds: [] },
   });
+
+  const [dimensionSettingsOpen, setDimensionSettingsOpen] = useState(false);
+  const [dimensionSettingsMode, setDimensionSettingsMode] = useState<DimensionSettingsMode>("filters");
+  const [dimensionSettingsInitialChannel, setDimensionSettingsInitialChannel] = useState<"metasearch" | "sem" | "social">("metasearch");
+
+  const dimensionSettingsValue: DimensionSettingsModalValue = useMemo(() => {
+    return {
+      filtersByChannel: {
+        metasearch: filterConfigs.metasearch?.filterDimensionIds || [],
+        sem: filterConfigs.sem?.filterDimensionIds || [],
+        social: filterConfigs.social?.filterDimensionIds || [],
+      },
+      breakdownsByChannel: {
+        metasearch: breakdownConfigs.metasearch?.breakdownDimensionIds || [],
+        sem: breakdownConfigs.sem?.breakdownDimensionIds || [],
+        social: breakdownConfigs.social?.breakdownDimensionIds || [],
+      },
+    };
+  }, [breakdownConfigs, filterConfigs]);
+
+  const persistDimensionSettings = useCallback(async (next: DimensionSettingsModalValue) => {
+    setFilterConfigs((prev) => ({
+      ...prev,
+      metasearch: { filterDimensionIds: next.filtersByChannel.metasearch || [] },
+      sem: { filterDimensionIds: next.filtersByChannel.sem || [] },
+      social: { filterDimensionIds: next.filtersByChannel.social || [] },
+    }));
+
+    setBreakdownConfigs((prev) => ({
+      ...prev,
+      metasearch: { breakdownDimensionIds: next.breakdownsByChannel.metasearch || [] },
+      sem: { breakdownDimensionIds: next.breakdownsByChannel.sem || [] },
+      social: { breakdownDimensionIds: next.breakdownsByChannel.social || [] },
+    }));
+
+    if (!slideReportId || !user) return;
+
+    const prevConfig = (slideReport?.configuration || {}) as any;
+    const configuration = {
+      ...prevConfig,
+      filterConfigs: {
+        ...(prevConfig.filterConfigs || {}),
+        metasearch: { filterDimensionIds: next.filtersByChannel.metasearch || [] },
+        sem: { filterDimensionIds: next.filtersByChannel.sem || [] },
+        social: { filterDimensionIds: next.filtersByChannel.social || [] },
+      },
+      breakdownConfigs: {
+        ...(prevConfig.breakdownConfigs || {}),
+        metasearch: { breakdownDimensionIds: next.breakdownsByChannel.metasearch || [] },
+        sem: { breakdownDimensionIds: next.breakdownsByChannel.sem || [] },
+        social: { breakdownDimensionIds: next.breakdownsByChannel.social || [] },
+      },
+    };
+
+    try {
+      await updateSlideReport.mutateAsync({
+        id: slideReportId,
+        configuration,
+      } as any);
+    } catch (e) {
+      console.error("Failed to persist dimension settings", e);
+    }
+  }, [slideReport?.configuration, slideReportId, updateSlideReport, user]);
 
 
   // Pending filter values (before Apply is clicked)
@@ -2858,6 +2919,25 @@ export default function SlideViewPage() {
 
       {/* Main column: topbar + content */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+      <DimensionSettingsModal
+        open={dimensionSettingsOpen}
+        onOpenChange={setDimensionSettingsOpen}
+        mode={dimensionSettingsMode}
+        initialChannel={dimensionSettingsInitialChannel}
+        filterDimensions={{
+          metasearch: (dimensions.metasearch || []).filter((d) => d.type === "text"),
+          sem: (dimensions.sem || []).filter((d) => d.type === "text"),
+          social: (dimensions.social || []).filter((d) => d.type === "text"),
+        }}
+        breakdownDimensions={{
+          metasearch: (breakdownDimensions.metasearch || []).filter((d) => d.type === "text"),
+          sem: (breakdownDimensions.sem || []).filter((d) => d.type === "text"),
+          social: (breakdownDimensions.social || []).filter((d) => d.type === "text"),
+        }}
+        value={dimensionSettingsValue}
+        onApply={persistDimensionSettings}
+        disabled={isReadOnlyMode}
+      />
       {/* Data Studio: subtle background refresh indicator (non-blocking) */}
       {isDataStudio && dataStudioRefreshStatus === 'refreshing' && (
         <div className="fixed top-2 right-2 z-50 flex items-center gap-2 bg-background/90 border rounded-lg px-3 py-2 shadow-sm">
@@ -2904,6 +2984,11 @@ export default function SlideViewPage() {
             filterValuesLoading={filterValuesLoading}
             setFilterValuesLoading={setFilterValuesLoading}
             loadFilterDimensionValues={loadFilterDimensionValues}
+            onOpenFilterSettings={(channel) => {
+              setDimensionSettingsMode("filters");
+              setDimensionSettingsInitialChannel(channel);
+              setDimensionSettingsOpen(true);
+            }}
           />
         </div>
 
@@ -2982,6 +3067,11 @@ export default function SlideViewPage() {
                 comparisonTotals={comparisonTotals}
                 comparisonType={comparisonType}
                 displayCurrency={undefined}
+                onOpenBreakdownDimensionSettings={(ch) => {
+                  setDimensionSettingsMode("breakdowns");
+                  setDimensionSettingsInitialChannel(ch);
+                  setDimensionSettingsOpen(true);
+                }}
               />
             </TabsContent>
           ))}

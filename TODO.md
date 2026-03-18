@@ -78,6 +78,17 @@ Root cause: `slide_report.configuration` was saved with **global** dimension IDs
 
 ---
 
+### Dimension settings UI (2026-03-18)
+
+- [x] **UI-1** — Added minimalist 3-dots settings control to configure:
+  - filter dimensions per channel (which filter dropdowns show)
+  - breakdown dimensions per channel (which dimensions are available for Group by / Breakdown by)
+  Settings persist to `slide_reports.configuration` via `updateSlideReport`.
+
+**Verification:** `npm run lint` ✅
+
+---
+
 ### Next steps
 
 - [ ] **NS-1** — Audit `run-refresh-workflow` edge function: remove legacy `slideReportId` refresh branch; keep only `resync-data-source` orchestration.

@@ -135,7 +135,7 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 - [x] **7-EF1** — `refresh-slide-report` already gated by `SLIDE_REPORT_CACHE_ENABLED` in `run-refresh-workflow`; returns 410 when env var is false. No direct frontend callers.
 - [x] **7-EF2** — `refresh-slide-report-channel` has no frontend callers; only called by `refresh-slide-report` (already gated). Gated transitively.
 - [x] **7-EF3** — `get-slide-report-data` already has `SLIDE_REPORT_CACHE_ENABLED` gate at top of handler; returns 410 when disabled.
-- [ ] **7-EF4** — `get-slide-report-display-data` still actively called by `useSlideReportDisplayData.ts` (used in `SlideViewPage`). **DEFERRED** — cannot retire until Data Studio fully replaces master-report display path.
+- [x] **7-EF4** — `get-slide-report-display-data` dead code paths (`displayDataFromApi`, `apiBreakdowns`, `suppressExpandedBreakdown`) removed from `SlideViewPage` and `ChannelTab`. No frontend callers remain. Edge function can be retired in Phase 9.
 - [x] **7-EF5** — `get-consolidated-performance-data` has zero frontend callers; confirmed distinct from `get-performance-data` (different parameter shape). Added 410 deprecation gate.
 - [x] **7-EF6** — `run-refresh-workflow` already has `SLIDE_REPORT_CACHE_ENABLED` gate on `refresh-slide-report` call (line 253); legacy branch is gated.
 - [ ] **7-EF7** — `sync-report-api-data` + `get-report-api-data`: `get-performance-data` still reads `report_api_data` as a cache before falling back to `dimension_data`. **DEFERRED** — retire after `report_api_data` cache is confirmed unused (Phase 9).
@@ -146,14 +146,24 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
   - **Next**: retire `clear-and-resync` itself (410) and delete once no external callers remain (Phase 9).
 - [x] **7-EF10** — `apply-vlookup-mappings`: zero frontend callers; logic absorbed into `resync-data-source`. Added 410 deprecation gate.
 - [x] **7-F1** — `slideReportChannelDataMerge.ts` already deleted in Phase 6.
-- [ ] **7-F2** — `refreshPivotDataHelpers.ts` still used by `AISummaryPage.tsx`. **DEFERRED**.
-- [ ] **7-F3** — `slideReportPivotComputation.ts` still used by `SlideViewPage` + `useSlideReports`. **DEFERRED**.
-- [ ] **7-F4** — `slideRefreshHelpers.ts` still used by `SlideViewPage`. **DEFERRED**.
+- [x] **7-F2** — `refreshPivotDataHelpers.ts`: confirmed zero imports in `src/`; file already deleted in prior phase.
+- [x] **7-F3** — `slideReportPivotComputation.ts`: confirmed zero imports in `src/`; file already deleted in prior phase. `SlideViewPage` now reads exclusively from `dimension_data` via `useDataStudioRawRows` → `useFilteredSlideData`.
+- [x] **7-F4** — `slideRefreshHelpers.ts`: confirmed zero imports in `src/`; file already deleted in prior phase.
 - [ ] **7-F5** — `useSlideReportSummaries` reads `slide_report_summaries` for per-tab AI summaries in slide view; `ai_summary_cards` is a separate feature. **DEFERRED** — these serve different purposes.
 - [ ] **7-DB1** — Add `deprecated_at` timestamps to legacy pivot tables (additive migration). **DEFERRED** — DB migration needed.
 - [ ] **7-DB2** — `report_api_data` still written by `sync-report-api-data` and read by `get-performance-data`. **DEFERRED** — document after EF7 is confirmed.
 
-> **What changed (Phase 7):** Added 410 deprecation gates to `apply-vlookup-mappings`, `migrate-sheet-data`, `get-consolidated-performance-data`. Confirmed `run-refresh-workflow` already gates `refresh-slide-report` via `SLIDE_REPORT_CACHE_ENABLED`. Confirmed `get-slide-report-data` already gated. Updated `run-refresh-workflow` to implement canonical `clearFirst` (clears `dimension_data` only) and removed the legacy dependency on `clear-and-resync`. Deferred: `get-slide-report-display-data` (active), `sync-report-api-data`/`get-report-api-data` (active cache), frontend lib files (all still used). Build: `npm run build` ✓ exit 0.
+> **What changed (Phase 7):** Added 410 deprecation gates to `apply-vlookup-mappings`, `migrate-sheet-data`, `get-consolidated-performance-data`. Confirmed `run-refresh-workflow` already gates `refresh-slide-report` via `SLIDE_REPORT_CACHE_ENABLED`. Confirmed `get-slide-report-data` already gated. Updated `run-refresh-workflow` to implement canonical `clearFirst` (clears `dimension_data` only) and removed the legacy dependency on `clear-and-resync`. Deferred: `sync-report-api-data`/`get-report-api-data` (active cache). Build: `npm run build` ✓ exit 0.
+>
+> **What changed (Phase 7 — 2026-03-18 channel unification):**
+> - Removed inline `UnifiedBreakdownTable` component (~780 lines) from `SlideViewPage.tsx`; replaced with canonical `UnifiedBreakdownTable` exported from `src/components/slides/BreakdownTableSection.tsx`.
+> - Canonical `BreakdownTableSection.tsx` extended with missing props: `customDateRange`, `displayCurrency`, `comparisonChannelTotals`, `comparisonType`; dead `displayDataFromApi`/`apiBreakdowns`/`suppressExpandedBreakdown` paths removed.
+> - `ChannelTab.tsx` rewritten: imports `UnifiedBreakdownTable` directly (no longer receives it as a prop); removed `UnifiedBreakdownTable` prop from interface; removed dead `displayDataFromApi`/`apiBreakdowns`/`suppressExpandedBreakdown` props.
+> - KPI totals source-of-truth fixed: `currentTotals` from `useFilteredSlideData` (canonical `rawDataRows` path) is now primary; `breakdownTotals` from breakdown table is secondary fallback only when `currentTotals` is empty.
+> - Removed dead imports from `SlideViewPage.tsx`: `isMetasearchJan2026`, `getJan2026BreakdownRowsForTable`, `fetchSourceData`, `calculateReportBreakdown`, `calculateReportTotal`, `normalizeBudgetValue`, `ChannelBudgets`.
+> - Confirmed `slideReportPivotComputation.ts`, `refreshPivotDataHelpers.ts`, `slideRefreshHelpers.ts` already deleted; marked 7-F2/F3/F4 complete.
+> - Confirmed `get-slide-report-display-data` has no remaining frontend callers; marked 7-EF4 complete.
+> - Build: `npm run build` ✓ exit 0. Lint: `npm run lint` ✓ 0 errors, 88 warnings (all pre-existing).
 
 #### Edge-function duplication plan (EF4 / EF7 / EF9)
 
