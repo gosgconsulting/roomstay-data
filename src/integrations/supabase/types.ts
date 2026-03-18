@@ -351,7 +351,7 @@ export type Database = {
             foreignKeyName: "budgets_view_id_fkey"
             columns: ["view_id"]
             isOneToOne: false
-            referencedRelation: "slide_report_views"
+            referencedRelation: "views"
             referencedColumns: ["id"]
           },
         ]
@@ -936,66 +936,6 @@ export type Database = {
           },
         ]
       }
-      monthly_dimension_data: {
-        Row: {
-          aggregated_metrics: Json
-          created_at: string | null
-          data_source_id: string
-          date_range_end: string | null
-          date_range_start: string | null
-          dimension_values: Json
-          id: string
-          month: number
-          report_id: string
-          row_count: number
-          updated_at: string | null
-          year: number
-        }
-        Insert: {
-          aggregated_metrics?: Json
-          created_at?: string | null
-          data_source_id: string
-          date_range_end?: string | null
-          date_range_start?: string | null
-          dimension_values?: Json
-          id?: string
-          month: number
-          report_id: string
-          row_count?: number
-          updated_at?: string | null
-          year: number
-        }
-        Update: {
-          aggregated_metrics?: Json
-          created_at?: string | null
-          data_source_id?: string
-          date_range_end?: string | null
-          date_range_start?: string | null
-          dimension_values?: Json
-          id?: string
-          month?: number
-          report_id?: string
-          row_count?: number
-          updated_at?: string | null
-          year?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "monthly_dimension_data_data_source_id_fkey"
-            columns: ["data_source_id"]
-            isOneToOne: false
-            referencedRelation: "data_sources"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "monthly_dimension_data_report_id_fkey"
-            columns: ["report_id"]
-            isOneToOne: false
-            referencedRelation: "reports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           created_at: string
@@ -1016,47 +956,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
-      }
-      report_api_data: {
-        Row: {
-          created_at: string
-          data: Json
-          date_from: string
-          date_to: string
-          id: string
-          period_type: string
-          report_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          data?: Json
-          date_from: string
-          date_to: string
-          id?: string
-          period_type: string
-          report_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          data?: Json
-          date_from?: string
-          date_to?: string
-          id?: string
-          period_type?: string
-          report_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "report_api_data_report_id_fkey"
-            columns: ["report_id"]
-            isOneToOne: false
-            referencedRelation: "reports"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       report_daily_metrics: {
         Row: {
@@ -1345,358 +1244,7 @@ export type Database = {
             foreignKeyName: "share_links_view_id_fkey"
             columns: ["view_id"]
             isOneToOne: false
-            referencedRelation: "slide_report_views"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      sheet_data: {
-        Row: {
-          created_at: string
-          data_source_id: string
-          id: string
-          row_data: Json
-          row_number: number
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          data_source_id: string
-          id?: string
-          row_data: Json
-          row_number: number
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          data_source_id?: string
-          id?: string
-          row_data?: Json
-          row_number?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sheet_data_data_source_id_fkey"
-            columns: ["data_source_id"]
-            isOneToOne: false
-            referencedRelation: "data_sources"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      slide_report_channel_month_data: {
-        Row: {
-          channel: string
-          created_at: string
-          data: Json
-          id: string
-          month: number
-          slide_report_id: string
-          updated_at: string
-          year: number
-        }
-        Insert: {
-          channel: string
-          created_at?: string
-          data?: Json
-          id?: string
-          month: number
-          slide_report_id: string
-          updated_at?: string
-          year: number
-        }
-        Update: {
-          channel?: string
-          created_at?: string
-          data?: Json
-          id?: string
-          month?: number
-          slide_report_id?: string
-          updated_at?: string
-          year?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slide_report_channel_month_data_slide_report_id_fkey"
-            columns: ["slide_report_id"]
-            isOneToOne: false
-            referencedRelation: "slide_reports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      slide_report_channel_raw_rows: {
-        Row: {
-          channel: string
-          created_at: string
-          dimension_map: Json
-          id: string
-          month: number
-          rows: Json
-          slide_report_id: string
-          updated_at: string
-          year: number
-        }
-        Insert: {
-          channel: string
-          created_at?: string
-          dimension_map?: Json
-          id?: string
-          month: number
-          rows?: Json
-          slide_report_id: string
-          updated_at?: string
-          year: number
-        }
-        Update: {
-          channel?: string
-          created_at?: string
-          dimension_map?: Json
-          id?: string
-          month?: number
-          rows?: Json
-          slide_report_id?: string
-          updated_at?: string
-          year?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slide_report_channel_raw_rows_slide_report_id_fkey"
-            columns: ["slide_report_id"]
-            isOneToOne: false
-            referencedRelation: "slide_reports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      slide_report_channel_year_data: {
-        Row: {
-          channel: string
-          created_at: string
-          data: Json
-          id: string
-          slide_report_id: string
-          updated_at: string
-          year: number
-        }
-        Insert: {
-          channel: string
-          created_at?: string
-          data?: Json
-          id?: string
-          slide_report_id: string
-          updated_at?: string
-          year: number
-        }
-        Update: {
-          channel?: string
-          created_at?: string
-          data?: Json
-          id?: string
-          slide_report_id?: string
-          updated_at?: string
-          year?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slide_report_channel_year_data_slide_report_id_fkey"
-            columns: ["slide_report_id"]
-            isOneToOne: false
-            referencedRelation: "slide_reports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      slide_report_monthly_data: {
-        Row: {
-          account_id: string | null
-          breakdowns: Json
-          channel: string
-          computed_at: string
-          created_at: string
-          id: string
-          metrics: Json
-          month: number
-          row_count: number | null
-          slide_report_id: string
-          updated_at: string
-          year: number
-        }
-        Insert: {
-          account_id?: string | null
-          breakdowns?: Json
-          channel: string
-          computed_at?: string
-          created_at?: string
-          id?: string
-          metrics?: Json
-          month: number
-          row_count?: number | null
-          slide_report_id: string
-          updated_at?: string
-          year: number
-        }
-        Update: {
-          account_id?: string | null
-          breakdowns?: Json
-          channel?: string
-          computed_at?: string
-          created_at?: string
-          id?: string
-          metrics?: Json
-          month?: number
-          row_count?: number | null
-          slide_report_id?: string
-          updated_at?: string
-          year?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slide_report_monthly_data_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "slide_report_monthly_data_slide_report_id_fkey"
-            columns: ["slide_report_id"]
-            isOneToOne: false
-            referencedRelation: "slide_reports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      slide_report_summaries: {
-        Row: {
-          account_id: string | null
-          comparison_type: string
-          created_at: string
-          id: string
-          selected_month: string
-          selected_year: string
-          slide_report_id: string
-          source: string
-          summary_text: string
-          tab: string
-          updated_at: string
-          user_id: string
-          view_id: string | null
-        }
-        Insert: {
-          account_id?: string | null
-          comparison_type: string
-          created_at?: string
-          id?: string
-          selected_month: string
-          selected_year: string
-          slide_report_id: string
-          source?: string
-          summary_text: string
-          tab: string
-          updated_at?: string
-          user_id: string
-          view_id?: string | null
-        }
-        Update: {
-          account_id?: string | null
-          comparison_type?: string
-          created_at?: string
-          id?: string
-          selected_month?: string
-          selected_year?: string
-          slide_report_id?: string
-          source?: string
-          summary_text?: string
-          tab?: string
-          updated_at?: string
-          user_id?: string
-          view_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slide_report_summaries_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "slide_report_summaries_slide_report_id_fkey"
-            columns: ["slide_report_id"]
-            isOneToOne: false
-            referencedRelation: "slide_reports"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "slide_report_summaries_view_id_fkey"
-            columns: ["view_id"]
-            isOneToOne: false
-            referencedRelation: "slide_report_views"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      slide_report_views: {
-        Row: {
-          account_id: string | null
-          chart_time_range: string | null
-          comparison_type: string
-          created_at: string
-          filter_values: Json
-          id: string
-          name: string
-          price_check_chart_time_range: string | null
-          selected_month: string
-          selected_year: string
-          slide_report_id: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_id?: string | null
-          chart_time_range?: string | null
-          comparison_type: string
-          created_at?: string
-          filter_values?: Json
-          id?: string
-          name: string
-          price_check_chart_time_range?: string | null
-          selected_month: string
-          selected_year: string
-          slide_report_id: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_id?: string | null
-          chart_time_range?: string | null
-          comparison_type?: string
-          created_at?: string
-          filter_values?: Json
-          id?: string
-          name?: string
-          price_check_chart_time_range?: string | null
-          selected_month?: string
-          selected_year?: string
-          slide_report_id?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slide_report_views_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "slide_report_views_slide_report_id_fkey"
-            columns: ["slide_report_id"]
-            isOneToOne: false
-            referencedRelation: "slide_reports"
+            referencedRelation: "views"
             referencedColumns: ["id"]
           },
         ]
@@ -1817,6 +1365,127 @@ export type Database = {
             columns: ["report_id"]
             isOneToOne: false
             referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      views: {
+        Row: {
+          account_id: string | null
+          breakdown_by_dimensions: string[] | null
+          chart_time_range: string | null
+          column_order: string[] | null
+          comparison_type: string | null
+          created_at: string
+          date_granularity: string | null
+          date_order: string | null
+          date_range_end: string | null
+          date_range_preset: string | null
+          date_range_start: string | null
+          filter_dimensions: string[] | null
+          filter_values: Json | null
+          group_by_dimensions: string[] | null
+          id: string
+          is_default: boolean | null
+          kpi_order: string[] | null
+          mode: string
+          name: string
+          price_check_chart_time_range: string | null
+          report_id: string | null
+          selected_month: string | null
+          selected_year: string | null
+          slide_report_id: string | null
+          tab: string | null
+          then_by_dimensions: string[] | null
+          updated_at: string
+          user_id: string
+          visible_columns: string[] | null
+          visible_kpis: string[] | null
+        }
+        Insert: {
+          account_id?: string | null
+          breakdown_by_dimensions?: string[] | null
+          chart_time_range?: string | null
+          column_order?: string[] | null
+          comparison_type?: string | null
+          created_at?: string
+          date_granularity?: string | null
+          date_order?: string | null
+          date_range_end?: string | null
+          date_range_preset?: string | null
+          date_range_start?: string | null
+          filter_dimensions?: string[] | null
+          filter_values?: Json | null
+          group_by_dimensions?: string[] | null
+          id?: string
+          is_default?: boolean | null
+          kpi_order?: string[] | null
+          mode: string
+          name: string
+          price_check_chart_time_range?: string | null
+          report_id?: string | null
+          selected_month?: string | null
+          selected_year?: string | null
+          slide_report_id?: string | null
+          tab?: string | null
+          then_by_dimensions?: string[] | null
+          updated_at?: string
+          user_id: string
+          visible_columns?: string[] | null
+          visible_kpis?: string[] | null
+        }
+        Update: {
+          account_id?: string | null
+          breakdown_by_dimensions?: string[] | null
+          chart_time_range?: string | null
+          column_order?: string[] | null
+          comparison_type?: string | null
+          created_at?: string
+          date_granularity?: string | null
+          date_order?: string | null
+          date_range_end?: string | null
+          date_range_preset?: string | null
+          date_range_start?: string | null
+          filter_dimensions?: string[] | null
+          filter_values?: Json | null
+          group_by_dimensions?: string[] | null
+          id?: string
+          is_default?: boolean | null
+          kpi_order?: string[] | null
+          mode?: string
+          name?: string
+          price_check_chart_time_range?: string | null
+          report_id?: string | null
+          selected_month?: string | null
+          selected_year?: string | null
+          slide_report_id?: string | null
+          tab?: string | null
+          then_by_dimensions?: string[] | null
+          updated_at?: string
+          user_id?: string
+          visible_columns?: string[] | null
+          visible_kpis?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "views_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "views_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "views_slide_report_id_fkey"
+            columns: ["slide_report_id"]
+            isOneToOne: false
+            referencedRelation: "slide_reports"
             referencedColumns: ["id"]
           },
         ]

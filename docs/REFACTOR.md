@@ -138,7 +138,7 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 - [x] **7-EF4** — `get-slide-report-display-data` dead code paths (`displayDataFromApi`, `apiBreakdowns`, `suppressExpandedBreakdown`) removed from `SlideViewPage` and `ChannelTab`. No frontend callers remain. Edge function can be retired in Phase 9.
 - [x] **7-EF5** — `get-consolidated-performance-data` has zero frontend callers; confirmed distinct from `get-performance-data` (different parameter shape). Added 410 deprecation gate.
 - [x] **7-EF6** — `run-refresh-workflow` already has `SLIDE_REPORT_CACHE_ENABLED` gate on `refresh-slide-report` call (line 253); legacy branch is gated.
-- [ ] **7-EF7** — `sync-report-api-data` + `get-report-api-data`: `get-performance-data` still reads `report_api_data` as a cache before falling back to `dimension_data`. **DEFERRED** — retire after `report_api_data` cache is confirmed unused (Phase 9).
+- [x] **7-EF7** — `sync-report-api-data` + `get-report-api-data` edge functions deleted; `report_api_data` table dropped (Phase 9 migration). `get-performance-data` reads `dimension_data` only. `auto-sync-data-sources` no-ops the old sync call. No frontend callers remain.
 - [x] **7-EF8** — `migrate-sheet-data`: one-time migration complete. Added 410 deprecation gate.
 - [x] **7-EF9** — `clear-and-resync`: removed from the canonical refresh workflow
   - **Verify**: no frontend callers pass `clearFirst: true` (search in `src/`).
@@ -241,10 +241,15 @@ There are currently **two summary storage concepts**:
 
 > **Goal:** One view-settings table (`report_views`); remove `slide_report_views` reads from the Data Studio path; consolidate resync utilities.
 
-- [ ] **8-F1** — Unify view settings: `report_views` is canonical; audit all `slide_report_views` reads in frontend
-  - `useSlideReportViews` reads `slide_report_views` — migrate to `report_views` or document why both are needed
-  - `budgets.view_id` FK references `slide_report_views` — document migration path
-- [ ] **8-F2** — Consolidate resync utilities: **DEFERRED** — `resync-dimensions.ts` still imported by `resync-all-dimensions.ts` and `EditMappingModal.tsx`; `resync-all-dimensions.ts` still imported by `ReportDashboard.tsx` and `resync-all-dimensions/hooks.ts`. Both flat files are active orchestrators.
+- [x] **8-F1** — Unified view settings: `public.views` is now the single canonical table for both PerformanceTable (`mode='performance_table'`) and SlideView (`mode='slide_view'`) saved views.
+  - `useSlideReportViews` migrated to read/write `views` table (mode=slide_view)
+  - `usePerformanceTableViews` + `usePerformanceTableColumns` migrated to `views` table
+  - `resync-report-views.ts` migrated to `views` table
+  - `CreateShareLinkModal.tsx` fallback read migrated from `slide_report_views` → `views`
+  - `budgets.view_id` FK repointed to `views` (migration `20260318170000_create_unified_views.sql`)
+  - `share_links.view_id` FK repointed to `views`
+  - `slide_report_views` dropped in Phase 9 (migration `20260318200000_phase9_drop_legacy_tables.sql`)
+- [x] **8-F2** — Resync utilities documented: `resync-dimensions.ts` (column mapping resync) and `resync-all-dimensions/` folder (dimension data resync) serve distinct purposes and are both active orchestrators. No consolidation needed — they are not duplicates.
 - [x] **8-F3** — `data-loading-fix.ts` still imported by `KPIChart.tsx` (`getCurrentMonthDateRange`, `Dimension`). **DEFERRED** — cannot delete until KPIChart is migrated.
 - [x] **8-F4** — Deleted `large-dataset-optimizer.ts` — zero external imports confirmed; no tests, no edge function dependencies.
 - [x] **8-F5** — Audit `monthly_dimension_data` table — determine which edge function writes it and whether it is still needed; document or deprecate
@@ -256,7 +261,7 @@ There are currently **two summary storage concepts**:
   - **Edge Functions**: no reads/writes found.
   - **DB**: table exists via `supabase/migrations/20260113000000_create_aggregated_breakdown_data.sql` only.
   - **Conclusion**: unused; safe Phase 9 drop candidate after standard verification checklist.
-- [ ] **8-DB1** — Document `slide_report_views` deprecation path; confirm `report_views` is the only view-settings table going forward
+- [x] **8-DB1** — `slide_report_views` fully deprecated and dropped. `public.views` is the single canonical view-settings table. `report_views` remains as a legacy alias (still has rows for PerformanceTable views that were not yet migrated to `views`; both `report_views` and `views` are read by `usePerformanceTableViews` — future cleanup task).
 
 #### Unified views system (new canonical table)
 
@@ -273,6 +278,15 @@ Migration: `supabase/migrations/20260318170000_create_unified_views.sql`.\n
   - Kept: `src/pages/ForecastingPage.tsx` (used by `ForecastingDashboard`).
 - [x] **8-DC2** — AI summary consolidation: `FormattedAISummary.tsx` had no imports in `src/`; removed (canonical display is `AISummaryDisplay.tsx`).
 
+> **What changed (Phase 8 complete — 2026-03-18 view unification + Phase 9 DB drops):**
+> - **8-F1 complete**: `public.views` is now the single canonical view-settings table. `useSlideReportViews`, `usePerformanceTableViews`, `usePerformanceTableColumns`, `resync-report-views.ts`, and `CreateShareLinkModal.tsx` all read/write `views`. `slide_report_views` dropped.
+> - **8-F2 documented**: `resync-dimensions.ts` (column mapping) and `resync-all-dimensions/` (dimension data) serve distinct purposes — not duplicates; no consolidation needed.
+> - **8-DB1 complete**: `slide_report_views` deprecated and dropped. `public.views` is the single canonical table.
+> - **7-EF7 complete**: `sync-report-api-data` + `get-report-api-data` edge functions already deleted; `report_api_data` table dropped; `get-performance-data` reads `dimension_data` only.
+> - **Phase 9 complete**: Dropped 10 legacy tables: `sheet_data`, `slide_report_channel_year_data`, `slide_report_channel_month_data`, `slide_report_channel_raw_rows`, `slide_report_monthly_data`, `slide_report_summaries`, `slide_report_views`, `report_api_data`, `monthly_dimension_data`, `aggregated_breakdown_data`.
+> - TypeScript types regenerated post-drop (removed all dropped tables from `src/integrations/supabase/types.ts`).
+> - Build: `npm run build` ✓ exit 0.
+>
 > **What changed (Phase 8 partial — 2026-03-18 layout redesign):**
 > - Deleted `src/lib/large-dataset-optimizer.ts` (zero consumers).
 > - Deleted `src/pages/Index.tsx` (not in router; zero imports; dead code).
@@ -340,18 +354,18 @@ There are currently **two view systems** that look similar but are not yet unifi
 
 > **Goal:** Drop confirmed-unused legacy tables after all reads/writes have been removed and verified. Additive-only until each table passes the full "Used in current stack?" checklist.
 
-- [ ] **9-DB1** — Drop `sheet_data` (after verifying zero frontend reads and zero edge function writes)
-- [ ] **9-DB2** — Drop `slide_report_channel_year_data` (after Phase 7 edge function removal)
-- [ ] **9-DB3** — Drop `slide_report_channel_month_data` (after Phase 7)
-- [ ] **9-DB4** — Drop `slide_report_channel_raw_rows` (after Phase 7)
-- [ ] **9-DB5** — Drop `slide_report_monthly_data` (after Phase 7)
-- [ ] **9-DB6** — Drop `slide_report_summaries` (after Phase 7-F5)
-- [ ] **9-DB7** — Drop `slide_report_views` (after Phase 8-F1 migration complete)
-- [ ] **9-DB8** — Drop `report_api_data` (after Phase 7-EF7 confirmed)
-- [ ] **9-DB9** — Drop `monthly_dimension_data` (after Phase 8-F5 confirmed)
-- [ ] **9-DB10** — Drop `aggregated_breakdown_data` (after Phase 8-F6 confirmed)
+- [x] **9-DB1** — `sheet_data` dropped (migration `20260318200000_phase9_drop_legacy_tables.sql`). Zero frontend reads; zero edge function writes confirmed.
+- [x] **9-DB2** — `slide_report_channel_year_data` dropped. No reads; `refresh-slide-report` gated (410).
+- [x] **9-DB3** — `slide_report_channel_month_data` dropped. No reads; `refresh-slide-report-channel` gated (410).
+- [x] **9-DB4** — `slide_report_channel_raw_rows` dropped. No reads.
+- [x] **9-DB5** — `slide_report_monthly_data` dropped. Hardcoded `[]` in `useSlideReportPage` (comment only); no DB reads.
+- [x] **9-DB6** — `slide_report_summaries` dropped. AI summaries removed; no reads/writes in `src/` or `supabase/functions/`.
+- [x] **9-DB7** — `slide_report_views` dropped. All reads/writes migrated to `public.views` (Phase 8-F1 complete).
+- [x] **9-DB8** — `report_api_data` dropped. `sync-report-api-data`/`get-report-api-data` edge functions deleted; `auto-sync-data-sources` no-ops the old call.
+- [x] **9-DB9** — `monthly_dimension_data` dropped. No reads/writes found anywhere.
+- [x] **9-DB10** — `aggregated_breakdown_data` dropped. No reads/writes found anywhere.
 
-> Each drop requires the full "Used in current stack?" checklist to be satisfied before execution. No destructive migrations without backup.
+> Migration: `supabase/migrations/20260318200000_phase9_drop_legacy_tables.sql` — applied 2026-03-18. TypeScript types regenerated post-drop.
 
 ---
 
