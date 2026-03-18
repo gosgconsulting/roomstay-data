@@ -2853,9 +2853,11 @@ export default function SlideViewPage() {
             console.warn('[RefreshData] Failed to update last_refreshed_at:', updateErr);
           }
 
-          // Reload report: refetch canonical report data so cache has fresh dimension_data before showing complete (avoids stale Cost/KPIs). One query — KPIs and charts both derive from this.
+          // Reload report: refetch canonical report data so cache has fresh dimension_data before showing complete (avoids stale Cost/KPIs). Use exact query key so the active report's data is refetched.
+          const rawRowsQueryKey = ['data-studio-raw-rows', slideReportId, selectedYear];
           try {
-            await queryClient.refetchQueries({ queryKey: ['data-studio-raw-rows'] });
+            await queryClient.refetchQueries({ queryKey: rawRowsQueryKey });
+            queryClient.invalidateQueries({ queryKey: rawRowsQueryKey });
           } catch (refetchErr) {
             console.warn('[RefreshData] Report refetch failed (data may still be stale):', refetchErr);
           }
@@ -2863,6 +2865,7 @@ export default function SlideViewPage() {
           setRefreshStep(5);
           setRefreshStepStatus((prev) => ({ ...prev, 2: 'complete', 3: 'complete', 4: 'complete', 5: 'complete' }));
 
+          queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
           queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
         } else {
           setRefreshStep(2);
@@ -2890,7 +2893,7 @@ export default function SlideViewPage() {
         setRefreshStepStatus((prev) => ({ ...prev, 0: prev[0] === 'loading' ? 'error' : prev[0], 1: prev[1] === 'loading' ? 'error' : prev[1], 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
       }
     })();
-  }, [refreshPending, isRefreshModalOpen, slideReportId, slideReport, queryClient, isDataStudio, accountId, activeRefreshMode]);
+  }, [refreshPending, isRefreshModalOpen, slideReportId, slideReport, selectedYear, queryClient, isDataStudio, accountId, activeRefreshMode]);
 
   // ========== Budget edit handlers ==========
   const handleStartEditBudget = useCallback((month: string, channel: string | null, currentBudget: number) => {
