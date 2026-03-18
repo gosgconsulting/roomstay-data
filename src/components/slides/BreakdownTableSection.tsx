@@ -664,7 +664,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                 <TableCell></TableCell>
                 <TableCell className="font-bold">
                   Total
-                  {compType !== 'none' && compTotals && renderPercentChange(totals.revenue, compTotals.revenue)}
+                  {comparisonType !== 'none' && compTotals && renderPercentChange(totals.revenue, compTotals.revenue)}
                 </TableCell>
                 <TableCell className="text-right">{formatNumber(totalMetrics.impressions)}</TableCell>
                 <TableCell className="text-right">{formatNumber(totalMetrics.clicks)}</TableCell>
