@@ -225,7 +225,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
         channels[ch] = {
           current: emptyMetrics,
           monthly: {},
-          breakdowns: {},
           rawDataRows: rows,
           dimensionMap: dimMap,
         };
@@ -248,7 +247,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
       channels[ch] = {
         current: emptyMetrics,
         monthly: {},
-        breakdowns: {},
         ...(baseChannel || {}),
         rawDataRows: rows,
         dimensionMap: Object.keys(freshDimMap).length > 0

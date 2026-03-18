@@ -23,8 +23,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { syncDataSource } from "@/lib/sync-utils";
+import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
 import { useUserAccount } from "@/hooks/useUserAccount";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface DataSource {
   id: string;
@@ -55,6 +56,7 @@ export default function DataSourcesPage() {
   const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
   const accountId = urlAccountId ?? resolvedAccount?.id ?? null;
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -218,35 +220,34 @@ export default function DataSourcesPage() {
   };
 
   const handleSync = async (dataSource: DataSource) => {
+    if (!accountId) {
+      toast({ title: "Sync failed", description: "No account found.", variant: "destructive" });
+      return;
+    }
     setIsSyncing(dataSource.id);
-    
+
     try {
       toast({
         title: "Syncing data...",
         description: `Starting sync for ${dataSource.name}`,
       });
 
-      const result = await syncDataSource(dataSource);
+      await runRefreshWorkflow({
+        accountId,
+        reportId: dataSource.report_id,
+        clearFirst: false,
+        skipRefresh: true,
+      });
 
-      if (result.success) {
-        toast({
-          title: "Sync complete",
-          description: `Successfully synced ${result.rowsProcessed.toLocaleString()} rows from ${dataSource.name}`,
-        });
+      toast({
+        title: "Sync complete",
+        description: `Successfully synced ${dataSource.name}`,
+      });
 
-        await supabase
-          .from('data_sources')
-          .update({ last_synced_at: new Date().toISOString() })
-          .eq('id', dataSource.id);
+      queryClient.invalidateQueries({ queryKey: ['data-studio-raw-rows'] });
+      queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
 
-        await loadDataSources();
-      } else {
-        toast({
-          title: "Sync failed",
-          description: result.error || "Unknown error occurred",
-          variant: "destructive",
-        });
-      }
+      await loadDataSources();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
       toast({

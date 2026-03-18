@@ -258,6 +258,14 @@ export function derivePresetFromDateRange(range: DateRange | undefined): string 
   const last30Start = new Date(today); last30Start.setDate(today.getDate() - 29);
   if (from.getTime() === last30Start.getTime() && to.getTime() === today.getTime()) return 'last_30_days';
 
+  // last 90 days
+  const last90Start = new Date(today); last90Start.setDate(today.getDate() - 89);
+  if (from.getTime() === last90Start.getTime() && to.getTime() === today.getTime()) return 'last_90_days';
+
+  // month to date
+  const mtdStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  if (from.getTime() === mtdStart.getTime() && to.getTime() === today.getTime()) return 'month_to_date';
+
   // this month
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -267,6 +275,20 @@ export function derivePresetFromDateRange(range: DateRange | undefined): string 
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
   if (from.getTime() === lastMonthStart.getTime() && to.getTime() === lastMonthEnd.getTime()) return 'last_month';
+
+  // quarter to date
+  const currentQuarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+  if (from.getTime() === currentQuarterStart.getTime() && to.getTime() === today.getTime()) return 'quarter_to_date';
+
+  // last quarter
+  const lastQuarterEndMonth = Math.floor(now.getMonth() / 3) * 3 - 1;
+  const lastQuarterStart = new Date(now.getFullYear(), lastQuarterEndMonth - 2, 1);
+  const lastQuarterEnd = new Date(now.getFullYear(), lastQuarterEndMonth + 1, 0);
+  if (from.getTime() === lastQuarterStart.getTime() && to.getTime() === lastQuarterEnd.getTime()) return 'last_quarter';
+
+  // year to date
+  const ytdStart = new Date(now.getFullYear(), 0, 1);
+  if (from.getTime() === ytdStart.getTime() && to.getTime() === today.getTime()) return 'year_to_date';
 
   // this year
   const thisYearStart = new Date(now.getFullYear(), 0, 1);
@@ -308,6 +330,30 @@ export function dateRangeFromPreset(preset: string): DateRange | undefined {
       const from = new Date(today); from.setDate(today.getDate() - 29);
       return { from, to: today };
     }
+    case 'last_90_days': {
+      const from = new Date(today); from.setDate(today.getDate() - 89);
+      return { from, to: today };
+    }
+    case 'month_to_date':
+      return {
+        from: new Date(now.getFullYear(), now.getMonth(), 1),
+        to: today,
+      };
+    case 'quarter_to_date': {
+      const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+      return { from: qStart, to: today };
+    }
+    case 'last_quarter': {
+      const lqEndMonth = Math.floor(now.getMonth() / 3) * 3 - 1;
+      const lqStart = new Date(now.getFullYear(), lqEndMonth - 2, 1);
+      const lqEnd = new Date(now.getFullYear(), lqEndMonth + 1, 0);
+      return { from: lqStart, to: lqEnd };
+    }
+    case 'year_to_date':
+      return {
+        from: new Date(now.getFullYear(), 0, 1),
+        to: today,
+      };
     case 'this_month':
       return {
         from: new Date(now.getFullYear(), now.getMonth(), 1),

@@ -161,6 +161,13 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 
 > **What changed (Phase 7):** Added 410 deprecation gates to `apply-vlookup-mappings`, `migrate-sheet-data`, `get-consolidated-performance-data`. Confirmed `run-refresh-workflow` already gates `refresh-slide-report` via `SLIDE_REPORT_CACHE_ENABLED`. Confirmed `get-slide-report-data` already gated. Updated `run-refresh-workflow` to implement canonical `clearFirst` (clears `dimension_data` only) and removed the legacy dependency on `clear-and-resync`. Deferred: `sync-report-api-data`/`get-report-api-data` (active cache). Build: `npm run build` ✓ exit 0.
 >
+> **What changed (2026-03-19 — breakdown dimension channel filtering):**
+> - `loadBreakdownDimensionsForChannel` in `SlideViewPage.tsx` was returning ALL account-scoped text dimensions regardless of channel, causing invalid options (e.g. "Ad Group" appearing in metasearch, "Hotel"/"Link Type" appearing in SEM/social).
+> - Fix: after fetching dimensions, filter by `CHANNEL_DIMENSION_NAMES[channel]` (case-insensitive name match). Both primary path (account dims) and fallback path (column_mappings) now apply this filter.
+> - `CHANNEL_DIMENSION_NAMES` updated: `sem` now includes `Ad Group` (was missing; Google Ads has Ad Group hierarchy).
+> - Canonical dimension sets: metasearch → `[Hotel, Channel, Device, Link Type, Market]`; sem → `[Account, Campaign, Ad Group]`; social → `[Account, Campaign, Ad Group]`.
+> - Build: `npm run build` ✓ exit 0.
+>
 > **What changed (Phase 7 — 2026-03-18 channel unification):**
 > - Removed inline `UnifiedBreakdownTable` component (~780 lines) from `SlideViewPage.tsx`; replaced with canonical `UnifiedBreakdownTable` exported from `src/components/slides/BreakdownTableSection.tsx`.
 > - Canonical `BreakdownTableSection.tsx` extended with missing props: `customDateRange`, `displayCurrency`, `comparisonChannelTotals`, `comparisonType`; dead `displayDataFromApi`/`apiBreakdowns`/`suppressExpandedBreakdown` paths removed.

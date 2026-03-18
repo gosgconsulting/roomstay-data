@@ -276,11 +276,9 @@ export const filterRawDataRows = (
         if (isNaN(rowDate.getTime()) || !isWithinInterval(rowDate, dateRange)) {
           return false;
         }
-      } else {
-        // No date field found but dateRange is required — exclude this row
-        // to prevent unfiltered data from leaking through
-        return false;
       }
+      // If no date field is found, pass the row through — we cannot determine its date
+      // so we include it rather than silently dropping data.
     }
 
     // Apply dimension filters (using resolved IDs)
@@ -542,6 +540,52 @@ export const getMetricKeys = (
 
   return keys;
 };
+
+/**
+ * Canonical metric aggregation from raw dimension_data rows.
+ *
+ * Uses buildMetricNameToIdsMap + getMetricKeys so dimension name matching is
+ * case-insensitive and handles all known variations (cost/spend/amount spent, etc.).
+ * This is the single source of truth for reading metric values from raw rows —
+ * use this instead of inline metricNameToIdMap['Cost'] patterns.
+ */
+export function aggregateRowsToMetrics(
+  rows: Array<{ dimension_values?: Record<string, unknown> } | Record<string, unknown>>,
+  dimensionMap: Record<string, string>
+): { impressions: number; clicks: number; cost: number; revenue: number; bookings: number } {
+  const metrics = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+  if (rows.length === 0) return metrics;
+
+  const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+
+  const getVal = (rowData: Record<string, unknown>, keys: string[]): number => {
+    for (const key of keys) {
+      const v = rowData[key];
+      if (v !== undefined && v !== null) {
+        const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.-]/g, ''));
+        if (!isNaN(n)) return n;
+      }
+    }
+    return 0;
+  };
+
+  const impressionsKeys = getMetricKeys('impressions', nameToIdsMap);
+  const clicksKeys = getMetricKeys('clicks', nameToIdsMap);
+  const costKeys = getMetricKeys('cost', nameToIdsMap);
+  const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
+  const bookingsKeys = getMetricKeys('bookings', nameToIdsMap);
+
+  for (const row of rows) {
+    const rowData = ((row as any).dimension_values || row) as Record<string, unknown>;
+    metrics.impressions += getVal(rowData, impressionsKeys);
+    metrics.clicks += getVal(rowData, clicksKeys);
+    metrics.cost += getVal(rowData, costKeys);
+    metrics.revenue += getVal(rowData, revenueKeys);
+    metrics.bookings += getVal(rowData, bookingsKeys);
+  }
+
+  return metrics;
+}
 
 /**
  * Ensure chart data has at least 6 months for meaningful display

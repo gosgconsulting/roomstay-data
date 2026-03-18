@@ -147,16 +147,69 @@ Root cause: `slide_report.configuration` was saved with **global** dimension IDs
 
 ---
 
+### Breakdown dimension channel filtering — definitive fix (2026-03-19)
+
+Root cause analysis: three separate paths were bypassing the channel filter, causing cross-channel dims (e.g. Hotel/Channel in SEM, Ad Group in Metasearch) to appear in the Group by / Breakdown by dropdowns.
+
+- [x] **BDF-4** — `ChannelTab.tsx`: removed dual read path (`slideReport.configuration.breakdownConfigs` vs local `breakdownConfigs`). Now reads only from local `breakdownConfigs` prop (already synced from DB). Removed the intersection with raw DB config IDs that was the primary source of cross-channel leakage. Falls back to showing all channel-valid dims when no IDs are configured yet (prevents blank table on first load).
+- [x] **BDF-5** — `SlideViewPage.tsx`: `breakdownDimensions` prop passed to `ChannelTab` is now pre-filtered at the prop boundary — each channel's dim list is filtered by `CHANNEL_DIMENSION_NAMES[channel]` before being passed. This is the final defense-in-depth guard regardless of what's in state.
+
+**Verification:** `npm run build` ✅ exit 0
+
+---
+
+### Breakdown dimension channel filtering — complete fix (2026-03-19)
+
+- [x] **BDF-1** — Moved `CHANNEL_DIMENSION_NAMES` to module scope (outside component) so it can be referenced by all effects including the auto-config initializer.
+- [x] **BDF-2** — Fixed BA-2 fallback `useEffect` (lines ~2002): when fetching missing dimension IDs from saved `breakdownConfigs`, now filters fetched dims by `CHANNEL_DIMENSION_NAMES[channel]` before merging into state. Previously this path bypassed channel filtering and re-introduced cross-channel dims (e.g. "Ad Group" in metasearch) even after the primary load was fixed.
+- [x] **BDF-3** — Fixed auto-config initializer (runs on first load when no saved config): was setting the same flat `breakdownDimIds` for all channels. Now computes per-channel `channelTextDimIds` filtered by `CHANNEL_DIMENSION_NAMES[ch]` so initial config is already channel-correct.
+
+**Canonical dimension sets:**
+- metasearch → `[Hotel, Channel, Device, Link Type, Market]`
+- sem → `[Account, Campaign, Ad Group]`
+- social → `[Account, Campaign, Ad Group]`
+
+**Verification:** `npm run build` ✅ exit 0
+
+---
+
 ### Next steps
 
 - [ ] **NS-1** — Audit `run-refresh-workflow` edge function: remove legacy `slideReportId` refresh branch; keep only `resync-data-source` orchestration.
 - [ ] **NS-2** — Migrate `debug.ts` utilities (`retryWithBackoff`, `filterDimensionsByFilterSettings`) into a more descriptive module (e.g. `src/lib/utils/retry.ts`, `src/lib/utils/dimensionFilter.ts`) and delete `debug.ts`.
-- [ ] **NS-3** — Dead code removal: `SlidesPage.tsx`, `ForecastingPage.tsx` (verify router status), `ReportDashboard.tsx` (not in router).
+- [ ] **NS-3** — Dead code removal: `ForecastingPage.tsx` (verify router status).
 - [ ] **NS-4** — `resync-dimensions.ts` (flat) and `resync-all-dimensions.ts` (flat orchestrator) — consolidate into the `resync-all-dimensions/` folder module.
+- [ ] **NS-5** — Delete `src/lib/sync-utils.ts` once all remaining callers (`useDataSourceHeaders.ts`, `EditDataSourceModal.tsx`, `ViewDataModal.tsx`) are migrated off `parseDate`/`parseValue`/`fetchGoogleSheetsData` to canonical alternatives in `src/lib/data-sources/`.
 
 ---
 
 ## Completed
+
+### KPI metrics unification + single source of truth (2026-03-19)
+
+Root cause: `useChannelMetrics` had a broken "no-filter fast path" that tried `channelData.monthly` / `channelData.yearly` / `channelData.current` — all always empty `{}` / zeros post-refactor since `effectivePivotData` only populates `rawDataRows`. Additionally, three separate inline metric extraction implementations used case-sensitive `metricNameToIdMap['Cost']` lookups that silently returned 0 when dimension names didn't match Title Case exactly. A second root cause was that `filterRawDataRows` excluded rows with no date field when a date range was applied, silently dropping data.
+
+- [x] **KPI-1** — Added `aggregateRowsToMetrics(rows, dimensionMap)` to `src/lib/slideViewHelpers.ts` as the single canonical metric aggregation utility. Uses `buildMetricNameToIdsMap` + `getMetricKeys` — case-insensitive, handles all name variations (cost/spend/amount spent, etc.).
+- [x] **KPI-2** — Rewrote `useChannelMetrics` `currentTotals` useMemo: `rawDataRows` is now the primary path for all channels (not a fallback). Removed the broken `monthly`/`yearly`/`current` fast path. All channels now go through the same code path via `aggregateChannelRows` helper.
+- [x] **KPI-3** — Rewrote `useChannelMetrics` `comparisonTotals` useMemo: replaced all inline `metricNameToIdMap['Cost']` patterns with `aggregateRowsToMetrics`. Simplified from ~80 lines to ~20 lines.
+- [x] **KPI-4** — Fixed `BreakdownTableSection`: replaced inline `metricNameToIdMap['Cost']` pattern with `aggregateRowsToMetrics`. Removed the manual `metricNameToIdMap` construction block.
+- [x] **KPI-5** — Removed duplicate `comparisonTotals` useMemo from `SlideViewPage.tsx` that fell back to stale `channelData.previous_period` / `previous_year` blobs. `comparisonTotals` now comes exclusively from `useChannelMetrics` (rawDataRows-based, date-filtered).
+- [x] **KPI-6** — Fixed `filterRawDataRows`: rows with no date field now pass through (included) instead of being excluded when a date range is applied. This prevents silent data loss for rows that don't have a date column.
+- [x] **KPI-7** — Single source of truth: `currentTotals` (KPI cards) comes exclusively from `useFilteredSlideData → filteredData.channelTotals`. `useChannelMetrics` is used only for `comparisonTotals`.
+
+**Verification:** `npm run build` ✅ (exit 0)
+
+---
+
+### Sync refactor & bug fixes (2026-03-19)
+
+- [x] **SY-1** — Fixed metasearch breakdown data disappearing after sync: removed `breakdowns: {}` hardcode from `effectivePivotData` in `useSlideReportPage.ts` (both the `pivot_data=null` branch and the merge branch). The `BreakdownTableSection` primary path reads `rawDataRows` correctly; the `aggregateChannelTotalsFromBreakdowns` fallback in `useFilteredSlideData` is no longer blocked by an empty object.
+- [x] **SY-2** — Replaced deprecated client-side `syncDataSource` (from `sync-utils.ts`) in `DataSourcesPage.tsx` with canonical server-side `runRefreshWorkflow`. Sync now runs through `run-refresh-workflow` → `resync-data-source` edge functions (same path as the "Refresh Data" button). React Query caches (`data-studio-raw-rows`, `cached-dimension-data`) are invalidated after sync.
+- [x] **SY-3** — Added missing date presets to `monthUtils.ts`: `last_90_days`, `month_to_date`, `quarter_to_date`, `last_quarter`, `year_to_date` — both in `dateRangeFromPreset` and `derivePresetFromDateRange`. These presets were shown in `DateRangeFilter` but previously fell through to `undefined` (silently showing all data).
+
+**Verification:** `npm run build` ✅ (exit 0, 8.26s)
+
+---
 
 ### Looker Studio Refactor (2026-03-18)
 
@@ -306,8 +359,8 @@ _None currently._
 
 ## Verification baseline
 
-Last verified: **2026-03-18** (post blank-page / E2E reports fix)
+Last verified: **2026-03-19** (post KPI metrics unification)
 
-- `npm run build` ✅ (exit 0)
+- `npm run build` ✅ (exit 0, 8.26s)
 - `npm run lint` — not re-run (pre-existing warnings only)
 - E2E reports: Data Studio (/) and shared reports; loading/empty states prevent blank page when account or report is missing

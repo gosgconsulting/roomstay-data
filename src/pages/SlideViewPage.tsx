@@ -75,6 +75,17 @@ import type { RawDataRow, MetricData } from "@/types/slideView";
 const DEFAULT_GROUPBY: Record<string, string> = { metasearch: 'hotel', sem: 'account', social: 'account' };
 const DEFAULT_BREAKDOWNBY: Record<string, string> = { metasearch: 'link_type', sem: 'campaign', social: 'campaign' };
 
+// Valid breakdown/filter dimension names per channel type.
+// Dimensions not in this list are excluded from the breakdown and filter dropdowns for that channel.
+// metasearch: hotel-centric (no Ad Group / Campaign)
+// sem: Google/Bing Ads hierarchy (Account → Campaign → Ad Group)
+// social: Meta Ads hierarchy (Account → Campaign → Ad Group)
+const CHANNEL_DIMENSION_NAMES: Record<string, string[]> = {
+  metasearch: ['Hotel', 'Channel', 'Device', 'Link Type', 'Market'],
+  sem: ['Account', 'Campaign', 'Ad Group'],
+  social: ['Account', 'Campaign', 'Ad Group'],
+};
+
 export default function SlideViewPage() {
   const { accountId: urlAccountId, slideId } = useParams<{ accountId?: string; slideId?: string }>();
   const navigate = useNavigate();
@@ -310,12 +321,7 @@ export default function SlideViewPage() {
         const valueDimIds = dims
           .filter(d => ['number', 'currency', 'percentage'].includes(d.type))
           .map(d => d.id);
-        const breakdownDimIds = dims
-          .filter(d => d.type === 'string' || d.type === 'text')
-          .map(d => d.id);
-        const filterDimIds = dims
-          .filter(d => d.type === 'string' || d.type === 'text')
-          .map(d => d.id);
+        const textDims = dims.filter(d => d.type === 'string' || d.type === 'text');
 
         const validChannels: ('metasearch' | 'sem' | 'social')[] = [];
         const reportIds: Record<string, string> = {};
@@ -330,9 +336,13 @@ export default function SlideViewPage() {
         const filterConfigsAuto: Record<string, { filterDimensionIds: string[] }> = {};
 
         for (const ch of validChannels) {
+          const validNames = new Set((CHANNEL_DIMENSION_NAMES[ch] || []).map(n => n.toLowerCase()));
+          const channelTextDimIds = validNames.size > 0
+            ? textDims.filter(d => validNames.has(d.name.toLowerCase())).map(d => d.id)
+            : textDims.map(d => d.id);
           channelConfigs[ch] = { dimensionId: null, selectedValues: [] };
-          breakdownConfigsAuto[ch] = { breakdownDimensionIds: breakdownDimIds };
-          filterConfigsAuto[ch] = { filterDimensionIds: filterDimIds };
+          breakdownConfigsAuto[ch] = { breakdownDimensionIds: channelTextDimIds };
+          filterConfigsAuto[ch] = { filterDimensionIds: channelTextDimIds };
         }
 
         const configuration: SlideReportConfiguration = {
@@ -742,29 +752,8 @@ export default function SlideViewPage() {
     );
   };
 
-  // Get comparison totals based on comparison type and selected year/month
-  // TODO: Migrate fully to useChannelMetrics hook
-  const comparisonTotals = useMemo(() => {
-    // Use hook result if available, otherwise fall back to legacy calculation
-    if (hookComparisonTotals) {
-      return hookComparisonTotals;
-    }
-
-    if (comparisonType === 'none') return null;
-
-    if (!effectivePivotData?.channels) return null;
-    const channelTotals: Record<string, any> = {};
-    for (const [channel, channelData] of Object.entries(effectivePivotData.channels)) {
-      if (comparisonType === 'previous_period' && (channelData as any).previous_period) {
-        channelTotals[channel] = (channelData as any).previous_period;
-      } else if (comparisonType === 'previous_year' && (channelData as any).previous_year) {
-        channelTotals[channel] = (channelData as any).previous_year;
-      } else {
-        channelTotals[channel] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-      }
-    }
-    return channelTotals;
-  }, [comparisonType, effectivePivotData, hookComparisonTotals]);
+  // Comparison totals come exclusively from useChannelMetrics (rawDataRows-based, date-filtered).
+  const comparisonTotals = hookComparisonTotals ?? null;
 
   // Load data from stored pivot_data when slideReport changes (uses channel data from tables when available)
   useEffect(() => {
@@ -1386,6 +1375,13 @@ export default function SlideViewPage() {
 
       const resolvedAccountId = reportData?.account_id || accountId;
 
+      // Only show dimensions that are valid for this channel type.
+      const channelDimNames = (CHANNEL_DIMENSION_NAMES[channel] || []).map((n) => n.toLowerCase());
+      const filterToChannel = (dims: { id: string; name: string; type: string }[]) =>
+        channelDimNames.length > 0
+          ? dims.filter((d) => channelDimNames.includes(d.name.toLowerCase()))
+          : dims;
+
       // Primary path: query account-scoped text dimensions directly (matches dimension_data keys)
       if (resolvedAccountId) {
         const { data: accountDims, error: accountDimError } = await supabase
@@ -1397,7 +1393,7 @@ export default function SlideViewPage() {
           .order('name');
 
         if (!accountDimError && accountDims && accountDims.length > 0) {
-          setBreakdownDimensions(prev => ({ ...prev, [channel]: accountDims }));
+          setBreakdownDimensions(prev => ({ ...prev, [channel]: filterToChannel(accountDims) }));
           return;
         }
       }
@@ -1433,7 +1429,7 @@ export default function SlideViewPage() {
         return;
       }
 
-      setBreakdownDimensions(prev => ({ ...prev, [channel]: dims || [] }));
+      setBreakdownDimensions(prev => ({ ...prev, [channel]: filterToChannel(dims || []) }));
     } catch (err) {
       console.error(`Error loading breakdown dimensions for ${channel}:`, err);
       setBreakdownDimensions(prev => ({ ...prev, [channel]: [] }));
@@ -1516,13 +1512,6 @@ export default function SlideViewPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeChannelTab, modalStep, isEditSourceOpen]);
-
-  // Expected dimension names per channel (used to filter dimensions from database)
-  const CHANNEL_DIMENSION_NAMES: Record<string, string[]> = {
-    metasearch: ['Hotel', 'Channel', 'Device', 'Link Type', 'Market'],
-    sem: ['Account', 'Campaign'],
-    social: ['Account', 'Ad Group', 'Campaign'],
-  };
 
   // Ref to store loadValuesForDimension to avoid circular dependency
   const loadValuesForDimensionRef = useRef<((channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => Promise<void>) | null>(null);
@@ -1987,7 +1976,8 @@ export default function SlideViewPage() {
   }, [slideReportId, selectedChannels, selectedTab]);
 
   // When we have saved breakdown config IDs but loaded dimensions don't include them (e.g. ID scope mismatch),
-  // fetch those dimensions by ID so Group by / Breakdown by dropdowns can show options
+  // fetch those dimensions by ID so Group by / Breakdown by dropdowns can show options.
+  // Only dimensions valid for the channel are merged in (CHANNEL_DIMENSION_NAMES guard).
   useEffect(() => {
     const channelKeys: ('metasearch' | 'sem' | 'social')[] = ['metasearch', 'sem', 'social'];
     channelKeys.forEach(async (channel) => {
@@ -2004,14 +1994,27 @@ export default function SlideViewPage() {
         .in('id', missingIds);
 
       if (dims?.length) {
+        // Only allow dimensions that are valid for this channel type.
+        const validNames = new Set(
+          (CHANNEL_DIMENSION_NAMES[channel] || []).map((n) => n.toLowerCase())
+        );
+        const channelDims = validNames.size > 0
+          ? dims.filter((d: { id: string; name: string; type: string }) =>
+              validNames.has(d.name.toLowerCase())
+            )
+          : dims;
+
+        if (channelDims.length === 0) return;
+
         setBreakdownDimensions((prev) => {
           const current = prev[channel] ?? [];
           const byId = new Map(current.map((d) => [d.id, d]));
-          dims.forEach((d: { id: string; name: string; type: string }) => byId.set(d.id, d));
+          channelDims.forEach((d: { id: string; name: string; type: string }) => byId.set(d.id, d));
           return { ...prev, [channel]: Array.from(byId.values()) };
         });
       }
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [breakdownConfigs, breakdownDimensions]);
 
   // Handle dimension change
@@ -3220,7 +3223,17 @@ export default function SlideViewPage() {
                 customDateRange={customDateRange}
                 filterValues={filterValues}
                 filterDimensionValues={filterDimensionValues}
-                breakdownDimensions={breakdownDimensions}
+                breakdownDimensions={Object.fromEntries(
+                  (Object.keys(breakdownDimensions) as ('metasearch' | 'sem' | 'social')[]).map((ch) => {
+                    const validNames = new Set((CHANNEL_DIMENSION_NAMES[ch] || []).map((n) => n.toLowerCase()));
+                    return [
+                      ch,
+                      validNames.size > 0
+                        ? (breakdownDimensions[ch] || []).filter((d) => validNames.has(d.name.toLowerCase()))
+                        : (breakdownDimensions[ch] || []),
+                    ];
+                  })
+                ) as Record<string, { id: string; name: string; type: string }[]>}
                 breakdownConfigs={breakdownConfigs}
                 renderKPICards={renderKPICards}
                 renderKPICardsSkeleton={renderKPICardsSkeleton}

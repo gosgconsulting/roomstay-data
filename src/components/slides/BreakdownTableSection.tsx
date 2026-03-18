@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { calculateDerivedMetrics, formatNumber, filterRawDataRows, hasActiveFiltersForChannel } from '@/lib/slideViewHelpers';
+import { calculateDerivedMetrics, formatNumber, filterRawDataRows, hasActiveFiltersForChannel, aggregateRowsToMetrics } from '@/lib/slideViewHelpers';
 import { parseSelectedMonths, buildMultiMonthDateRange } from '@/lib/monthUtils';
 import type { SlideReportPivotData } from '@/types/slideReports';
 
@@ -230,43 +230,16 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
             }
           });
 
-          const metricNameToIdMap: Record<string, string> = {};
-          Object.entries(dimensionMap as Record<string, string>).forEach(
-            ([dimensionId, dimensionName]) => {
-              if (dimensionName && typeof dimensionName === 'string') {
-                metricNameToIdMap[dimensionName] = dimensionId;
-              }
-            }
-          );
-
           Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
             if (!allBreakdowns[groupValue]) {
-              allBreakdowns[groupValue] = {
-                impressions: 0,
-                clicks: 0,
-                cost: 0,
-                revenue: 0,
-                bookings: 0,
-              };
+              allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
             }
-
-            groupRows.forEach((row) => {
-              const rowData = row.dimension_values || row;
-
-              allBreakdowns[groupValue].impressions +=
-                parseFloat(
-                  rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0
-                ) || 0;
-              allBreakdowns[groupValue].clicks +=
-                parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
-              allBreakdowns[groupValue].cost +=
-                parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
-              allBreakdowns[groupValue].revenue +=
-                parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
-              allBreakdowns[groupValue].bookings +=
-                parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) ||
-                0;
-            });
+            const agg = aggregateRowsToMetrics(groupRows, dimensionMap);
+            allBreakdowns[groupValue].impressions += agg.impressions;
+            allBreakdowns[groupValue].clicks += agg.clicks;
+            allBreakdowns[groupValue].cost += agg.cost;
+            allBreakdowns[groupValue].revenue += agg.revenue;
+            allBreakdowns[groupValue].bookings += agg.bookings;
           });
         } else {
           // Fallback: no rawDataRows — use pre-computed breakdown blobs (legacy pivot_data)

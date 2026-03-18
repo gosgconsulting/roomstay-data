@@ -200,10 +200,25 @@ export function ChannelTab({
             <CardContent>
               {(() => {
                 const pivotData = pivotDataProp ?? (slideReport?.pivot_data as SlideReportPivotData | null);
-                const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.[channel];
-                const configuredBreakdowns = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs[channel]?.breakdownDimensionIds || [];
+                // Use local breakdownConfigs (already synced from DB) as the source of configured IDs.
+                // breakdownDimensions[channel] is pre-filtered to channel-valid dims only, so the
+                // intersection below can never produce cross-channel dimensions.
+                const configuredBreakdowns = breakdownConfigs[channel]?.breakdownDimensionIds || [];
 
-                if (configuredBreakdowns.length === 0) {
+                // Build the available list: only dims that are both channel-valid (breakdownDimensions)
+                // and explicitly configured by the user (configuredBreakdowns).
+                // When no IDs are configured yet, fall back to showing all channel-valid dims so the
+                // table is never blank on first load.
+                const channelDims = breakdownDimensions[channel] || [];
+                const availableDimensionsList = configuredBreakdowns.length > 0
+                  ? [...new Map(
+                      channelDims
+                        .filter(dim => configuredBreakdowns.includes(dim.id))
+                        .map(dim => [dim.id, dim])
+                    ).values()]
+                  : [...new Map(channelDims.map(dim => [dim.id, dim])).values()];
+
+                if (availableDimensionsList.length === 0 && configuredBreakdowns.length === 0) {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
                       <p>No breakdown dimensions configured.</p>
@@ -211,14 +226,6 @@ export function ChannelTab({
                     </div>
                   );
                 }
-
-                const availableDimensionsList = [
-                  ...new Map([
-                    ...(breakdownDimensions[channel] || []).filter(dim =>
-                      configuredBreakdowns.includes(dim.id)
-                    ),
-                  ].map(dim => [dim.id, dim])).values()
-                ];
 
                 return (
                   <UnifiedBreakdownTable
