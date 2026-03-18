@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"; // v2
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -235,7 +235,7 @@ export default function SlideViewPage() {
     effectivePivotData,
     filteredData,
     views,
-    summaries,
+    // summaries removed in Phase B
     monthlyDataRecords,
     viewBudgets,
     accountReportIds,
@@ -3206,7 +3206,7 @@ export default function SlideViewPage() {
               views={views.map(v => ({ id: v.id, name: v.name }))}
               handleApplyView={handleApplyView}
               isLoadingViewBudgets={isLoadingViewBudgets}
-              isLoadingDisplayData={filteredData.isLoadingDisplayData}
+              isLoadingDisplayData={false}
               budgetMonthlyData={budgetMonthlyData}
               slideReport={slideReport}
               pivotData={effectivePivotData}

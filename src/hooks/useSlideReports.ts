@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { SlideReport, SlideReportConfiguration, SlideReportPivotData } from "@/types/slideReports";
+import { SlideReport, SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange } from "@/types/slideReports";
 import { toast } from "@/hooks/use-toast";
 import { Json } from "@/integrations/supabase/types";
 

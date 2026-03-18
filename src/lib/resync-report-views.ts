@@ -47,9 +47,9 @@ export async function resyncReportViews(
     // Get all performance_table views for this report (canonical: views)
     const { data: reportViews, error: viewsError } = await supabase
       .from("views")
-      .select("id, visible_dimensions, visible_columns, visible_kpis, kpi_order, filter_dimensions, name")
+      .select("id, visible_columns, visible_kpis, kpi_order, filter_values, name")
       .eq("mode", "performance_table")
-      .eq("report_id", reportId);
+      .eq("report_id", reportId) as { data: any[] | null; error: any };
 
     if (viewsError) throw viewsError;
 

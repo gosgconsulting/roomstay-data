@@ -15,8 +15,8 @@ export interface Dimension {
   scope?: 'global' | 'custom' | 'account';
   account_id?: string;
   conditions?: DimensionCondition[];
-  // Added to support multiple formulas with conditions
   formula_condition_pairs?: FormulaConditionPair[];
+  [key: string]: unknown;
 }
 
 interface UsePerformanceTableDimensionsOptions {

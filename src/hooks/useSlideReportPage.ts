@@ -213,7 +213,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
 
   const effectivePivotData = useMemo((): SlideReportPivotData | null => {
     const base = slideReport?.pivot_data as SlideReportPivotData | null;
-    const emptyMetrics: ChannelMetrics = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+    const emptyMetrics: ChannelMetrics = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0, ctr: 0, conversionRate: 0, cpc: 0, roas: 0, costOfSale: 0 };
     const emptyBudget: SlideReportPivotData['budget'] = { monthly: [], totals: { totalBudget: 0, totalActual: 0, variance: 0 } };
 
     // When pivot_data is null (post-refactor: canonical data is in dimension_data), build from raw rows
@@ -246,13 +246,16 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
       const baseChannel = base.channels?.[ch];
       const freshDimMap = dataStudioDimensionMaps?.[ch] || {};
       channels[ch] = {
+        current: emptyMetrics,
+        monthly: {},
+        breakdowns: {},
         ...(baseChannel || {}),
         rawDataRows: rows,
         dimensionMap: Object.keys(freshDimMap).length > 0
           ? freshDimMap
           : (baseChannel?.dimensionMap || {}),
         filterUniqueValues: baseChannel?.filterUniqueValues || {},
-      };
+      } as SlideReportPivotData['channels'][string];
     }
     return { ...base, channels };
   }, [slideReport?.pivot_data, dataStudioRawRows, dataStudioDimensionMaps]);
