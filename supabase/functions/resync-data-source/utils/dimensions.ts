@@ -11,6 +11,35 @@
 
 import type { ColumnMapping } from './types.ts';
 
+/** Column header variations (lowercase) -> standard dimension name (as in DB). Aligned with frontend buildMetricNameToIdsMap so Cost/Revenue etc. resolve. */
+const COLUMN_HEADER_TO_STANDARD: Record<string, string> = {
+  cost: 'Cost',
+  spend: 'Cost',
+  'amount spent': 'Cost',
+  revenue: 'Revenue',
+  'conversion value': 'Revenue',
+  'purchase value': 'Revenue',
+  impressions: 'Impressions',
+  impression: 'Impressions',
+  clicks: 'Clicks',
+  click: 'Clicks',
+  bookings: 'Bookings',
+  conversions: 'Bookings',
+  conversion: 'Bookings',
+};
+
+/**
+ * Returns the standard dimension name for a column header (e.g. "Spend" -> "Cost") so we resolve to account dimension.
+ */
+function getStandardDimensionNameForHeader(header: string): string | null {
+  const normalized = header.toLowerCase().trim();
+  if (COLUMN_HEADER_TO_STANDARD[normalized]) return COLUMN_HEADER_TO_STANDARD[normalized];
+  for (const [key, standard] of Object.entries(COLUMN_HEADER_TO_STANDARD)) {
+    if (normalized.includes(key) || key.includes(normalized)) return standard;
+  }
+  return null;
+}
+
 /**
  * Resolves a dimension name to its ID based on account context
  * 
@@ -435,10 +464,14 @@ export const buildDimensionMappingWithAutoDetection = async (
       // Get dimension name (either from mapping or by looking up dimensionId)
       let dimensionName = await getDimensionName(finalMapping);
       // Fallback: if dimension was deleted (e.g. after full resync deleteCustomDimensions), resolve by column header
-      // so that Cost/Revenue etc. map to account-scoped dimensions and data is not lost (fixes metasearch 0 cost).
-      if (!dimensionName && mapping.column && (mapping.dimensionId && mapping.dimensionId !== 'none' && mapping.dimensionId !== 'create_new')) {
-        dimensionName = mapping.column.trim();
-        console.log(`[RESYNC] Dimension ID no longer found; resolving column "${mapping.column}" by header name`);
+      // or standard synonym (Spend -> Cost) so Cost/Revenue etc. map to account-scoped dimensions (fixes metasearch 0 cost).
+      if (!dimensionName && mapping.column?.trim()) {
+        const header = mapping.column.trim();
+        const standardName = getStandardDimensionNameForHeader(header);
+        dimensionName = standardName || header;
+        if (mapping.dimensionId && mapping.dimensionId !== 'none' && mapping.dimensionId !== 'create_new') {
+          console.log(`[RESYNC] Dimension ID no longer found; resolving column "${header}"${standardName ? ` via standard name "${standardName}"` : ' by header'}`);
+        }
       }
       
       // If we have a dimension name, resolve it to ID; otherwise try createOrGetDimension
@@ -450,10 +483,23 @@ export const buildDimensionMappingWithAutoDetection = async (
         // Creating a new dimension
         dimensionId = await createOrGetDimension(supabase, finalMapping, userId, reportId, dataSourceId, accountId);
       }
-      // Final fallback: try column header as dimension name (e.g. "Cost" -> account Cost dimension)
+      // Final fallback: try column header as dimension name, then standard synonym (e.g. "Spend" -> "Cost") so Cost always maps to account dimension
       if (!dimensionId && mapping.column?.trim()) {
-        dimensionId = await resolveDimensionNameToId(supabase, mapping.column.trim(), accountId || null, reportId, userId);
-        if (dimensionId) {
+        const header = mapping.column.trim();
+        dimensionId = await resolveDimensionNameToId(supabase, header, accountId || null, reportId, userId);
+        if (!dimensionId) {
+          const standardName = getStandardDimensionNameForHeader(header);
+          if (standardName) {
+            dimensionId = await resolveDimensionNameToId(supabase, standardName, accountId || null, reportId, userId);
+            if (dimensionId) console.log(`[RESYNC] Mapped column "${header}" to dimension "${standardName}" (synonym)`);
+          }
+        }
+        if (!dimensionId && header.length > 0) {
+          const titleCase = header.charAt(0).toUpperCase() + header.slice(1).toLowerCase();
+          dimensionId = await resolveDimensionNameToId(supabase, titleCase, accountId || null, reportId, userId);
+          if (dimensionId) console.log(`[RESYNC] Mapped column "${header}" to dimension by title-case`);
+        }
+        if (dimensionId && !dimensionIdMap[mapping.column]) {
           console.log(`[RESYNC] Mapped column "${mapping.column}" to dimension by header name`);
         }
       }

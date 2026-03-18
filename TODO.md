@@ -32,6 +32,18 @@ After coding:
 
 ## Active tasks
 
+### Metasearch cost showing ~300 instead of ~1.3k (QA fix 2026-03-19)
+
+**Root cause:** The dimension map used for aggregating Cost (and other KPIs) was built from only the **first 20 rows** (RPC path) or **first 200 rows** (all-time path). When a report has **multiple data sources** for the same channel (e.g. metasearch), each data source can use different dimension IDs (e.g. different Cost dimension IDs). Rows from the second data source only appear later in the result set. The small sample never saw those dimension IDs, so `buildMetricNameToIdsMap` / `getMetricKeys('cost')` only returned the Cost ID from the first source. Aggregation therefore only summed cost from rows keyed by that ID, under-counting (e.g. ~300 from one source, missing ~1k from the other).
+
+**Fix applied:**
+- [x] **MS-1** — `useDataStudioRawRows.ts` (RPC path): after fetching the full year via `fetchByDateRpc`, rebuild the dimension map from **all** fetched rows (collect every dimension ID from every row, then `buildDimensionNameMap`). This ensures Cost (and all metrics) from every data source are included in the map and aggregated.
+- [x] **MS-2** — `useDataStudioRawRows.ts` (all-time path): build dimension map from **all** `cachedRows` instead of the first 200.
+
+**Verification:** `npm run build` ✅. After deploy, metasearch "this month" Cost should reflect the full total (~1.3k) when the report has multiple data sources.
+
+---
+
 ### Dimension ID alignment fix (2026-03-18)
 
 Root cause: `slide_report.configuration` was saved with **global** dimension IDs but `dimension_data` rows use **account-scoped** dimension IDs. Fixed by:
@@ -238,9 +250,17 @@ Root cause: refresh was run with `clearFirst: false`, so `dimension_data` was ne
 
 ---
 
+### Metasearch Cost/CPC zero — header synonym resolution (2026-03-19)
+
+- [x] **MC-1** — In `resync-data-source` `utils/dimensions.ts`: added `COLUMN_HEADER_TO_STANDARD` (Spend/Amount spent → Cost, etc.) and `getStandardDimensionNameForHeader(header)` so sheet columns named "Spend" or "cost" resolve to the account "Cost" dimension. When dimension-by-ID fails we use `standardName || header`; in the final fallback we try header, then standard synonym, then title-case. Aligned with frontend `buildMetricNameToIdsMap` variations. Documented in `docs/REFACTOR.md` and `docs/REFRESH_WORKFLOW_AUDIT.md`.
+
+**Verification:** `npm run build` ✅ (exit 0). Deploy `resync-data-source` edge function and run Full Refresh to verify Cost/CPC for Metasearch.
+
+---
+
 ### Next steps
 
-- [ ] **NS-1** — Audit `run-refresh-workflow` edge function: remove legacy `slideReportId` refresh branch; keep only `resync-data-source` orchestration.
+- [x] **NS-1** — Audit `run-refresh-workflow`: removed legacy `refresh-slide-report` branch; workflow now only resyncs data sources (no slide_report_* cache refresh). See REFACTOR.md Remaining work.
 - [ ] **NS-2** — Migrate `debug.ts` utilities (`retryWithBackoff`, `filterDimensionsByFilterSettings`) into a more descriptive module (e.g. `src/lib/utils/retry.ts`, `src/lib/utils/dimensionFilter.ts`) and delete `debug.ts`.
 - [ ] **NS-3** — Dead code removal: `ForecastingPage.tsx` (verify router status).
 - [ ] **NS-4** — `resync-dimensions.ts` (flat) and `resync-all-dimensions.ts` (flat orchestrator) — consolidate into the `resync-all-dimensions/` folder module.

@@ -109,6 +109,8 @@ Non-goals:
 
 **Post-refresh report reload (cache fix):** After the workflow completes, the UI previously only invalidated React Query caches, so the report could still show stale data (e.g. Metasearch Cost $0) until the next mount or refetch. Refactored so that for Data Studio, after clearing/syncing we **await** a single `refetchQueries({ queryKey: ['data-studio-raw-rows'] })` before marking "Updating cache & interface" complete. KPIs and charts both derive from that canonical query (`useDataStudioRawRows` → `effectivePivotData` → `useFilteredSlideData`), so one refetch repopulates the report. Single path: `SlideViewPage` refresh effect; no duplicate reload logic.
 
+**Metasearch Cost/CPC zero (mapping fix):** After clear + resync, Cost and CPC could still show $0 if the sheet column header did not exactly match the dimension name in the DB (e.g. header "Spend" or "cost" vs dimension "Cost"), or if the stored mapping pointed at a deleted custom dimension. **Fix in resync-data-source** `utils/dimensions.ts`: (1) Added `COLUMN_HEADER_TO_STANDARD` and `getStandardDimensionNameForHeader()` so headers like "Spend", "Amount spent" resolve to standard name "Cost" (aligned with frontend `buildMetricNameToIdsMap`). (2) When dimension-by-ID lookup fails (deleted dimension), we set `dimensionName = standardName || header` so we try the account "Cost" dimension. (3) In the final fallback we try: header as-is, then standard synonym, then title-case of header. No duplicate resolution paths; one canonical flow with synonym support so Cost/Revenue/Impressions/Clicks/Bookings map correctly after every refresh.
+
 **Post–Phase 6/7 fix (blank report tabs):** OverviewTab and ChannelTab were gating content on `slideReport?.pivot_data`. After the refactor, the canonical data path is `dimension_data` → `useDataStudioRawRows` → `effectivePivotData`; `slide_report.pivot_data` may be null. Updated both tabs to show content when the report is loaded and not in a loading state (`isSlideReportsLoading` / `isLoadingData`), and to render KPIs even when `currentTotals` is empty (show zeros). No dependency on `slide_report.pivot_data` for showing tab content.
 
 **Follow-up (tabs still blank):** OverviewTab was still requiring `slideReport` for the KPI block (`slideReportId && slideReport`), so when `slideReport` was undefined (e.g. query pending or failed) the tab rendered nothing. Fixed by gating only on `slideReportId`: when we have a report ID and are not in the loading skeleton state, we always render KPI content (using zeros when `currentTotals`/breakdownTotals are empty). Removed redundant inner `TabsContent` wrappers from OverviewTab and ChannelTab so the parent `SlideViewPage` is the single source of tab visibility; both components now return a plain `div` with `className="space-y-6"`. Build and lint: ✓.
@@ -177,9 +179,9 @@ Some legacy Edge Functions remain because the frontend still depends on them. Th
 
 - **Done**: EFs and table removed in Phase 7-EF7 and Phase 9. `get-performance-data` reads `dimension_data` only.
 
-##### EF9: `clear-and-resync` (still called from frontend)
+##### EF9: `clear-and-resync` (legacy; not used by run-refresh-workflow)
 
-- **Current**: `run-refresh-workflow` can call `clear-and-resync` when `clearFirst=true`; frontend (ReportDashboard) sets `clearFirst: true`.
+- **Current**: `run-refresh-workflow` no longer calls `refresh-slide-report` (NS-1 complete). It implements canonical clear via `dimension_data` delete when `clearFirst=true`. `clear-and-resync` edge function is legacy; no frontend passes `clearFirst: true` to workflow.
 - **Target**: The canonical workflow should be:
   - Clear only the canonical table (`dimension_data`) for the relevant report(s), then resync each data source via `resync-data-source`.
 - **Migration steps**:
@@ -358,7 +360,10 @@ There are currently **two view systems** that look similar but are not yet unifi
 
 Aligned with `TODO.md` next steps. No duplicate systems; one canonical path per capability.
 
-- [ ] **NS-1** — Audit `run-refresh-workflow`: remove legacy `slideReportId` → `refresh-slide-report` branch; keep only `resync-data-source` orchestration.
+- [x] **NS-1** — Audit `run-refresh-workflow`: remove legacy `slideReportId` → `refresh-slide-report` branch; keep only `resync-data-source` orchestration.
+  - **Verify:** Frontend already passes `skipRefresh: true` for Data Studio (`SlideViewPage`) and Data Sources (`DataSourcesPage`); no caller relied on `refresh-slide-report`. `slideReportId` is still used only to resolve `report_ids` from `slide_reports` and list data sources to resync.
+  - **Migrate/Delete:** Removed `SLIDE_REPORT_CACHE_ENABLED` gate, `REFRESH_RETRIES`, and the entire block that invoked `refresh-slide-report`. Removed `refreshSuccess` from all response payloads. Workflow now: resolve report IDs (from slideReportId or reportId or account) → optional clear `dimension_data` → resync each data source via `resync-data-source` → return. Single canonical path.
+  - **Checks:** `npm run build` ✓ exit 0. Deploy updated `run-refresh-workflow` when ready.
 - [ ] **NS-2** — Migrate `debug.ts` utilities (`retryWithBackoff`, `filterDimensionsByFilterSettings`) to descriptive modules (e.g. `src/lib/utils/retry.ts`, `src/lib/utils/dimensionFilter.ts`); delete `debug.ts`.
 - [ ] **NS-3** — Dead code: verify `ForecastingPage.tsx` router status; remove if unused.
 - [ ] **NS-4** — Consolidate `resync-dimensions.ts` (flat) and `resync-all-dimensions.ts` (flat) into `resync-all-dimensions/` folder module.

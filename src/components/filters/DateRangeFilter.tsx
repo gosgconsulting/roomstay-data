@@ -73,13 +73,22 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
     return pendingRange;
   })();
 
-  // Sync pending state when popover opens
+  // Calendar view month — controlled so left/right arrows change the visible month
+  const anchorDate = pendingRange?.from ?? dateRange?.from;
+  const initialDisplayMonth = anchorDate
+    ? new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1)
+    : new Date();
+  const [displayMonth, setDisplayMonth] = useState(initialDisplayMonth);
+
+  // Sync pending state and calendar month when popover opens
   const handleOpenChange = (next: boolean) => {
     if (next) {
       setPendingRange(dateRange);
       setPendingPreset(datePreset);
       setPhase('idle');
       setHoverDate(undefined);
+      const anchor = dateRange?.from ?? new Date();
+      setDisplayMonth(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
     }
     setOpen(next);
   };
@@ -140,13 +149,6 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
     return active?.label ?? "This Month";
   };
 
-  // Anchor calendar to the start of the pending/committed range (or current month)
-  const anchorDate = pendingRange?.from ?? dateRange?.from;
-  const displayMonth = anchorDate
-    ? new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1)
-    : new Date();
-  const displayMonthKey = `${displayMonth.getFullYear()}-${displayMonth.getMonth()}`;
-
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -199,8 +201,8 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
                 onDayMouseEnter={(day) => phase === 'picking-end' && setHoverDate(day)}
                 onDayMouseLeave={() => phase === 'picking-end' && setHoverDate(undefined)}
                 numberOfMonths={1}
-                defaultMonth={displayMonth}
-                key={displayMonthKey}
+                month={displayMonth}
+                onMonthChange={setDisplayMonth}
                 // Suppress built-in range onSelect so our two-phase handler is the only driver
                 onSelect={() => {}}
               />

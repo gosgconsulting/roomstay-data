@@ -168,8 +168,19 @@ async function fetchChannelRows(
       const yearNum = parseInt(selectedYear);
       const rows = await fetchByDateRpc(channelReportId, dateDimId, yearNum, null);
 
-      // Add _row_number placeholder (not needed for aggregation but keeps type compat)
-      return { rows: rows.map((r, i) => ({ ...r, _row_number: i + 1 })), dimMap };
+      // Rebuild dimension map from ALL fetched rows so we include every dimension ID
+      // from every data source. The initial 20-row sample can miss Cost/other dimensions
+      // that only appear in later rows (e.g. second data source), causing under-counted KPIs.
+      const allDimIds = new Set<string>();
+      for (const r of rows) {
+        for (const id of Object.keys(r)) {
+          if (id === '_row_number') continue;
+          allDimIds.add(id);
+        }
+      }
+      const fullDimMap = await buildDimensionNameMap(Array.from(allDimIds));
+
+      return { rows: rows.map((r, i) => ({ ...r, _row_number: i + 1 })), dimMap: fullDimMap };
     }
 
     // No date dimension found — fall through to full fetch
@@ -182,15 +193,13 @@ async function fetchChannelRows(
     _row_number: row.row_number,
   }));
 
-  // Build dimension map from sample
-  const sampleSize = 200;
-  const sampled = cachedRows.slice(0, sampleSize);
-  const dimIds = new Set<string>();
-  for (const row of sampled) {
+  // Build dimension map from ALL rows so every data source's dimension IDs are included
+  const allDimIds = new Set<string>();
+  for (const row of cachedRows) {
     const dv = (row.dimension_values || {}) as Record<string, unknown>;
-    for (const id of Object.keys(dv)) dimIds.add(id);
+    for (const id of Object.keys(dv)) allDimIds.add(id);
   }
-  const dimMap = await buildDimensionNameMap(Array.from(dimIds));
+  const dimMap = await buildDimensionNameMap(Array.from(allDimIds));
 
   return { rows: allRawRows, dimMap };
 }

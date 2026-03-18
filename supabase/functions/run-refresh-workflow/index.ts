@@ -1,8 +1,9 @@
 /**
  * Run Refresh Workflow Edge Function
  *
- * Orchestrates: optional clear-and-resync → resync each data source (with retries) → refresh-slide-report when slideReportId.
- * Single entry point for frontend and MCP so refresh logic and retries are consistent.
+ * Orchestrates: optional clear (dimension_data) → resync each data source via resync-data-source (with retries).
+ * Single entry point for frontend and MCP. Legacy refresh-slide-report branch removed (NS-1); Data Studio
+ * reads from dimension_data only; no slide_report_* cache refresh.
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -17,8 +18,6 @@ const getCorsHeaders = (req?: Request) => {
   headers['Access-Control-Allow-Headers'] = requested || 'authorization, x-client-info, apikey, content-type';
   return headers;
 };
-
-const SLIDE_REPORT_CACHE_ENABLED = Deno.env.get('SLIDE_REPORT_CACHE_ENABLED') === 'true';
 
 async function validateAuth(req: Request): Promise<boolean> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -83,7 +82,6 @@ async function invokeEdgeFunction(
 }
 
 const RESYNC_RETRIES = 3;
-const REFRESH_RETRIES = 3;
 const CONCURRENCY = 3;
 
 async function runInBatches<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -137,7 +135,6 @@ Deno.serve(async (req: Request) => {
   const resyncErrors: Array<{ dataSourceId: string; error: string }> = [];
   let resyncedCount = 0;
   let totalRowsProcessed = 0;
-  let refreshSuccess: boolean | undefined;
 
   try {
     let reportIds: string[] = [];
@@ -154,7 +151,6 @@ Deno.serve(async (req: Request) => {
           cleared,
           resynced: 0,
           resyncErrors: [],
-          refreshSuccess: undefined,
         }, slideErr ? 500 : 404, cors);
       }
       const ids = slideReport.report_ids as Record<string, string>;
@@ -173,7 +169,6 @@ Deno.serve(async (req: Request) => {
           cleared,
           resynced: 0,
           resyncErrors: [],
-          refreshSuccess: undefined,
         }, 500, cors);
       }
       reportIds = (reports || []).map((r: { id: string }) => r.id);
@@ -185,7 +180,6 @@ Deno.serve(async (req: Request) => {
         cleared,
         resynced: 0,
         resyncErrors: [],
-        refreshSuccess: undefined,
         message: 'No reports found for account',
       }, 200, cors);
     }
@@ -205,7 +199,6 @@ Deno.serve(async (req: Request) => {
           cleared: false,
           resynced: 0,
           resyncErrors: [],
-          refreshSuccess: undefined,
         }, 500, cors);
       }
 
@@ -225,7 +218,6 @@ Deno.serve(async (req: Request) => {
           cleared,
           resynced: 0,
           resyncErrors: [],
-          refreshSuccess: undefined,
         }, 500, cors);
       }
       dataSources = dsList || [];
@@ -262,46 +254,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (slideReportId && !skipRefresh) {
-      if (!SLIDE_REPORT_CACHE_ENABLED) {
-        return jsonResponse({
-          success: false,
-          error: 'Slide report refresh is deprecated and disabled (set SLIDE_REPORT_CACHE_ENABLED=true to allow).',
-          cleared,
-          resynced: resyncedCount,
-          resyncErrors: resyncErrors.length > 0 ? resyncErrors : undefined,
-          refreshSuccess: false,
-        }, 410, cors);
-      }
-
-      const { ok, data } = await invokeEdgeFunction(
-        supabaseUrl,
-        serviceRoleKey,
-        'refresh-slide-report',
-        { slideReportId, years: [2024, 2025, 2026] },
-        REFRESH_RETRIES
-      );
-      refreshSuccess = ok && (data as { success?: boolean })?.success !== false;
-      if (!refreshSuccess) {
-        const errMsg = (data as { error?: string })?.error || 'refresh-slide-report failed';
-        return jsonResponse({
-          success: false,
-          error: errMsg,
-          cleared,
-          resynced: resyncedCount,
-          resyncErrors,
-          refreshSuccess: false,
-        }, 502, cors);
-      }
-    }
-
     return jsonResponse({
       success: true,
       cleared,
       resynced: resyncedCount,
       rowsProcessed: totalRowsProcessed,
       resyncErrors: resyncErrors.length > 0 ? resyncErrors : undefined,
-      refreshSuccess: slideReportId ? refreshSuccess : undefined,
     }, 200, cors);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -312,7 +270,6 @@ Deno.serve(async (req: Request) => {
       resynced: resyncedCount,
       rowsProcessed: totalRowsProcessed,
       resyncErrors,
-      refreshSuccess,
     }, 500, cors);
   }
 });
