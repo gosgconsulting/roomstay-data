@@ -215,6 +215,39 @@ export const filterRawDataRows = (
 ): RawDataRow[] => {
   if (!rawDataRows || rawDataRows.length === 0) return [];
 
+  // Pre-resolve filter dimension IDs: when a filter references a global dimension ID
+  // that doesn't exist in the raw row data, resolve it to the report-specific ID
+  // by matching dimension names. This avoids per-row overhead.
+  const resolvedFilterValues: Record<string, string[]> = {};
+  if (Object.keys(filterValues).length > 0 && dimensionIdToName) {
+    const sampleRow = rawDataRows[0];
+    const sampleData = (sampleRow?.dimension_values || sampleRow) as Record<string, unknown>;
+    // Build reverse map: dimensionName -> report-specific dimensionId (present in data)
+    const nameToDataId = new Map<string, string>();
+    for (const [dimId, dimName] of Object.entries(dimensionIdToName)) {
+      if (dimId in sampleData) {
+        nameToDataId.set(dimName, dimId);
+      }
+    }
+    for (const [filterId, values] of Object.entries(filterValues)) {
+      if (filterId in sampleData) {
+        // Direct match — use as-is
+        resolvedFilterValues[filterId] = values;
+      } else {
+        // Try to resolve via dimension name
+        const filterDimName = dimensionIdToName[filterId];
+        if (filterDimName && nameToDataId.has(filterDimName)) {
+          resolvedFilterValues[nameToDataId.get(filterDimName)!] = values;
+        } else {
+          // Keep original — will cause row exclusion if truly absent
+          resolvedFilterValues[filterId] = values;
+        }
+      }
+    }
+  } else {
+    Object.assign(resolvedFilterValues, filterValues);
+  }
+
   return rawDataRows.filter((row) => {
     const rowData = row.dimension_values || row;
     const rowDataRecord = rowData as Record<string, unknown>;
@@ -250,8 +283,8 @@ export const filterRawDataRows = (
       }
     }
 
-    // Apply dimension filters
-    for (const [dimensionId, selectedValues] of Object.entries(filterValues)) {
+    // Apply dimension filters (using resolved IDs)
+    for (const [dimensionId, selectedValues] of Object.entries(resolvedFilterValues)) {
       // If filter is explicitly set to empty array, filter out all rows (show zero data)
       if (selectedValues && selectedValues.length === 0) {
         return false; // Explicitly empty = no matches = zero data
