@@ -235,7 +235,7 @@ export default function DataSourcesPage() {
       await runRefreshWorkflow({
         accountId,
         reportId: dataSource.report_id,
-        clearFirst: false,
+        clearFirst: true,
         skipRefresh: true,
       });
 

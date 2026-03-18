@@ -173,6 +173,20 @@ Root cause analysis: three separate paths were bypassing the channel filter, cau
 
 ---
 
+### Refresh audit & row count display (2026-03-19)
+
+- [x] **RA-1** — `run-refresh-workflow` now collects `rowsProcessed` from each `resync-data-source` response and returns `rowsProcessed: totalRowsProcessed` in its own response. Previously the per-source row count was silently discarded.
+- [x] **RA-2** — `RunRefreshWorkflowResult` type in `refreshWorkflow.ts` extended with `rowsProcessed?: number`.
+- [x] **RA-3** — `SlideViewPage` captures the workflow result and stores `rowsProcessed` in `refreshRowsProcessed` state, passed to `RefreshDataModal`.
+- [x] **RA-4** — `RefreshDataModal` success message now shows row count: "X rows imported (last 2 months)" or "X rows imported".
+- [x] **RA-5** — `RefreshDataModal` cleaned up: React import moved to top, mode reset on re-open, duplicate `isDataStudio` mode label unified.
+
+**Deployed:** `run-refresh-workflow` v6.
+
+**Verification:** `npm run build` ✅ (exit 0)
+
+---
+
 ### Refresh mode selection (2026-03-19)
 
 Added two refresh modes to the refresh workflow:
@@ -186,6 +200,41 @@ Added two refresh modes to the refresh workflow:
 **Deployed:** `run-refresh-workflow` v5, `resync-data-source` v210.
 
 **Verification:** `npm run build` ✅ (exit 0), no lint errors.
+
+---
+
+### Metasearch sync — erase and replace (2026-03-19)
+
+Root cause: refresh was run with `clearFirst: false`, so `dimension_data` was never cleared before resync. Each `resync-data-source` only deletes rows by `data_source_id`; if a channel had multiple data sources or stale rows from a previous sync, the report showed duplicate or outdated data (e.g. March cost 1362 not updating after sync).
+
+- [x] **MS-1** — Set `clearFirst: true` in `SlideViewPage` when calling `runRefreshWorkflow` (Data Studio "Refresh Data").
+- [x] **MS-2** — Set `clearFirst: true` in `DataSourcesPage` when syncing a data source. Workflow clears all `dimension_data` for the target report(s) first, then resyncs each source — full erase-then-replace.
+- [x] **MS-3** — Fixed `useDataStudioRawRows`: removed use of undefined `selectedMonth` in `fetchChannelRows` call and console.log.
+
+**Verification:** `npm run build` ✅ (exit 0).
+
+---
+
+### Refactor plan doc audit (2026-03-19)
+
+- [x] **REFACTOR.md** audited and updated: routes section aligned with README; Phase 7 deferred items (7-F5, 7-DB2) corrected; Database section updated (Phase 9 dropped tables, legacy EFs); Refresh workflow subsection and row-count flow documented; Remaining work (NS-1–NS-5) added; Master TODO E/F/G/H marked complete; 2026-03-19 execution log entry for refresh modes + row count.
+
+### Full refresh + metasearch 0 cost + clear step (2026-03-19)
+
+- [x] **FR-1** — **Full refresh:** Workflow already clears all `dimension_data` for target report(s) then resyncs every data source. When user selects "Full Refresh", `refreshMode: 'full'` is passed; `resync-data-source` fetches all rows from each sheet. No code change; confirmed behavior.
+- [x] **FR-2** — **Clear step in UI:** Added explicit Step 1 "Clearing and resetting data" in `RefreshDataModal` (Data Studio). Step 2 = Fetching from sources, Step 3 = Updating cache. `SlideViewPage` sets `refreshStepStatus[0]` so the clear step shows loading/complete.
+- [x] **FR-3** — **Metasearch 0 cost (Supabase/resync):** In `resync-data-source` `buildDimensionMappingWithAutoDetection`, when a column's stored `dimensionId` pointed at a dimension that was just deleted by `deleteCustomDimensions` (full mode), the dimension name lookup failed and the column (e.g. Cost) was not re-mapped, so no cost was written. Fixed by: (1) if dimension-by-ID lookup returns no name but mapping has dimensionId, use `mapping.column` as dimension name and resolve (account-scoped); (2) final fallback: resolve by `mapping.column.trim()` so headers like "Cost" map to account Cost dimension. Ensures Cost/Revenue etc. are written after full resync for all channels.
+- [x] **FR-4** — **Workflow audit:** Added `docs/REFRESH_WORKFLOW_AUDIT.md` listing shared workflow for SEM, Social, Metasearch and the gap (deleted dimension ID in mappings). No structural difference between channels; fix in dimension resolution applies to all.
+
+**Verification:** `npm run build` ✅ (exit 0).
+
+---
+
+### Post-refresh report reload (cache / stale KPIs) (2026-03-19)
+
+- [x] **RL-1** — After Data Studio refresh completed we only invalidated React Query caches; the report could still show stale data (e.g. Metasearch Cost $0) until next refetch. Refactored so we **await** a single `queryClient.refetchQueries({ queryKey: ['data-studio-raw-rows'] })` before marking "Updating cache & interface" complete. KPIs and charts both derive from that query; one refetch repopulates the report. Documented in `docs/REFACTOR.md` (Refresh workflow — "Post-refresh report reload").
+
+**Verification:** `npm run build` ✅ (exit 0).
 
 ---
 

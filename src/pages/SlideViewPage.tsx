@@ -1335,6 +1335,7 @@ export default function SlideViewPage() {
   const [isRefreshModalOpen, setIsRefreshModalOpen] = useState(false);
   const [refreshStep, setRefreshStep] = useState(0); // 0 = not started, 1-5 = steps
   const [refreshStepStatus, setRefreshStepStatus] = useState<Record<number, 'pending' | 'loading' | 'complete' | 'error'>>({
+    0: 'pending',
     1: 'pending',
     2: 'pending',
     3: 'pending',
@@ -2771,7 +2772,7 @@ export default function SlideViewPage() {
     setRefreshStep(0);
     setRefreshPending(false);
     setRefreshRowsProcessed(null);
-    setRefreshStepStatus({ 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'pending' });
+    setRefreshStepStatus({ 0: 'pending', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'pending' });
     setRefreshError(null);
     setIsRefreshModalOpen(true);
   }, [slideReportId]);
@@ -2815,19 +2816,19 @@ export default function SlideViewPage() {
     const workflowAccountId = accountId || (slideReport.account_id as string);
     if (!workflowAccountId) {
       setRefreshError('Missing account ID');
-      setRefreshStepStatus((prev) => ({ ...prev, 1: 'error', 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
+      setRefreshStepStatus((prev) => ({ ...prev, 0: 'error', 1: 'error', 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
       return;
     }
 
     setRefreshStep(1);
-    setRefreshStepStatus((prev) => ({ ...prev, 1: 'loading' }));
+    setRefreshStepStatus((prev) => ({ ...prev, 0: 'loading', 1: 'loading' }));
 
     (async () => {
       try {
         const result = await runRefreshWorkflow({
           accountId: workflowAccountId,
           slideReportId,
-          clearFirst: false,
+          clearFirst: true,
           skipRefresh: isDataStudio,
           refreshMode: activeRefreshMode,
         });
@@ -2836,7 +2837,7 @@ export default function SlideViewPage() {
           setRefreshRowsProcessed(result.rowsProcessed);
         }
 
-        setRefreshStepStatus((prev) => ({ ...prev, 1: 'complete' }));
+        setRefreshStepStatus((prev) => ({ ...prev, 0: 'complete', 1: 'complete' }));
 
         if (isDataStudio) {
           setRefreshStep(2);
@@ -2852,13 +2853,16 @@ export default function SlideViewPage() {
             console.warn('[RefreshData] Failed to update last_refreshed_at:', updateErr);
           }
 
+          // Reload report: refetch canonical report data so cache has fresh dimension_data before showing complete (avoids stale Cost/KPIs). One query — KPIs and charts both derive from this.
+          try {
+            await queryClient.refetchQueries({ queryKey: ['data-studio-raw-rows'] });
+          } catch (refetchErr) {
+            console.warn('[RefreshData] Report refetch failed (data may still be stale):', refetchErr);
+          }
+
           setRefreshStep(5);
           setRefreshStepStatus((prev) => ({ ...prev, 2: 'complete', 3: 'complete', 4: 'complete', 5: 'complete' }));
 
-          queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
-          queryClient.invalidateQueries({ queryKey: ['data-studio-raw-rows'] });
-          queryClient.invalidateQueries({ queryKey: ['channel_chart_data_from_table', slideReportId] });
-          queryClient.invalidateQueries({ queryKey: ['slide_reports', 'detail', slideReportId] });
           queryClient.invalidateQueries({ queryKey: ['slide_reports'] });
         } else {
           setRefreshStep(2);
@@ -2883,7 +2887,7 @@ export default function SlideViewPage() {
           ? ' Check your connection and try again. If it persists, ensure run-refresh-workflow is deployed.'
           : '';
         setRefreshError(msg + hint);
-        setRefreshStepStatus((prev) => ({ ...prev, 1: prev[1] === 'loading' ? 'error' : prev[1], 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
+        setRefreshStepStatus((prev) => ({ ...prev, 0: prev[0] === 'loading' ? 'error' : prev[0], 1: prev[1] === 'loading' ? 'error' : prev[1], 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
       }
     })();
   }, [refreshPending, isRefreshModalOpen, slideReportId, slideReport, queryClient, isDataStudio, accountId, activeRefreshMode]);

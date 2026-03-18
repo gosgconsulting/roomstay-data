@@ -48,45 +48,14 @@ Non-goals:
 
 ## Core routes (must remain)
 
-Routes are defined in `src/App.tsx` and are treated as a contract.
+**Canonical route map:** See `README.md` → Route Map. Routes are defined in `src/App.tsx`.
 
-**Current:**
+**Refactor-relevant state (post Phase A/B/5D/E):**
 
-- `/` and `/landing`
-- `/auth`
-- `/tools/reports` (new short entry: redirects to Data Studio for resolved account)
-- `/tools/data-sources/:accountId`
-- `/tools/data-sources` (new short entry: redirects to resolved account)
-- `/tools/dimensions/:accountId`
-- `/tools/dimensions` (new short entry: redirects to resolved account)
-- `/tools/data`
-- `/tools/data/:accountId`
-- `/tools/reports/:accountId`
-- `/tools/reports/:accountId/brady` — **to remove** (Phase B)
-- `/tools/reports/:accountId/master-report` — **to remove** (Phase B)
-- `/tools/reports/:accountId/data-studio`
-- `/tools/forecasting`
-- `/tools/forecasting/scenario/:scenarioId`
-- `/tools/forecasting/:accountId`
-- `/tools/price-widget` (new short entry: redirects to resolved account)
-- `/tools/price-widget/:accountId`
-- `/tools/price-widget/:accountId/:widgetId`
-- `/tools/report/:reportName`
-- `/tools/report/:accountId/:summaryId` (legacy support)
-- `/integrations`
-- `/shared/:slug`
-- `/shared/reports/:slug`
-- `/:slug` (shared report alias)
-
-**After Phase A/B:** `accountId` is resolved from the logged-in user (no selector). Routes above that use `:accountId` stay; links are built with the resolved account. Only the two report view routes `brady` and `master-report` are removed; single entry is Data Studio.
-  
-**After Phase 5D/E:** Prefer accountless tool entry routes (keep `:accountId` variants for backward compatibility and deep links):
-- `/tools/reports` (Data Studio only)
-- `/tools/data-sources`
-- `/tools/dimensions`
-- `/tools/data`
-- `/tools/forecasting`
-- `/tools/price-widget`
+- **Single report entry:** `/` renders `SlideViewPage` (Data Studio homepage). `/tools/reports`, `/tools/reports/:accountId`, `/tools/reports/:accountId/data-studio`, `/tools/data`, `/tools/data/:accountId` all redirect to `/`.
+- **Removed routes:** `/tools/reports/:accountId/brady`, `/tools/reports/:accountId/master-report`, `/tools/reports/:accountId/view/:slideId`, `/tools/report/:reportName` (AI summary), `/shared/reports/:slug`.
+- **Tool entry routes** (account resolved when omitted): `/tools/data-sources`, `/tools/dimensions`, `/tools/forecasting`, `/tools/price-widget` (and `:accountId` variants).
+- **Shared report:** `/shared/:slug`, `/:slug` (alias).
 
 ## Current pain points (why we’re refactoring)
 
@@ -128,6 +97,18 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 >
 > Build: `npm run build` ✓ exit 0. Lint: `npm run lint` ✓ 0 errors.
 
+### Refresh workflow (canonical path + modes + row count)
+
+**Canonical path:** Data Studio "Refresh Data" → `run-refresh-workflow` (Edge Function) → per–data-source `resync-data-source` (Edge Function) → reads Google Sheets/CSV, maps dimensions, writes `dimension_data`. No duplicate refresh entry points; `DataSourcesPage` sync also uses `runRefreshWorkflow` (same path).
+
+- **Refresh modes:** `full` = delete all rows for the data source, re-insert everything. `recent` = delete only rows from the last 2 months (by date dimension), re-insert only those rows; older data preserved. Mode is chosen in `RefreshDataModal` before "Start Refresh"; forwarded via `RunRefreshWorkflowParams.refreshMode` and `resync-data-source` request body.
+- **Batch processing:** `resync-data-source` fetches and inserts in batches (e.g. chunked Google Sheets fetch, `insertDataInBatches`); `recent` mode filters fetched rows by date then deletes/inserts only that subset.
+- **Row count:** `resync-data-source` returns `rowsProcessed`; `run-refresh-workflow` sums it across data sources and returns `rowsProcessed` in the response. Frontend (`SlideViewPage`) captures it and passes `rowsProcessed` to `RefreshDataModal`; success message shows "X rows imported" (and "(last 2 months)" when mode is `recent`).
+
+**Deployed:** `run-refresh-workflow` v6, `resync-data-source` (with `refreshMode` and `rowsProcessed`). See TODO.md "Refresh mode selection" and "Refresh audit & row count display" for verification.
+
+**Post-refresh report reload (cache fix):** After the workflow completes, the UI previously only invalidated React Query caches, so the report could still show stale data (e.g. Metasearch Cost $0) until the next mount or refetch. Refactored so that for Data Studio, after clearing/syncing we **await** a single `refetchQueries({ queryKey: ['data-studio-raw-rows'] })` before marking "Updating cache & interface" complete. KPIs and charts both derive from that canonical query (`useDataStudioRawRows` → `effectivePivotData` → `useFilteredSlideData`), so one refetch repopulates the report. Single path: `SlideViewPage` refresh effect; no duplicate reload logic.
+
 **Post–Phase 6/7 fix (blank report tabs):** OverviewTab and ChannelTab were gating content on `slideReport?.pivot_data`. After the refactor, the canonical data path is `dimension_data` → `useDataStudioRawRows` → `effectivePivotData`; `slide_report.pivot_data` may be null. Updated both tabs to show content when the report is loaded and not in a loading state (`isSlideReportsLoading` / `isLoadingData`), and to render KPIs even when `currentTotals` is empty (show zeros). No dependency on `slide_report.pivot_data` for showing tab content.
 
 **Follow-up (tabs still blank):** OverviewTab was still requiring `slideReport` for the KPI block (`slideReportId && slideReport`), so when `slideReport` was undefined (e.g. query pending or failed) the tab rendered nothing. Fixed by gating only on `slideReportId`: when we have a report ID and are not in the loading skeleton state, we always render KPI content (using zeros when `currentTotals`/breakdownTotals are empty). Removed redundant inner `TabsContent` wrappers from OverviewTab and ChannelTab so the parent `SlideViewPage` is the single source of tab visibility; both components now return a plain `div` with `className="space-y-6"`. Build and lint: ✓.
@@ -155,9 +136,9 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 - [x] **7-F2** — `refreshPivotDataHelpers.ts`: confirmed zero imports in `src/`; file already deleted in prior phase.
 - [x] **7-F3** — `slideReportPivotComputation.ts`: confirmed zero imports in `src/`; file already deleted in prior phase. `SlideViewPage` now reads exclusively from `dimension_data` via `useDataStudioRawRows` → `useFilteredSlideData`.
 - [x] **7-F4** — `slideRefreshHelpers.ts`: confirmed zero imports in `src/`; file already deleted in prior phase.
-- [ ] **7-F5** — `useSlideReportSummaries` reads `slide_report_summaries` for per-tab AI summaries in slide view; `ai_summary_cards` is a separate feature. **DEFERRED** — these serve different purposes.
-- [ ] **7-DB1** — Add `deprecated_at` timestamps to legacy pivot tables (additive migration). **DEFERRED** — DB migration needed.
-- [ ] **7-DB2** — `report_api_data` still written by `sync-report-api-data` and read by `get-performance-data`. **DEFERRED** — document after EF7 is confirmed.
+- [x] **7-F5** — **OBSOLETE:** `slide_report_summaries` table dropped in Phase 9; `useSlideReportSummaries` no longer has a backing table. Per-tab AI summaries were removed with the table. No action.
+- [ ] **7-DB1** — Add `deprecated_at` timestamps to any remaining legacy pivot tables (additive migration). **DEFERRED** — DB migration needed.
+- [x] **7-DB2** — `report_api_data` and `sync-report-api-data`/`get-report-api-data` removed in Phase 7-EF7 and Phase 9; `get-performance-data` reads `dimension_data` only.
 
 > **What changed (Phase 7):** Added 410 deprecation gates to `apply-vlookup-mappings`, `migrate-sheet-data`, `get-consolidated-performance-data`. Confirmed `run-refresh-workflow` already gates `refresh-slide-report` via `SLIDE_REPORT_CACHE_ENABLED`. Confirmed `get-slide-report-data` already gated. Updated `run-refresh-workflow` to implement canonical `clearFirst` (clears `dimension_data` only) and removed the legacy dependency on `clear-and-resync`. Deferred: `sync-report-api-data`/`get-report-api-data` (active cache). Build: `npm run build` ✓ exit 0.
 >
@@ -192,16 +173,9 @@ Some legacy Edge Functions remain because the frontend still depends on them. Th
   3. Switch `useSlideReportDisplayData` to the new canonical path.
   4. Verify no callers remain; retire `get-slide-report-display-data` (410) then delete in Phase 9.
 
-##### EF7: `sync-report-api-data` + `get-report-api-data` + `report_api_data` cache (still active)
+##### EF7: `sync-report-api-data` + `get-report-api-data` + `report_api_data` cache (done)
 
-- **Current**: `get-performance-data` still uses `report_api_data` as a fast-path cache.
-- **Target**: Either:
-  - (A) remove the cache and read `dimension_data` directly everywhere (preferred, simplest), or
-  - (B) keep cache but make it a *derived, optional* accelerator with a clear deprecation policy.
-- **Migration steps**:
-  1. Add instrumentation/logging: confirm whether `report_api_data` is hit in production flows.
-  2. If low/no usage: remove read path from `get-performance-data`, retire `get-report-api-data` and `sync-report-api-data`.
-  3. If needed: document cache contract + rebuild triggers; ensure it is derived solely from `dimension_data`.
+- **Done**: EFs and table removed in Phase 7-EF7 and Phase 9. `get-performance-data` reads `dimension_data` only.
 
 ##### EF9: `clear-and-resync` (still called from frontend)
 
@@ -379,6 +353,16 @@ There are currently **two view systems** that look similar but are not yet unifi
 - [x] **9-DB10** — `aggregated_breakdown_data` dropped. No reads/writes found anywhere.
 
 > Migration: `supabase/migrations/20260318200000_phase9_drop_legacy_tables.sql` — applied 2026-03-18. TypeScript types regenerated post-drop.
+
+### Remaining work (next steps)
+
+Aligned with `TODO.md` next steps. No duplicate systems; one canonical path per capability.
+
+- [ ] **NS-1** — Audit `run-refresh-workflow`: remove legacy `slideReportId` → `refresh-slide-report` branch; keep only `resync-data-source` orchestration.
+- [ ] **NS-2** — Migrate `debug.ts` utilities (`retryWithBackoff`, `filterDimensionsByFilterSettings`) to descriptive modules (e.g. `src/lib/utils/retry.ts`, `src/lib/utils/dimensionFilter.ts`); delete `debug.ts`.
+- [ ] **NS-3** — Dead code: verify `ForecastingPage.tsx` router status; remove if unused.
+- [ ] **NS-4** — Consolidate `resync-dimensions.ts` (flat) and `resync-all-dimensions.ts` (flat) into `resync-all-dimensions/` folder module.
+- [ ] **NS-5** — Delete `src/lib/sync-utils.ts` once callers (`useDataSourceHeaders.ts`, `EditDataSourceModal.tsx`, `ViewDataModal.tsx`) are migrated off `parseDate`/`parseValue`/`fetchGoogleSheetsData` to `src/lib/data-sources/`.
 
 ---
 
@@ -629,6 +613,13 @@ Only after all above are checked, proceed to deletion.
     - `src/pages/ForecastingTool.tsx`
   - **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors, warnings only — all pre-existing).
 
+### 2026-03-19
+
+- **Refresh workflow (modes + row count):**
+  - `resync-data-source` and `run-refresh-workflow` support `refreshMode: 'full' | 'recent'` (full = replace all rows; recent = last 2 months only). Modal step 0 lets user choose before starting.
+  - `run-refresh-workflow` aggregates `rowsProcessed` from each `resync-data-source` and returns it; frontend shows "X rows imported" (and "(last 2 months)" when recent) in `RefreshDataModal` success message.
+  - Deployed: `run-refresh-workflow` v6, `resync-data-source` with `refreshMode` and `rowsProcessed`. See "Refresh workflow" subsection in Progress tracker and TODO.md.
+
 ---
 
 ## Master TODO plan
@@ -669,32 +660,32 @@ Only after all above are checked, proceed to deletion.
 
 ### E. Data sources + Data Studio unification (Phase 6)
 
-- [ ] **E1** - Collapse `useDataStudioRawRows`, `useFiltersSourceData`, `useSourceData` into one canonical fetch path via `useCachedSourceData` (reads `dimension_data`).
-- [ ] **E2** - Remove `useSlideReportChannelData` (reads legacy `slide_report_channel_*` tables).
-- [ ] **E3** - Remove `useMetasearchJan2026RawRows` (hardcoded one-off hook).
-- [ ] **E4** - Consolidate data source creation modals: keep `DataSourceSelectionModal` + `UnifiedDataSourceModal` + `ColumnMappingStep`; delete `CSVImportChoiceModal`, `DataSourcesListModal`; audit `MappingModal` vs `EditMappingModal`.
-- [ ] **E5** - Remove inline report-creation logic from `DataSourcesPage` (`handleCreateBookingReport`, `handleCreatePriceCheckReport`).
+- [x] **E1** — Canonical fetch path: `useCachedSourceData` / `useDataStudioRawRows` reads `dimension_data`; `useFiltersSourceData` deleted.
+- [x] **E2** — `useSlideReportChannelData` removed; `effectivePivotData` from `dataStudioRawRows` only.
+- [x] **E3** — `useMetasearchJan2026RawRows` removed; utils in `metasearchJan2026Utils.ts`.
+- [x] **E4** — `CSVImportChoiceModal`, `DataSourcesListModal`, `MappingModal` deleted; `EditMappingModal` single mapping step.
+- [x] **E5** — `handleCreateBookingReport`, `handleCreatePriceCheckReport` removed from `DataSourcesPage`.
 
 ### F. Legacy pivot cache + edge function cleanup (Phase 7)
 
-- [ ] **F1** - Retire `refresh-slide-report`, `refresh-slide-report-channel`, `get-slide-report-data`, `get-slide-report-display-data` edge functions (already gated; remove gate + function after confirming Data Studio covers all use cases).
-- [ ] **F2** - Audit and retire `get-consolidated-performance-data`, `sync-report-api-data`, `get-report-api-data`, `migrate-sheet-data`, `clear-and-resync`, `apply-vlookup-mappings`.
-- [ ] **F3** - Delete `slideReportChannelDataMerge.ts`, `refreshPivotDataHelpers.ts`, `slideReportPivotComputation.ts` after Phase 6 hook removal.
-- [ ] **F4** - Migrate `useSlideReportSummaries` to `ai_summary_cards` if applicable; remove `slide_report_summaries` reads.
+- [x] **F1** — `refresh-slide-report`, `refresh-slide-report-channel`, `get-slide-report-data`, `get-slide-report-display-data` gated (410 when `SLIDE_REPORT_CACHE_ENABLED` false); Data Studio reads `dimension_data`.
+- [x] **F2** — `get-consolidated-performance-data`, `sync-report-api-data`, `get-report-api-data`, `migrate-sheet-data`, `clear-and-resync`, `apply-vlookup-mappings` gated or deleted; `report_api_data` dropped.
+- [x] **F3** — `slideReportChannelDataMerge.ts`, `refreshPivotDataHelpers.ts`, `slideReportPivotComputation.ts` deleted.
+- [x] **F4** — `slide_report_summaries` table dropped in Phase 9; `useSlideReportSummaries` obsolete (no backing table).
 
 ### G. View settings + resync consolidation (Phase 8)
 
-- [ ] **G1** - Unify view settings: `report_views` canonical; migrate `slide_report_views` reads; document `budgets.view_id` FK migration path.
-- [ ] **G2** - Consolidate resync utilities: `resync-all-dimensions/` folder is canonical; delete flat `resync-dimensions.ts` and `resync-all-dimensions.ts` after verification.
-- [ ] **G3** - Audit and delete `data-loading-fix.ts`, `large-dataset-optimizer.ts` if superseded.
-- [ ] **G4** - Document or deprecate `monthly_dimension_data`, `aggregated_breakdown_data` tables.
+- [x] **G1** — `public.views` canonical; `slide_report_views` migrated and dropped; `budgets.view_id` → `views`.
+- [x] **G2** — `resync-dimensions.ts` and `resync-all-dimensions/` documented as distinct (column mapping vs dimension data); no consolidation needed.
+- [x] **G3** — `large-dataset-optimizer.ts` deleted; `data-loading-fix.ts` deferred (KPIChart still uses it).
+- [x] **G4** — `monthly_dimension_data`, `aggregated_breakdown_data` dropped in Phase 9.
 
 ### H. DB table drops (Phase 9 - after proof)
 
-- [ ] **H1** - Drop `sheet_data` after zero-consumer verification.
-- [ ] **H2** - Drop `slide_report_channel_year_data`, `slide_report_channel_month_data`, `slide_report_channel_raw_rows`, `slide_report_monthly_data` after Phase 7 edge function removal.
-- [ ] **H3** - Drop `slide_report_summaries`, `slide_report_views` after Phase 7-8 migration.
-- [ ] **H4** - Drop `report_api_data`, `monthly_dimension_data`, `aggregated_breakdown_data` after Phase 7-8 confirmation.
+- [x] **H1** — `sheet_data` dropped (migration `20260318200000_phase9_drop_legacy_tables.sql`).
+- [x] **H2** — `slide_report_channel_*`, `slide_report_monthly_data` dropped.
+- [x] **H3** — `slide_report_summaries`, `slide_report_views` dropped.
+- [x] **H4** — `report_api_data`, `monthly_dimension_data`, `aggregated_breakdown_data` dropped.
 
 ---
 
@@ -867,31 +858,15 @@ Only after all above are checked, proceed to deletion.
   - **Stores**: visible columns / group-by / breakdown selections; must be repaired by name when IDs drift.
   - **Reader/writer**: `src/hooks/performanceTable/usePerformanceTableViews.ts`
 
-#### Secondary caches (optional; keep for now but not canonical)
+#### Dropped in Phase 9 (no longer exist)
 
-- **`report_api_data`** (optional acceleration cache)
-  - **Meaning**: precomputed slices of performance rows for “current/comparison” periods.
-  - **Writer**: `supabase/functions/sync-report-api-data/index.ts` (and `auto-sync-data-sources`)
-  - **Reader**: `supabase/functions/get-performance-data/index.ts` may use it as a fast path.
-  - **Note**: cache can be regenerated from `dimension_data`; it is not a source of truth.
+- **Dropped tables:** `sheet_data`, `slide_report_channel_*`, `slide_report_monthly_data`, `slide_report_summaries`, `slide_report_views`, `report_api_data`, `monthly_dimension_data`, `aggregated_breakdown_data`. Migration: `20260318200000_phase9_drop_legacy_tables.sql`. Data Studio reads `dimension_data` only; view settings in `public.views`.
 
-#### Legacy / to deprecate (stop writing; migrate reads; delete only after proof)
+#### Legacy / deprecated edge functions (gated or retired; do not use)
 
-- **`sheet_data`** (legacy raw sheet rows)
-  - **Meaning**: raw row_data keyed by column names (pre-mapping).
-  - **Canonical replacement**: `dimension_data` (post-mapping, typed, dimension-id keyed).
-  - **Action**: keep for now; do not expand usage; plan removal after verifying no consumers.
-
-- **Slide-report cache tables** (`slide_report_*`)
-  - Examples:
-    - `slide_report_channel_year_data`
-    - `slide_report_channel_month_data`
-    - `slide_report_channel_raw_rows`
-    - `slide_report_monthly_data`
-    - `slide_report_summaries`, `slide_report_views`, `slide_reports`
-  - **Meaning**: precomputed/persisted pivot outputs and UI state for the legacy slide report system.
-  - **Direction**: deprecate and stop writing new cache rows; unify to a single Data Studio report flow using `dimension_data`.
-  - **Action**: gate edge functions that write these tables; keep endpoints temporarily for backward compatibility.
+- **Slide-report cache writers** (`refresh-slide-report`, `refresh-slide-report-channel`) — gated by `SLIDE_REPORT_CACHE_ENABLED`; return 410 when disabled. Tables they wrote are dropped.
+- **`get-slide-report-data`**, **`get-slide-report-display-data`** — gated or dead; no frontend callers for display data path.
+- **`clear-and-resync`**, **`migrate-sheet-data`**, **`apply-vlookup-mappings`**, **`get-consolidated-performance-data`** — 410 deprecation gates; canonical path is `run-refresh-workflow` → `resync-data-source`.
 
 ### “One unified report” policy (product decision)
 

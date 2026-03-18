@@ -126,6 +126,12 @@ export function RefreshDataModal({
                 <>
                   <RefreshStepIndicator
                     stepNumber={1}
+                    status={refreshStepStatus[0]}
+                    title="Clearing and resetting data"
+                    description="Removing existing report data before sync"
+                  />
+                  <RefreshStepIndicator
+                    stepNumber={2}
                     status={refreshStepStatus[1]}
                     title="Fetching from sources"
                     description={refreshMode === 'recent'
@@ -133,7 +139,7 @@ export function RefreshDataModal({
                       : "Loading all data from Google Sheets & CSV"}
                   />
                   <RefreshStepIndicator
-                    stepNumber={2}
+                    stepNumber={3}
                     status={refreshStepStatus[5] === 'complete' ? 'complete' : refreshStepStatus[2]}
                     title="Updating cache & interface"
                     description="Recomputing metrics and refreshing report"

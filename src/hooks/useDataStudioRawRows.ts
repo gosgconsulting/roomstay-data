@@ -226,9 +226,9 @@ export function useDataStudioRawRows(
         if (!channelReportId) return { channel, rows: [] as any[], dimMap: {} };
 
         const startTime = performance.now();
-        const { rows, dimMap } = await fetchChannelRows(channelReportId, selectedYear, selectedMonth);
+        const { rows, dimMap } = await fetchChannelRows(channelReportId, selectedYear, undefined);
         const duration = Math.round(performance.now() - startTime);
-        console.log(`[DataStudio] ${channel}: ${rows.length} rows in ${duration}ms (year=${selectedYear}, month=${selectedMonth})`);
+        console.log(`[DataStudio] ${channel}: ${rows.length} rows in ${duration}ms (year=${selectedYear})`);
 
         return { channel, rows, dimMap };
       });

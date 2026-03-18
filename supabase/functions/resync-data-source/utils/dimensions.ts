@@ -433,7 +433,13 @@ export const buildDimensionMappingWithAutoDetection = async (
       };
 
       // Get dimension name (either from mapping or by looking up dimensionId)
-      const dimensionName = await getDimensionName(finalMapping);
+      let dimensionName = await getDimensionName(finalMapping);
+      // Fallback: if dimension was deleted (e.g. after full resync deleteCustomDimensions), resolve by column header
+      // so that Cost/Revenue etc. map to account-scoped dimensions and data is not lost (fixes metasearch 0 cost).
+      if (!dimensionName && mapping.column && (mapping.dimensionId && mapping.dimensionId !== 'none' && mapping.dimensionId !== 'create_new')) {
+        dimensionName = mapping.column.trim();
+        console.log(`[RESYNC] Dimension ID no longer found; resolving column "${mapping.column}" by header name`);
+      }
       
       // If we have a dimension name, resolve it to ID; otherwise try createOrGetDimension
       let dimensionId: string | null = null;
@@ -443,6 +449,13 @@ export const buildDimensionMappingWithAutoDetection = async (
       } else if (finalMapping.newDimensionName) {
         // Creating a new dimension
         dimensionId = await createOrGetDimension(supabase, finalMapping, userId, reportId, dataSourceId, accountId);
+      }
+      // Final fallback: try column header as dimension name (e.g. "Cost" -> account Cost dimension)
+      if (!dimensionId && mapping.column?.trim()) {
+        dimensionId = await resolveDimensionNameToId(supabase, mapping.column.trim(), accountId || null, reportId, userId);
+        if (dimensionId) {
+          console.log(`[RESYNC] Mapped column "${mapping.column}" to dimension by header name`);
+        }
       }
       
       if (dimensionId) {

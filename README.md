@@ -138,7 +138,7 @@ Google Sheets / CSV URL
 ### 5. Refresh / Sync Workflow
 
 - **Entry point:** `src/lib/refreshWorkflow.ts` → `run-refresh-workflow` edge function.
-- **Workflow:** clears `dimension_data` for the report → calls `resync-data-source` for each data source.
+- **Workflow:** the UI always passes `clearFirst: true`, so the workflow first deletes all `dimension_data` for the target report(s), then calls `resync-data-source` for each data source. This gives erase-then-replace behavior and prevents duplicate or stale rows. The Refresh Data modal shows an explicit "Clearing and resetting data" step before "Fetching from sources". Full Refresh uses `refreshMode: 'full'` and reloads all data from all sources. See `docs/REFRESH_WORKFLOW_AUDIT.md` for the full SEM/Social/Metasearch flow and dimension-resolution fix (metasearch 0 cost).
 
 ### 6. Sharing System
 
