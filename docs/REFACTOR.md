@@ -135,6 +135,11 @@ Only after all above are checked, proceed to deletion.
   - **B4/B5:** One "Data Studio" report per account when missing; Edit Source uses name "Data Studio". Canonical report type is Data Studio.
   - **Verification:** npm run build and lint pass (warnings only).
 
+- **Phase 3 / C4–C5 (Remove duplicate table/hooks) — 2026-03-18:** Deleted unused PerformanceTable and data hook duplicates.
+  - **Used in current stack?** Verified: no imports of PerformanceTable.old, PerformanceTable.refactored, or usePerformanceTableDataFixed in src/ (grep). Canonical: PerformanceTable.tsx and usePerformanceTableData.ts.
+  - **Deleted:** PerformanceTable.old.tsx, PerformanceTable.refactored.tsx, usePerformanceTableDataFixed.ts. No migration needed; consumers already use PerformanceTable and usePerformanceTableData.
+  - **Verification:** npm run build ✅, npm run lint ✅ (warnings only).
+
 ---
 
 ## Master TODO plan
@@ -160,8 +165,8 @@ Only after all above are checked, proceed to deletion.
 - [ ] **C1** — Phase 2: Canonical dimension loading API + precedence rules (frontend).
 - [ ] **C2** — Phase 2: Align Edge Functions to same dimension rules.
 - [ ] **C3** — Phase 2: Canonicalize view settings mapping (visible columns/KPIs/orders).
-- [ ] **C4** — Phase 3: Migrate to canonical PerformanceTable; delete PerformanceTable.old and PerformanceTable.refactored after verification.
-- [ ] **C5** — Phase 3: Delete or consolidate usePerformanceTableDataFixed; one canonical data hook.
+- [x] **C4** — Phase 3: Migrate to canonical PerformanceTable; delete PerformanceTable.old and PerformanceTable.refactored after verification.
+- [x] **C5** — Phase 3: Delete or consolidate usePerformanceTableDataFixed; one canonical data hook.
 - [ ] **C6** — Phase 3: Standardize “Apply” behavior across settings modals.
 - [ ] **C7** — Phase 4: Unit tests for dimension dedupe + mapping validation.
 - [ ] **C8** — Phase 5: Delete unused utilities per “Used in current stack?” checklist.
