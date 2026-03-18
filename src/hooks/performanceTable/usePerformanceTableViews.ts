@@ -179,59 +179,12 @@ export function usePerformanceTableViews({
     }
 
     console.log('[VIEWS] Loading view settings for report:', reportId, 'view:', view.name, view);
-    
-    // Map old dimension IDs to account-scoped dimension IDs for group_by_dimensions
-    const mapDimensionIdsLocal = async (dimIds: string[]): Promise<string[]> => {
-      if (!dimIds || dimIds.length === 0) return [];
-      
-      const mapped: string[] = [];
-      const unmappedIds: string[] = [];
-      
-      for (const dimId of dimIds) {
-        const dimension = dimensions.find(d => d.id === dimId);
-        if (dimension) {
-          mapped.push(dimension.id);
-        } else {
-          unmappedIds.push(dimId);
-        }
-      }
-      
-      if (unmappedIds.length > 0) {
-        try {
-          const dimensionNameToIdMap = new Map<string, string>();
-          dimensions.forEach(dim => {
-            dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
-          });
-          
-          const { data: oldDimensions } = await supabase
-            .from("dimensions")
-            .select("id, name")
-            .in("id", unmappedIds);
-          
-          if (oldDimensions) {
-            oldDimensions.forEach((oldDim) => {
-              const normalizedName = oldDim.name.toLowerCase();
-              const newDimensionId = dimensionNameToIdMap.get(normalizedName);
-              
-              if (newDimensionId) {
-                mapped.push(newDimensionId);
-                console.log(`[VIEWS] Mapped group dimension "${oldDim.name}": ${oldDim.id} -> ${newDimensionId}`);
-              } else {
-                console.warn(`[VIEWS] Could not find account-scoped dimension for "${oldDim.name}" (${oldDim.id})`);
-              }
-            });
-          }
-        } catch (error) {
-          console.error('[VIEWS] Error mapping old dimension IDs:', error);
-        }
-      }
-      
-      return mapped;
-    };
+
+    const mappedDims = dimensions.map(d => ({ ...d, formula: d.formula || null }));
 
     // Load saved settings - map dimension IDs asynchronously
     const loadDimensionsAsync = async () => {
-      const groupDimensions = await mapDimensionIdsLocal(view.group_by_dimensions || []);
+      const groupDimensions = await mapDimensionIds(view.group_by_dimensions || [], mappedDims);
       let finalGroupDimensions = groupDimensions;
       if (groupDimensions.length === 0 && dimensions.length > 0) {
         const dateDimension = dimensions.find(d => d.type === 'date');
@@ -245,7 +198,7 @@ export function usePerformanceTableViews({
         }
       }
       
-      let breakdownDimensions = await mapDimensionIdsLocal(view.breakdown_by_dimensions || []);
+      let breakdownDimensions = await mapDimensionIds(view.breakdown_by_dimensions || [], mappedDims);
       // If no breakdown dimension is set but we have multiple dimensions available, set a default
       if (breakdownDimensions.length === 0 && dimensions.length > 1) {
         const dateDimension = dimensions.find(d => d.type === 'date');
@@ -271,7 +224,7 @@ export function usePerformanceTableViews({
         }
       }
       
-      let thenByDimensions = await mapDimensionIdsLocal(view.then_by_dimensions || []);
+      let thenByDimensions = await mapDimensionIds(view.then_by_dimensions || [], mappedDims);
       // If no then by dimension is set but we have 3+ dimensions available, set a default
       if (thenByDimensions.length === 0 && dimensions.length >= 3) {
         const usedDimensions = [...finalGroupDimensions, ...breakdownDimensions];
@@ -294,7 +247,7 @@ export function usePerformanceTableViews({
       
       // NEW: selector options mapping (filter_dimensions)
       if (typeof onSelectorDimensionsChange === 'function') {
-        const mappedFilters = await mapDimensionIdsLocal(view.filter_dimensions || []);
+        const mappedFilters = await mapDimensionIds(view.filter_dimensions || [], mappedDims);
         const defaultSelectorIds = dimensions
           .filter(d => d.type === 'text' || d.type === 'date')
           .map(d => d.id);

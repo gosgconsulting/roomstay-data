@@ -104,11 +104,11 @@ export function ReportsSidebar({
     }
 
     if (accountId) {
-      navigate(`/tools/data/${accountId}?reportId=${reportId}`);
+      navigate(`/tools/data?reportId=${reportId}`);
     } else {
       const report = reports.find(r => r.id === reportId);
       if (report?.account_id) {
-        navigate(`/tools/data/${report.account_id}?reportId=${reportId}`);
+        navigate(`/tools/data?reportId=${reportId}`);
       }
     }
   };
@@ -117,11 +117,7 @@ export function ReportsSidebar({
     if (onAddNewReport) {
       onAddNewReport();
     } else {
-      if (accountId) {
-        navigate(`/tools/data/${accountId}`);
-      } else {
-        navigate('/tools/data');
-      }
+      navigate('/tools/data');
     }
   };
 
@@ -136,8 +132,8 @@ export function ReportsSidebar({
       import("@/lib/report-url").then(({ getReportUrlWithSummary }) => {
         navigate(getReportUrlWithSummary(reports[0].name, summaryId));
       });
-    } else if (accountId) {
-      navigate(`/tools/report/${accountId}/${summaryId}`);
+    } else {
+      navigate(`/tools/report/${summaryId}`);
     }
   };
 

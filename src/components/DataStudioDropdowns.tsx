@@ -73,11 +73,11 @@ export function DataStudioDropdowns({
     }
 
     if (accountId) {
-      navigate(`/tools/data/${accountId}?reportId=${reportId}`);
+      navigate(`/tools/data?reportId=${reportId}`);
     } else {
       const report = reports.find(r => r.id === reportId);
       if (report?.account_id) {
-        navigate(`/tools/data/${report.account_id}?reportId=${reportId}`);
+        navigate(`/tools/data?reportId=${reportId}`);
       }
     }
     setOpenReportDropdown(false);
@@ -87,11 +87,7 @@ export function DataStudioDropdowns({
     if (onAddNewReport) {
       onAddNewReport();
     } else {
-      if (accountId) {
-        navigate(`/tools/data/${accountId}`);
-      } else {
-        navigate('/tools/data');
-      }
+      navigate('/tools/data');
     }
     setOpenReportDropdown(false);
   };
@@ -107,8 +103,8 @@ export function DataStudioDropdowns({
       import("@/lib/report-url").then(({ getReportUrlWithSummary }) => {
         navigate(getReportUrlWithSummary(reports[0].name, summaryId));
       });
-    } else if (accountId) {
-      navigate(`/tools/report/${accountId}/${summaryId}`);
+    } else {
+      navigate(`/tools/report/${summaryId}`);
     }
   };
 

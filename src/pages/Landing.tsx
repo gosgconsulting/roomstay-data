@@ -25,7 +25,7 @@ const tools: Tool[] = [
     name: "Reports",
     description: "Pre-rendered data snapshots for fast performance",
     icon: <Presentation className="h-6 w-6" />,
-    getPath: (accountId: string) => `/tools/reports/${accountId}`,
+    getPath: () => `/tools/reports`,
     available: true,
   },
   {
@@ -33,7 +33,7 @@ const tools: Tool[] = [
     name: "Forecast",
     description: "Forecasting and scenario planning",
     icon: <TrendingUp className="h-6 w-6" />,
-    getPath: (accountId: string) => `/tools/forecasting/${accountId}`,
+    getPath: () => `/tools/forecasting`,
     available: true,
   },
   {
@@ -41,7 +41,7 @@ const tools: Tool[] = [
     name: "Price Widget",
     description: "Price monitoring and comparison tools",
     icon: <BarChart3 className="h-6 w-6" />,
-    getPath: (accountId: string) => `/tools/price-widget/${accountId}`,
+    getPath: () => `/tools/price-widget`,
     available: true,
   },
 ];

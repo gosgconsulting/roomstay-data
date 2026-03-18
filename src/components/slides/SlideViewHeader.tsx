@@ -41,7 +41,7 @@ export function SlideViewHeader({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate(`/tools/reports/${accountId}`)}
+            onClick={() => navigate(`/tools/reports`)}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>

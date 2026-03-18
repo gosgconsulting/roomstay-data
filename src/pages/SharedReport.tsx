@@ -27,6 +27,7 @@ export default function SharedReport() {
   const [shareLink, setShareLink] = useState<any>(null);
   const [sharedDimensionFilters, setSharedDimensionFilters] = useState<Record<string, Record<string, string[]>>>({});
   const [authenticated, setAuthenticated] = useState(false);
+  const [slideReportShare, setSlideReportShare] = useState<{ slideReportId: string; accountId: string } | null>(null);
   
   // Report dashboard state
   const [reportId, setReportId] = useState<string | null>(null);
@@ -49,7 +50,6 @@ export default function SharedReport() {
 
   // Stabilize the onFiltersChange callback to prevent unnecessary re-renders
   const handleFiltersChange = useCallback((newFilters: FilterState) => {
-    console.log('[testing] SharedReport - Filters changing:', newFilters);
     setFilters(newFilters);
   }, []);
 
@@ -119,7 +119,7 @@ export default function SharedReport() {
   };
 
   const initializeReport = async (linkData: any) => {
-    console.log('[testing] SharedReport - Initializing report with data:', linkData);
+    setSlideReportShare(null);
     
     // Check if this is a slide report share link (has slide_report_id or view_id)
     const slideReportId = linkData.slide_report_id;
@@ -132,16 +132,9 @@ export default function SharedReport() {
 
         // If we have slide_report_id directly, use it (new format)
         if (slideReportId) {
-          console.log('[testing] SharedReport - Share link has slide_report_id (new format)', {
-            slide_report_id: slideReportId,
-            account_id: accountId
-          });
+          // no-op
         } else if (hasViewId) {
           // Legacy: Use view_id to look up slide_report_id (backward compatibility)
-          console.log('[testing] SharedReport - Share link has view_id (legacy format), looking up slide report', {
-            view_id: linkData.view_id,
-            account_id: accountId
-          });
           
           // Query slide_report_views using view_id
           try {
@@ -182,7 +175,7 @@ export default function SharedReport() {
               }
             }
           } catch (err) {
-            console.error('[testing] Exception while querying view:', err);
+            console.error('Exception while querying view:', err);
           }
         }
 
@@ -200,7 +193,7 @@ export default function SharedReport() {
         }
 
         if (!finalSlideReportId || !accountId) {
-          console.error('[testing] Missing slide_report_id or account_id in share link', {
+          console.error('Missing slide_report_id or account_id in share link', {
             slideReportId: finalSlideReportId,
             accountId
           });
@@ -252,7 +245,7 @@ export default function SharedReport() {
                 }
               }
             } catch (error) {
-              console.error('[testing] Error converting filters:', error);
+              console.error('Error converting filters:', error);
             }
           }
         }
@@ -271,16 +264,11 @@ export default function SharedReport() {
         sessionStorage.setItem(authKey, "true");
         sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(linkData));
 
-        console.log('[testing] Redirecting to slide report view:', { 
-          slideReportId: finalSlideReportId, 
-          accountId,
-          hasFilters: Object.keys(channelFilters).length > 0
-        });
-        
-        // Navigate to the slide report view with shared flag
-        navigate(`/tools/reports/${accountId}/view/${finalSlideReportId}?shared=true&slug=${slug}`);
+        // Shared links should stay on /shared/:slug (public view). We no longer redirect into /tools/*.
+        // Keep the resolved slide_report_id/account_id so we can show an explicit message.
+        setSlideReportShare({ slideReportId: finalSlideReportId, accountId });
       } catch (error) {
-        console.error('[testing] Error handling slide report view:', error);
+        console.error('Error handling slide report view:', error);
         toast({
           title: "Error",
           description: "Failed to load slide report view",
@@ -293,7 +281,6 @@ export default function SharedReport() {
     // Store dimension filters from the share link
     if (linkData.dimension_filters) {
       setSharedDimensionFilters(linkData.dimension_filters);
-      console.log('[testing] SharedReport - Applying dimension filters:', linkData.dimension_filters);
     }
     
     // For shared links with multiple reports, set reportId to null to show "All Reports" view
@@ -323,7 +310,6 @@ export default function SharedReport() {
         }
       } else {
         // Multiple reports - show "All Reports" view
-        console.log('[testing] SharedReport - Multiple reports shared, showing All Reports view');
         setReportId(null); // null reportId triggers All Reports view in DashboardHeader
       }
       
@@ -460,6 +446,22 @@ export default function SharedReport() {
         isVisible={isDataLoading} 
         loadingComponents={loadingComponents}
       /> */}
+
+      {slideReportShare && (
+        <div className="container mx-auto px-6 pt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Shared Data Studio link</CardTitle>
+              <CardDescription>
+                This shared link points to a legacy “slide report” view. The app now supports a single Data Studio view and shared links stay on <code>/shared/:slug</code>.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              Ask the owner to re-share the report using the current sharing flow.
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <DashboardHeader 
         reportId={reportId}

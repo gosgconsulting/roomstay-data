@@ -13,7 +13,6 @@ import {
 import { AddAICardModal } from "@/components/AddAICardModal";
 import { CreateAISummaryShareLinkModal } from "@/components/CreateAISummaryShareLinkModal";
 import { ForecastSettingsModal } from "@/components/ForecastSettingsModal";
-import { MasterReportSetupModal, type MasterReportConfig } from "@/components/MasterReportSetupModal";
 import { supabase } from "@/integrations/supabase/client";
 import { getUser } from "@/lib/auth";
 import { fetchSourceData } from "@/hooks/dataSources/useSourceData";
@@ -134,8 +133,6 @@ const AISummaryPage = () => {
   const [selectedDatePeriod, setSelectedDatePeriod] = useState<string>(format(new Date(), "yyyy-MM"));
   const [selectedBudgetReportId, setSelectedBudgetReportId] = useState<string | null>(null);
   const [budgetForecastEnabled, setBudgetForecastEnabled] = useState(false);
-  const [isMasterReportSetupOpen, setIsMasterReportSetupOpen] = useState(false);
-  const [masterReportConfigs, setMasterReportConfigs] = useState<Record<string, MasterReportConfig>>({});
   // ADD: Budget year selector state (this year / last year)
   const [selectedBudgetYear, setSelectedBudgetYear] = useState<number>(new Date().getFullYear());
 
@@ -242,12 +239,23 @@ const AISummaryPage = () => {
           const isUUID = uuidRegex.test(reportName);
 
           if (isUUID) {
-            // Legacy UUID format - treat as accountId
-            console.log('[AISummaryPage] Detected UUID in reportName, treating as accountId');
-            setAccountId(reportName);
-            if (querySummaryId) {
-              setSummaryId(querySummaryId);
+            // Treat UUID in the path as a summary card id (accountless deep link).
+            // Resolve the owning accountId from the card record.
+            setSummaryId(reportName);
+            const { data: card, error: cardError } = await supabase
+              .from("ai_summary_cards")
+              .select("account_id")
+              .eq("id", reportName)
+              .eq("user_id", user.id)
+              .maybeSingle();
+
+            if (cardError || !card?.account_id) {
+              toast.error("AI summary not found");
+              setIsLoading(false);
+              return;
             }
+
+            setAccountId(card.account_id);
             return;
           }
 
@@ -267,14 +275,6 @@ const AISummaryPage = () => {
           // Find report by slug
           const report = findReportBySlug(reportName, allReports || []);
           
-          console.log('[AISummaryPage] Looking up report:', {
-            reportName,
-            allReportsCount: allReports?.length || 0,
-            reportNames: allReports?.map(r => r.name),
-            reportSlugs: allReports?.map(r => ({ name: r.name, slug: reportNameToSlug(r.name) })),
-            foundReport: report
-          });
-          
           if (report && report.account_id) {
             setAccountId(report.account_id);
             // Set summaryId from query param if provided
@@ -282,15 +282,6 @@ const AISummaryPage = () => {
               setSummaryId(querySummaryId);
             }
           } else {
-            console.error('[AISummaryPage] Report not found:', {
-              reportName,
-              decodedSlug: decodeURIComponent(reportName).toLowerCase(),
-              availableReports: allReports?.map(r => ({ 
-                name: r.name, 
-                slug: reportNameToSlug(r.name),
-                account_id: r.account_id 
-              }))
-            });
             toast.error(`Report "${reportName}" not found`);
             setIsLoading(false);
           }
@@ -739,9 +730,8 @@ const AISummaryPage = () => {
       navigate(getReportUrlWithSummary(reportName, cardId));
     } else if (reports.length > 0) {
       navigate(getReportUrlWithSummary(reports[0].name, cardId));
-    } else if (accountId) {
-      // Fallback to legacy route
-      navigate(`/tools/report/${accountId}/${cardId}`);
+    } else {
+      navigate(`/tools/report/${cardId}`);
     }
   };
 
@@ -1074,9 +1064,8 @@ const AISummaryPage = () => {
               navigate(getReportUrlWithSummary(reportName, newCardId));
             } else if (reports.length > 0) {
               navigate(getReportUrlWithSummary(reports[0].name, newCardId));
-            } else if (accountId) {
-              // Fallback to legacy route
-              navigate(`/tools/report/${accountId}/${newCardId}`);
+            } else {
+              navigate(`/tools/report/${newCardId}`);
             }
           }
         }}
@@ -1191,16 +1180,6 @@ const AISummaryPage = () => {
           ai_prompt: selectedCard.ai_prompt || ""
         } : null}
         mode="api"
-      />
-
-      {/* Master Report Setup Modal */}
-      <MasterReportSetupModal
-        open={isMasterReportSetupOpen}
-        onOpenChange={setIsMasterReportSetupOpen}
-        reports={reports}
-        accountId={accountId}
-        currentConfigs={masterReportConfigs}
-        onSave={setMasterReportConfigs}
       />
     </div>
   );

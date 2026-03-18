@@ -244,15 +244,20 @@ export function usePerformanceTableData({
         compareRows = applyDimensionFilters(compareRows);
       }
 
-      // Build comparison data map by grouping key (first dimension value)
+      // Build comparison data map by grouping key (composite of all groupBy dimension values)
       const firstDimId = groupByDimensions[0];
       const firstDimension = dimensions.find(d => d.id === firstDimId);
+
+      // Build a composite key from all groupBy dimensions so channel-level comparison
+      // works correctly even when the first groupBy dimension is a date.
+      const buildGroupKey = (dv: Record<string, any>): string =>
+        groupByDimensions.map(id => String(dv[id] ?? 'Unknown')).join('||');
       
       const compareDataMap: Record<string, Record<string, number>> = {};
       if (compareEnabled && compareRows.length > 0) {
         compareRows.forEach((row: any) => {
           const dv: Record<string, any> = row.dimension_values || {};
-          const groupKey = String(dv[firstDimId] || 'Unknown');
+          const groupKey = buildGroupKey(dv);
           
           if (!compareDataMap[groupKey]) {
             compareDataMap[groupKey] = {};
@@ -292,7 +297,7 @@ export function usePerformanceTableData({
         });
 
         const originalDate = firstDimension?.type === 'date' ? dv[firstDimId] : undefined;
-        const groupKey = String(dv[firstDimId] || 'Unknown');
+        const groupKey = buildGroupKey(dv);
 
         // Attach compare data if available
         const compareData = compareEnabled ? compareDataMap[groupKey] : undefined;

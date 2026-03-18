@@ -54,14 +54,13 @@ export async function mapDimensionIds(
           
           if (newDimensionId) {
             mapped.push(newDimensionId);
-            console.log(`[testing] Mapped dimension "${oldDim.name}": ${oldDim.id} -> ${newDimensionId}`);
           } else {
-            console.warn(`[testing] Could not find account-scoped dimension for "${oldDim.name}" (${oldDim.id})`);
+            console.warn(`[viewSettingsMapper] Could not find account-scoped dimension for "${oldDim.name}" (${oldDim.id})`);
           }
         });
       }
     } catch (error) {
-      console.error('[testing] Error mapping old dimension IDs:', error);
+      console.error('[viewSettingsMapper] Error mapping old dimension IDs:', error);
     }
   }
   
@@ -69,7 +68,8 @@ export async function mapDimensionIds(
 }
 
 /**
- * Map visible column IDs from old dimension IDs to account-scoped dimension IDs
+ * Map visible column IDs from old dimension IDs to account-scoped dimension IDs.
+ * Preserves the original input order.
  */
 export async function mapVisibleColumns(
   visibleColumnIds: string[],
@@ -79,54 +79,58 @@ export async function mapVisibleColumns(
     return [];
   }
 
-  // Create a map of dimension name to account-scoped dimension ID
   const dimensionNameToIdMap = new Map<string, string>();
   dimensions.forEach(dim => {
     dimensionNameToIdMap.set(dim.name.toLowerCase(), dim.id);
   });
-  
-  // Validate and map visible_columns
-  const mappedVisibleColumns: string[] = [];
-  
-  // First, collect all unmapped IDs to query them in one batch
-  const idsToCheck = visibleColumnIds.filter((id: string) => 
-    !dimensions.find(d => d.id === id)
-  );
-  
-  // If we have unmapped IDs, query them to get their names and map to account-scoped dimensions
+
+  // Build a resolution map: old ID → new ID (for stale IDs that need name-based lookup)
+  const staleIdResolutionMap = new Map<string, string>();
+
+  const idsToCheck = visibleColumnIds.filter(id => !dimensions.find(d => d.id === id));
+
   if (idsToCheck.length > 0) {
     try {
       const { data: oldDimensions } = await supabase
         .from("dimensions")
         .select("id, name")
         .in("id", idsToCheck);
-      
+
       if (oldDimensions) {
         oldDimensions.forEach((oldDim) => {
-          const normalizedName = oldDim.name.toLowerCase();
-          const newDimensionId = dimensionNameToIdMap.get(normalizedName);
-          
-          if (newDimensionId) {
-            mappedVisibleColumns.push(newDimensionId);
-            console.log(`[testing] Mapped visible column "${oldDim.name}": ${oldDim.id} -> ${newDimensionId}`);
+          const newId = dimensionNameToIdMap.get(oldDim.name.toLowerCase());
+          if (newId) {
+            staleIdResolutionMap.set(oldDim.id, newId);
           } else {
-            console.warn(`[testing] Could not find account-scoped dimension for "${oldDim.name}" (${oldDim.id})`);
+            console.warn(`[viewSettingsMapper] Could not find account-scoped dimension for "${oldDim.name}" (${oldDim.id})`);
           }
         });
       }
     } catch (error) {
-      console.error('[testing] Error mapping old dimension IDs:', error);
+      console.error('[viewSettingsMapper] Error mapping old dimension IDs:', error);
     }
   }
-  
-  // Add all valid dimension IDs (those that already exist in loaded dimensions)
-  visibleColumnIds.forEach((colDimId: string) => {
-    const dimension = dimensions.find(d => d.id === colDimId);
-    if (dimension && !mappedVisibleColumns.includes(dimension.id)) {
-      mappedVisibleColumns.push(dimension.id);
+
+  // Resolve each input ID in order, deduplicating the output
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const colDimId of visibleColumnIds) {
+    let resolvedId: string | undefined;
+
+    const directMatch = dimensions.find(d => d.id === colDimId);
+    if (directMatch) {
+      resolvedId = directMatch.id;
+    } else {
+      resolvedId = staleIdResolutionMap.get(colDimId);
     }
-  });
-  
-  return mappedVisibleColumns;
+
+    if (resolvedId && !seen.has(resolvedId)) {
+      seen.add(resolvedId);
+      result.push(resolvedId);
+    }
+  }
+
+  return result;
 }
 

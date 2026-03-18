@@ -857,12 +857,21 @@ const UnifiedBreakdownTable = ({
 };
 
 export default function SlideViewPage() {
-  const { accountId } = useParams<{ accountId: string }>();
+  const { accountId, slideId } = useParams<{ accountId: string; slideId?: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const { data: userData } = useUser();
   const user = userData?.user || null;
+
+  // Single-view contract: Data Studio is the only report view now.
+  // Any legacy /view/:slideId URL is redirected to /data-studio.
+  useEffect(() => {
+    if (!accountId) return;
+    if (slideId || location.pathname.includes("/view/")) {
+      navigate(`/tools/reports`, { replace: true });
+    }
+  }, [accountId, slideId, location.pathname, navigate]);
   // Get current month name for default
   const currentDate = new Date();
   const currentMonthName = MONTH_NAMES[currentDate.getMonth()];

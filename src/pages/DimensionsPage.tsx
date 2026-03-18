@@ -16,6 +16,7 @@ import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, Layers } from "lucide-react";
 import { useUser } from "@/lib/auth";
 import type { Dimension } from "@/types/dimensions";
+import { useUserAccount } from "@/hooks/useUserAccount";
 
 const typeLabels: Record<string, string> = {
   text: "Plain text",
@@ -26,7 +27,9 @@ const typeLabels: Record<string, string> = {
 };
 
 export default function DimensionsPage() {
-  const { accountId } = useParams<{ accountId: string }>();
+  const { accountId: urlAccountId } = useParams<{ accountId?: string }>();
+  const { account: resolvedAccount } = useUserAccount();
+  const accountId = urlAccountId ?? resolvedAccount?.id ?? null;
   const navigate = useNavigate();
   const { data: userData } = useUser();
   const user = userData?.user || null;

@@ -29,18 +29,21 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 
 - `/` and `/landing`
 - `/auth`
+- `/tools/reports` (new short entry: redirects to Data Studio for resolved account)
 - `/tools/data-sources/:accountId`
+- `/tools/data-sources` (new short entry: redirects to resolved account)
 - `/tools/dimensions/:accountId`
+- `/tools/dimensions` (new short entry: redirects to resolved account)
 - `/tools/data`
 - `/tools/data/:accountId`
 - `/tools/reports/:accountId`
-- `/tools/reports/:accountId/view/:slideId`
 - `/tools/reports/:accountId/brady` — **to remove** (Phase B)
 - `/tools/reports/:accountId/master-report` — **to remove** (Phase B)
 - `/tools/reports/:accountId/data-studio`
 - `/tools/forecasting`
 - `/tools/forecasting/scenario/:scenarioId`
 - `/tools/forecasting/:accountId`
+- `/tools/price-widget` (new short entry: redirects to resolved account)
 - `/tools/price-widget/:accountId`
 - `/tools/price-widget/:accountId/:widgetId`
 - `/tools/report/:reportName`
@@ -51,6 +54,14 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 - `/:slug` (shared report alias)
 
 **After Phase A/B:** `accountId` is resolved from the logged-in user (no selector). Routes above that use `:accountId` stay; links are built with the resolved account. Only the two report view routes `brady` and `master-report` are removed; single entry is Data Studio.
+  
+**After Phase 5D/E:** Prefer accountless tool entry routes (keep `:accountId` variants for backward compatibility and deep links):
+- `/tools/reports` (Data Studio only)
+- `/tools/data-sources`
+- `/tools/dimensions`
+- `/tools/data`
+- `/tools/forecasting`
+- `/tools/price-widget`
 
 ## Current pain points (why we’re refactoring)
 
@@ -88,7 +99,36 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 
 ### Phase 5 — Cleanup (LOW)
 
-- [ ] Delete unused utilities/assets guarded by “Used in current stack?” checklist
+- [x] Fix data-fetching mapping bugs: comparison keying, column ordering, duplicate mapper, debug logs, type-detection threshold
+- [x] Delete unused utilities/assets guarded by “Used in current stack?” checklist
+
+#### Phase 5 evidence (Verify → Delete)
+
+Deleted unused one-off repair scripts (not imported; no runtime route usage; no tests; not used by Edge Functions):
+
+- `src/lib/fix-diji-sem-views.ts`
+- `src/lib/fix-diji-social-views.ts`
+- `src/lib/force-refresh-views.ts`
+- `src/lib/metasearch-resync-fix.ts`
+- `src/lib/dimension-sync-auto-fix.ts`
+- `src/lib/debug-report-issues.ts`
+
+Verification notes:
+
+- **No imports in `src/`**: confirmed via repo search for each filename/module name prior to deletion.
+- **No runtime references**: these were not referenced by routes, lazy imports, or dynamic requires.
+- **No tests depend on it**: no matches found outside the files themselves.
+- **No Edge Functions depend on it**: nothing under `supabase/functions/` referenced these modules.
+
+#### Route + shared-link contract updates
+
+- Shared report links **stay on** `/shared/:slug` and do **not** redirect into `/tools/*` routes.
+- Internal navigation no longer generates `/tools/*/${accountId}` links for AI summaries; deep links can use `/tools/report/:uuid` (resolved to the owning account server-side by lookup).
+
+#### Build/lint verification
+
+- `npm run build` ✅ (2026-03-18)
+- `npm run lint` ✅ (2026-03-18, warnings only)
 
 ---
 
@@ -158,6 +198,104 @@ Only after all above are checked, proceed to deletion.
   - **Unit tests — mapping validation:** Added `src/lib/__tests__/utils.kpi.test.ts` for `sortKPIsByDefaultOrder` and `getAccountDefaultKPIs` (9 tests: priority order, Roomstay exact casing, fallback for non-Roomstay, no duplicate KPIs).
   - **Integration tests — report view:** Added `src/pages/__tests__/reportView.integration.test.tsx`: PerformanceTable (core report view) rendered with QueryClientProvider and minimal props; two tests (renders without crashing, shows loading or content when reportId is null).
   - **Verification:** `pnpm run test -- --run` 49 tests passed; `pnpm run build` ✅; `pnpm run lint` ✅ (0 errors, warnings only).
+
+- **Phase 5 (Data-fetching mapping fixes) — 2026-03-18:**
+  - **Fix 1 — Duplicate `mapDimensionIdsLocal`:** Removed the inline copy of `mapDimensionIds` from `usePerformanceTableViews.ts` (lines 184–230). All four call-sites (`group_by_dimensions`, `breakdown_by_dimensions`, `then_by_dimensions`, `filter_dimensions`) now call the canonical `mapDimensionIds` from `src/lib/performanceTable/viewSettingsMapper.ts` (already imported). No behavior change; single implementation maintained.
+  - **Fix 2 — Comparison data map keying bug:** `compareDataMap` in `usePerformanceTableData.ts` was keyed by `String(dv[firstDimId])` — when the first `groupByDimension` was a date, comparison rows were bucketed by date string instead of channel. Fixed: introduced `buildGroupKey` that composes all `groupByDimensions` values with `||` separator, used for both building the map and looking up per-row compare data.
+  - **Fix 3 — `mapVisibleColumns` column-order bug:** The original implementation appended valid IDs *after* stale-resolved IDs, breaking the persisted column order. Rewrote to: (a) batch-fetch stale IDs in one query, (b) build a `staleIdResolutionMap`, then (c) iterate the original `visibleColumnIds` in order — resolving each to its current account-scoped ID while deduplicating — so output order matches input order.
+  - **Fix 4 — Remove `[testing]` debug log prefixes:** Replaced `[testing]` prefix in `viewSettingsMapper.ts` `console.log/warn/error` calls with `[viewSettingsMapper]` for consistent production log attribution.
+  - **Fix 5 — `autoDetectColumnType` threshold bug:** The 70% threshold was computed against `nonEmptyValues.length` (all rows) but the loop only checked the first 10 values, so the denominator was inflated for large columns. Fixed: capped `sample = nonEmptyValues.slice(0, 10)` and computed `total = sample.length` so threshold is consistent with the actual sample inspected.
+  - **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors, warnings only — all pre-existing).
+
+- **Phase 5 (Cleanup) — 2026-03-18:**
+  - **Route cleanup:** `/tools/data` and `/tools/forecasting` were legacy “account picker + CRUD” pages. Replaced both with redirect-only pages that resolve the single account via `useUserAccount()` and navigate to `/tools/data/:accountId` and `/tools/forecasting/:accountId` respectively.
+  - **Deleted (after verification):**
+    - `src/components/CreateAccountModal.tsx`
+    - `src/components/EditAccountModal.tsx`
+    - `src/components/DeleteAccountDialog.tsx`
+    - `src/lib/migrate-to-account-dimensions.ts`
+  - **Used in current stack? (verification checklist):**
+    - [x] No imports found in `src/` (search for `CreateAccountModal|EditAccountModal|DeleteAccountDialog|migrate-to-account-dimensions`)
+    - [x] No runtime references (routes/imports): entry routes now point to redirect pages; no lazy/dynamic imports found for the deleted modules
+    - [x] No tests depend on it (no matches in `src/**/__tests__` and `src/**/*.test.*`)
+    - [x] No Edge Functions depend on it (no matches in `supabase/functions`)
+    - [x] No DB schema/migrations impacted (pure frontend/library deletion)
+  - **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors, warnings only — all pre-existing).
+  - **Deleted (after verification):**
+    - `src/components/ReportsSidebarDemo.tsx`
+    - `src/pages/DevPage.tsx`
+  - **Route changes:** removed `/demo/sidebar` and `/dev` from `src/App.tsx`.
+  - **Used in current stack? (verification checklist):**
+    - [x] No imports found in `src/` besides `src/App.tsx`
+    - [x] No runtime references (routes removed; no lazy/dynamic imports)
+    - [x] No tests depend on it
+    - [x] No Edge Functions depend on it
+    - [x] No DB schema/migrations impacted
+  - **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors, warnings only — all pre-existing).
+  - **Deleted (after verification):**
+    - `src/lib/priceCheckDataRaw.ts`
+  - **Used in current stack? (verification checklist):**
+    - [x] No imports found in `src/` (search for `PRICE_CHECK_DATA_RAW` / `priceCheckDataRaw`)
+    - [x] No runtime references (no routes/lazy/dynamic imports)
+    - [x] No tests depend on it
+    - [x] No Edge Functions depend on it
+    - [x] No DB schema/migrations impacted
+  - **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors, warnings only — all pre-existing).
+  - **Deleted (after verification):**
+    - `src/components/MasterReportSetupModal.tsx`
+    - `src/components/MasterReportSettingsModal.tsx`
+    - `src/components/MasterReportTable.tsx`
+  - **Unified path:** removed the legacy “Master report” UI/data pathway from `AISummaryPage.tsx` so AI summaries no longer rely on a parallel aggregation pipeline. Data Studio / PerformanceTable remains the canonical report view pipeline.
+  - **Used in current stack? (verification checklist):**
+    - [x] No imports found in `src/` (search for `MasterReportSetupModal|MasterReportSettingsModal|MasterReportTable`)
+    - [x] No runtime references (no routes/lazy/dynamic imports)
+    - [x] No tests depend on it
+    - [x] No Edge Functions depend on it
+    - [x] No DB schema/migrations impacted
+  - **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors, warnings only — all pre-existing).
+  - **Single-view report UX:** Data Studio is the only report view now.
+    - `/tools/reports/:accountId` redirects to `/tools/reports/:accountId/data-studio`
+    - `/tools/reports/:accountId/view/:slideId` redirects to `/tools/reports/:accountId/data-studio`
+  - **Deleted (after verification):**
+    - `src/components/slides/SlideListItem.tsx`
+    - `src/components/slides/CreateSlideModal.tsx`
+    - `src/components/slides/CreateChildReportModal.tsx`
+  - **Used in current stack? (verification checklist):**
+    - [x] No imports found in `src/` (search for `SlideListItem|CreateSlideModal|CreateChildReportModal`)
+    - [x] No runtime references (routes now redirect; no lazy/dynamic imports)
+    - [x] No tests depend on it
+    - [x] No Edge Functions depend on it
+    - [x] No DB schema/migrations impacted
+  - **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors, warnings only — all pre-existing).
+  - **Deleted (after verification):**
+    - `src/hooks/useSlides.ts`
+  - **Used in current stack? (verification checklist):**
+    - [x] No imports found in `src/` (search for `@/hooks/useSlides` / `useSlides(`)
+    - [x] No runtime references (route entrypoints removed; no dynamic imports)
+    - [x] No tests depend on it
+    - [x] No Edge Functions depend on it
+    - [x] No DB schema/migrations impacted
+  - **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors, warnings only — all pre-existing).
+  - **Route slug simplification:** Added short entry routes that resolve the user’s account and redirect to the account-scoped pages:
+    - `/tools/reports` → `/tools/reports/:accountId/data-studio`
+    - `/tools/data-sources` → `/tools/data-sources/:accountId`
+    - `/tools/dimensions` → `/tools/dimensions/:accountId`
+    - `/tools/price-widget` → `/tools/price-widget/:accountId`
+  - **Removed legacy route:** `/tools/reports/:accountId/view/:slideId` removed from `src/App.tsx` (single-view contract).
+  - **Accountless routes now render tool pages directly:** `ReportDashboard`, `ForecastingDashboard`, `DataSourcesPage`, `DimensionsPage`, `SlideViewPage`, `PriceWidgetPage` now resolve `accountId` from `useUserAccount()` when missing from the URL.
+  - **No more accountId links generated:** updated in-app navigation to prefer short routes:
+    - reports sidebar + dropdowns now navigate to `/tools/data?reportId=...`
+    - price widget detail “back” now navigates to `/tools/price-widget`
+    - shared report redirect now navigates to `/tools/reports` (single-view contract)
+    - slides legacy redirect now navigates to `/tools/reports`
+  - **Deleted (after verification):**
+    - `src/pages/ReportsEntry.tsx`
+    - `src/pages/DataSourcesEntry.tsx`
+    - `src/pages/DimensionsEntry.tsx`
+    - `src/pages/PriceWidgetEntry.tsx`
+    - `src/pages/ReportTool.tsx`
+    - `src/pages/ForecastingTool.tsx`
+  - **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors, warnings only — all pre-existing).
 
 ---
 

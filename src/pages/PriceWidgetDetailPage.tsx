@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, LogOut, Hotel, Calendar, Users, DollarSign } from "lucide-react";
+import { useUserAccount } from "@/hooks/useUserAccount";
 
 interface Account {
   id: string;
@@ -35,7 +36,9 @@ interface ProviderPrice {
 
 export default function PriceWidgetDetailPage() {
   const navigate = useNavigate();
-  const { accountId, widgetId } = useParams<{ accountId: string; widgetId: string }>();
+  const { accountId: urlAccountId, widgetId } = useParams<{ accountId?: string; widgetId: string }>();
+  const { account: resolvedAccount } = useUserAccount();
+  const accountId = urlAccountId ?? resolvedAccount?.id ?? null;
   const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [widget, setWidget] = useState<PriceWidget | null>(null);
@@ -158,7 +161,7 @@ export default function PriceWidgetDetailPage() {
             description: "This widget does not exist.",
             variant: "destructive",
           });
-          navigate(`/tools/price-widget/${accountId}`);
+          navigate(`/tools/price-widget`);
           return;
         }
         throw error;
@@ -170,7 +173,7 @@ export default function PriceWidgetDetailPage() {
           description: "This widget does not exist.",
           variant: "destructive",
         });
-        navigate(`/tools/price-widget/${accountId}`);
+        navigate(`/tools/price-widget`);
         return;
       }
       
@@ -183,7 +186,7 @@ export default function PriceWidgetDetailPage() {
         description: "Failed to load widget.",
         variant: "destructive",
       });
-      navigate(`/tools/price-widget/${accountId}`);
+      navigate(`/tools/price-widget`);
     }
   };
 
@@ -250,7 +253,7 @@ export default function PriceWidgetDetailPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate(`/tools/price-widget/${accountId}`)}
+              onClick={() => navigate(`/tools/price-widget`)}
               title="Back to widgets list"
             >
               <ArrowLeft className="h-4 w-4" />

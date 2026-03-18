@@ -244,13 +244,16 @@ export const createOrGetDimension = async (
 export const autoDetectColumnType = (sampleValues: any[]): { type: string; dateFormat?: string } => {
   const nonEmptyValues = sampleValues.filter(v => v !== null && v !== undefined && String(v).trim() !== '');
   if (nonEmptyValues.length === 0) return { type: 'text' };
+
+  // Use the same capped sample for both counting and threshold calculation
+  const sample = nonEmptyValues.slice(0, 10);
   
   let dateCount = 0;
   let currencyCount = 0;
   let percentageCount = 0;
   let numberCount = 0;
   
-  for (const value of nonEmptyValues.slice(0, 10)) { // Check first 10 non-empty values
+  for (const value of sample) {
     const stringValue = String(value).trim();
     
     // Check for date patterns
@@ -276,7 +279,7 @@ export const autoDetectColumnType = (sampleValues: any[]): { type: string; dateF
     }
   }
   
-  const total = nonEmptyValues.length;
+  const total = sample.length;
   
   // Determine type based on majority (>= 70% threshold)
   if (dateCount / total >= 0.7) {

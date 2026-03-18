@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { syncDataSource } from "@/lib/sync-utils";
+import { useUserAccount } from "@/hooks/useUserAccount";
 
 interface DataSource {
   id: string;
@@ -50,7 +51,9 @@ interface Report {
 }
 
 export default function DataSourcesPage() {
-  const { accountId } = useParams<{ accountId: string }>();
+  const { accountId: urlAccountId } = useParams<{ accountId?: string }>();
+  const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
+  const accountId = urlAccountId ?? resolvedAccount?.id ?? null;
   const navigate = useNavigate();
   const [dataSources, setDataSources] = useState<DataSource[]>([]);
   const [reports, setReports] = useState<Report[]>([]);

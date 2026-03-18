@@ -24,6 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useUserAccount } from "@/hooks/useUserAccount";
 
 interface Account {
   id: string;
@@ -100,7 +101,9 @@ interface ApiProviderResponse {
 
 export default function PriceWidgetPage() {
   const navigate = useNavigate();
-  const { accountId } = useParams<{ accountId: string }>();
+  const { accountId: urlAccountId } = useParams<{ accountId?: string }>();
+  const { account: resolvedAccount } = useUserAccount();
+  const accountId = urlAccountId ?? resolvedAccount?.id ?? null;
   const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);

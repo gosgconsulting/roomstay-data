@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
@@ -27,6 +27,7 @@ import { DimensionsListModal } from "@/components/DimensionsListModal";
 import { ReportModal } from "@/components/ReportModal";
 import { CreateAISummaryModal } from "@/components/CreateAISummaryModal";
 import { CacheStatusIndicator } from "@/components/CacheStatusIndicator";
+import { useUserAccount } from "@/hooks/useUserAccount";
 
 interface Account {
   id: string;
@@ -40,9 +41,11 @@ type SidebarReport = { id: string; name: string; account_id: string | null; crea
 
 export default function ReportDashboard() {
   const navigate = useNavigate();
-  const { accountId } = useParams<{ accountId: string }>();
+  const { accountId: urlAccountId } = useParams<{ accountId?: string }>();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
+  const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
+  const accountId = useMemo(() => urlAccountId ?? resolvedAccount?.id ?? null, [urlAccountId, resolvedAccount?.id]);
   const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -210,6 +213,14 @@ export default function ReportDashboard() {
     }
   }, [session, accountId]);
 
+  // When using accountless routes, we still need an account to query data.
+  // This keeps the page in its loading state until we can resolve it.
+  useEffect(() => {
+    if (!urlAccountId && isResolvingAccount) {
+      setIsLoading(true);
+    }
+  }, [urlAccountId, isResolvingAccount]);
+
   const loadAISummaries = async () => {
     if (!session || !accountId) return;
     
@@ -234,8 +245,8 @@ export default function ReportDashboard() {
     if (reportsList.length > 0) {
       const { getReportUrlWithSummary } = await import("@/lib/report-url");
       navigate(getReportUrlWithSummary(reportsList[0].name, summaryId));
-    } else if (accountId) {
-      navigate(`/tools/report/${accountId}/${summaryId}`);
+    } else {
+      navigate(`/tools/report/${summaryId}`);
     }
   };
 
@@ -454,9 +465,7 @@ export default function ReportDashboard() {
   
   const handleEditReport = (id: string) => {
     // Navigate to the report tool for editing the selected report
-    const url = accountId
-      ? `/tools/data/${accountId}?reportId=${id}`
-      : `/tools/data?reportId=${id}`;
+    const url = `/tools/data?reportId=${id}`;
     navigate(url);
   };
 
@@ -716,7 +725,7 @@ export default function ReportDashboard() {
             onOpenChange={setShowDataSourcesListModal}
             reportId={reportId || ""}
             accountId={accountId}
-            onAddNew={() => navigate(accountId ? `/tools/data/${accountId}?reportId=${reportId}` : `/tools/data?reportId=${reportId}`)}
+            onAddNew={() => navigate(`/tools/data?reportId=${reportId}`)}
             onDataSync={() => refreshData()}
             onRefreshData={() => refreshData()}
           />
@@ -724,8 +733,8 @@ export default function ReportDashboard() {
           <DimensionsListModal
             open={showDimensionsListModal}
             onOpenChange={setShowDimensionsListModal}
-            onAddNew={() => navigate(accountId ? `/tools/data/${accountId}?reportId=${reportId}` : `/tools/data?reportId=${reportId}`)}
-            onEdit={() => navigate(accountId ? `/tools/data/${accountId}?reportId=${reportId}` : `/tools/data?reportId=${reportId}`)}
+            onAddNew={() => navigate(`/tools/data?reportId=${reportId}`)}
+            onEdit={() => navigate(`/tools/data?reportId=${reportId}`)}
             refreshTrigger={loadingGeneration}
             reportId={reportId}
             accountId={accountId}
@@ -779,8 +788,8 @@ export default function ReportDashboard() {
           if (reportsList.length > 0) {
             const { getReportUrlWithSummary } = await import("@/lib/report-url");
             navigate(getReportUrlWithSummary(reportsList[0].name, summary.id));
-          } else if (accountId) {
-            navigate(`/tools/report/${accountId}/${summary.id}`);
+          } else {
+            navigate(`/tools/report/${summary.id}`);
           }
         }}
       />
