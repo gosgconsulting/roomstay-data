@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { checkDimensionsHaveData, filterDimensionsByDataAvailability } from "@/lib/dimensionUtils";
+import { checkDimensionsHaveData } from "@/lib/dimensionUtils";
+import { getAccountIdFromReport, loadDimensionsForUser } from "@/lib/dimensionLoader";
 import type { DimensionCondition, FormulaConditionPair } from "@/types/dimensions";
 import { useUser } from "@/lib/auth";
 
@@ -25,8 +26,8 @@ interface UsePerformanceTableDimensionsOptions {
 }
 
 /**
- * Hook for loading dimensions and checking data availability in PerformanceTable
- * Priority: Account dimensions (shared across account) > Global dimensions > Custom dimensions (report-specific)
+ * Hook for loading dimensions and checking data availability in PerformanceTable.
+ * Uses canonical dimension loading (account > custom > global) via loadDimensionsForUser.
  */
 export function usePerformanceTableDimensions({
   reportId,
@@ -47,7 +48,6 @@ export function usePerformanceTableDimensions({
       setDimensionHasData(hasDataMap);
     } catch (error) {
       console.error('[DIMENSIONS] Error checking dimension data availability:', error);
-      // Set all dimensions as having data to prevent UI issues
       const fallbackMap = dimensionIds.reduce((acc, id) => ({ ...acc, [id]: true }), {});
       setDimensionHasData(fallbackMap);
     }
@@ -59,130 +59,26 @@ export function usePerformanceTableDimensions({
       setIsLoadingDimensions(false);
       return;
     }
-    
+    if (!user) {
+      console.error("[DIMENSIONS] User not authenticated");
+      setIsLoadingDimensions(false);
+      return;
+    }
+
     try {
       setIsLoadingDimensions(true);
-      console.log('[DIMENSIONS] Starting dimension loading for report:', reportId);
-      
-      if (!user) {
-        console.error("[DIMENSIONS] User not authenticated");
-        setIsLoadingDimensions(false);
-        return;
-      }
+      console.log('[DIMENSIONS] Loading dimensions for report:', reportId);
 
-      // Resolve accountId if not provided
-      let resolvedAccountId = accountId;
-      if (!resolvedAccountId) {
-        try {
-          const { data: reportData, error: reportError } = await supabase
-            .from("reports")
-            .select("account_id")
-            .eq("id", reportId)
-            .single();
-          
-          if (reportError) {
-            console.warn('[DIMENSIONS] Error fetching report account_id:', reportError);
-          } else {
-            resolvedAccountId = reportData?.account_id || null;
-          }
-        } catch (reportFetchError) {
-          console.warn('[DIMENSIONS] Error resolving account ID:', reportFetchError);
-        }
-      }
-
-      console.log('[DIMENSIONS] Loading dimensions for user:', user.id, 'account:', resolvedAccountId, 'report:', reportId);
-
-      // Initialize arrays for different dimension types
-      let accountData: any[] = [];
-      let globalData: any[] = [];
-      let customData: any[] = [];
-
-      // 1. Load account-specific dimensions (HIGHEST PRIORITY - shared across all reports in account)
-      if (resolvedAccountId) {
-        try {
-          const { data, error: accountError } = await supabase
-            .from("dimensions")
-            .select("*")
-            .eq("scope", "account")
-            .eq("account_id", resolvedAccountId)
-            .order("created_at", { ascending: false });
-
-          if (accountError) {
-            console.error('[DIMENSIONS] Error loading account dimensions:', accountError);
-          } else {
-            accountData = (data || []);
-            console.log('[DIMENSIONS] Loaded account dimensions:', accountData.length);
-          }
-        } catch (accountLoadError) {
-          console.error('[DIMENSIONS] Exception loading account dimensions:', accountLoadError);
-        }
-      }
-
-      // 2. Load global dimensions (MEDIUM PRIORITY - available to all users)
-      try {
-        const { data, error: globalError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "global")
-          .order("created_at", { ascending: false });
-
-        if (globalError) {
-          console.error('[DIMENSIONS] Error loading global dimensions:', globalError);
-        } else {
-          globalData = (data || []);
-          console.log('[DIMENSIONS] Loaded global dimensions:', globalData.length);
-        }
-      } catch (globalLoadError) {
-        console.error('[DIMENSIONS] Exception loading global dimensions:', globalLoadError);
-      }
-
-      // 3. Load custom dimensions for this user and report (LOWEST PRIORITY - report-specific only)
-      try {
-        const { data, error: customError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("scope", "custom")
-          .eq("report_id", reportId) // Only load custom dimensions for this specific report
-          .order("created_at", { ascending: false });
-
-        if (customError) {
-          console.error('[DIMENSIONS] Error loading custom dimensions:', customError);
-        } else {
-          customData = (data || []);
-          console.log('[DIMENSIONS] Loaded custom dimensions for report:', customData.length);
-        }
-      } catch (customLoadError) {
-        console.error('[DIMENSIONS] Exception loading custom dimensions:', customLoadError);
-      }
-
-      // Combine all dimensions with proper priority: account > global > custom
-      const combinedDimensions = [
-        ...accountData,
-        ...globalData,
-        ...customData
-      ].map(d => ({
+      const resolvedAccountId = accountId ?? (await getAccountIdFromReport(reportId));
+      const baseRows = await loadDimensionsForUser(user.id, reportId, {
+        accountId: resolvedAccountId ?? undefined,
+      });
+      const allDimensions = baseRows.map((d) => ({
         ...d,
-        conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as DimensionCondition[]
-      }));
+        conditions: (Array.isArray(d.conditions) ? d.conditions : []) as unknown as DimensionCondition[],
+      })) as Dimension[];
 
-      // Deduplicate dimensions by name (keep first occurrence, which prioritizes account-scoped)
-      const seenNames = new Set<string>();
-      const allDimensions = combinedDimensions.filter(dim => {
-        if (!dim || !dim.name || seenNames.has(dim.name.toLowerCase().trim())) {
-          return false;
-        }
-        seenNames.add(dim.name.toLowerCase().trim());
-        return true;
-      });
-
-      console.log('[DIMENSIONS] Final dimensions loaded:', {
-        account: accountData.length,
-        global: globalData.length, 
-        custom: customData.length,
-        total: allDimensions.length,
-        accountId: resolvedAccountId
-      });
+      console.log('[DIMENSIONS] Canonical dimensions loaded:', allDimensions.length, 'accountId:', resolvedAccountId);
 
       // Check if budgets exist for this account/report
       let budgetDimension = null;

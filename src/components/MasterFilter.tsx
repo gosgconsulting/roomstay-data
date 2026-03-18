@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useUser } from "@/lib/auth";
+import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 
 interface Dimension {
   id: string;
@@ -52,34 +53,15 @@ export const MasterFilter = ({
   const loadDimensions = async () => {
     try {
       setIsLoading(true);
-      console.log('[MASTER-FILTER] Loading dimensions for account:', accountId);
-
       if (!user) return;
 
-      // Load dimensions that can be used as master filters (text type only)
-      let query = supabase
-        .from('dimensions')
-        .select('id, name, type, scope')
-        .eq('type', 'text') // Only text dimensions can be used as master filters
-        .in('scope', ['global', 'account']);
-
-      if (accountId) {
-        query = query.or(`account_id.eq.${accountId},scope.eq.global`);
-      } else {
-        query = query.eq('scope', 'global');
-      }
-
-      const { data, error } = await query.order('name');
-
-      if (error) {
-        console.error('[MASTER-FILTER] Error loading dimensions:', error);
-        return;
-      }
-
-      console.log('[MASTER-FILTER] Loaded dimensions:', data?.length || 0);
-      setDimensions(data || []);
+      const list = await loadDimensionsForUser(user.id, undefined, {
+        accountId: accountId ?? undefined,
+        typeFilter: "text",
+      });
+      setDimensions(list.map((d) => ({ id: d.id, name: d.name, type: d.type, scope: String((d as { scope?: string }).scope ?? "") })));
     } catch (error) {
-      console.error('[MASTER-FILTER] Error in loadDimensions:', error);
+      console.error('[MASTER-FILTER] Error loading dimensions:', error);
     } finally {
       setIsLoading(false);
     }

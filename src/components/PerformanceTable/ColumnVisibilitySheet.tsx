@@ -34,6 +34,8 @@ interface ColumnVisibilitySheetProps {
   isSaving: boolean;
   onApply: () => void;
   onCancel: () => void;
+  /** When provided with `open`, sheet is controlled; Apply/Cancel will call onOpenChange(false) to close. */
+  open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onRefreshDimensions?: () => void;
 }
@@ -51,6 +53,7 @@ export function ColumnVisibilitySheet({
   isSaving,
   onApply,
   onCancel,
+  open,
   onOpenChange,
   onRefreshDimensions,
 }: ColumnVisibilitySheetProps) {
@@ -61,13 +64,26 @@ export function ColumnVisibilitySheet({
     })
   );
 
+  const handleOpenChange = (next: boolean) => {
+    if (next && onRefreshDimensions) onRefreshDimensions();
+    onOpenChange?.(next);
+  };
+
+  const handleApply = () => {
+    onApply();
+    onOpenChange?.(false);
+  };
+
+  const handleCancel = () => {
+    onCancel();
+    onOpenChange?.(false);
+  };
+
   return (
-    <Sheet onOpenChange={(open) => {
-      if (open && onRefreshDimensions) {
-        onRefreshDimensions();
-      }
-      onOpenChange?.(open);
-    }}>
+    <Sheet
+      open={open}
+      onOpenChange={handleOpenChange}
+    >
       <SheetTrigger asChild>
         <Button variant="outline" size="icon" className="h-9 w-9">
           <Columns3 className="h-4 w-4" />
@@ -114,7 +130,7 @@ export function ColumnVisibilitySheet({
           <div className="border-t pt-4 mt-6 space-y-3">
             <div className="flex gap-2">
               <Button 
-                onClick={onApply} 
+                onClick={handleApply} 
                 disabled={isSaving}
                 className="flex-1 gap-2"
                 variant="default"
@@ -123,7 +139,7 @@ export function ColumnVisibilitySheet({
                 {isSaving ? "Applying..." : "Apply Changes"}
               </Button>
               <Button 
-                onClick={onCancel} 
+                onClick={handleCancel} 
                 disabled={isSaving}
                 variant="outline"
                 className="gap-2"

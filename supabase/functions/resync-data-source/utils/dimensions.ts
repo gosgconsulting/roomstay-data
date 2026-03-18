@@ -1,6 +1,11 @@
 /**
  * Dimension mapping and auto-detection functions
- * 
+ *
+ * Precedence (canonical, aligned with frontend src/lib/dimensionLoader.ts):
+ * 1. Account-specific dimensions
+ * 2. Custom dimensions (user/report)
+ * 3. Global dimensions
+ *
  * @module dimensions
  */
 

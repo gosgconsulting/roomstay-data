@@ -352,6 +352,7 @@ export function KPISettingsModal({
   const cancelSettings = () => {
     setKpis([...initialKpis]);
     console.log('[KPI-SETTINGS] Cancelled KPI settings changes');
+    onOpenChange(false);
   };
 
   const hasUnsavedChanges = () => {

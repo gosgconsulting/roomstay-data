@@ -5,6 +5,24 @@ export interface Dimension {
   id: string;
   name: string;
   type: string;
+  [key: string]: unknown; // allow full row from select("*")
+}
+
+/**
+ * Canonical dimension loading precedence (aligned with Edge Functions):
+ * 1. Account-specific dimensions (highest priority)
+ * 2. Custom dimensions (user-specific, report-scoped or report_id null)
+ * 3. Global dimensions (templates/fallback)
+ */
+
+/**
+ * Deduplicates dimensions by name, keeping the first occurrence (used for canonical precedence).
+ * Pure function for unit testing.
+ */
+export function dedupeDimensionsByName<T extends { name: string }>(dimensions: T[]): T[] {
+  return dimensions.filter(
+    (dim, index, arr) => arr.findIndex((d) => d.name === dim.name) === index
+  );
 }
 
 /**
@@ -23,57 +41,54 @@ export async function getAccountIdFromReport(reportId: string): Promise<string |
 }
 
 /**
- * Loads dimensions for a user, prioritizing by scope:
- * 1. Account-specific dimensions (highest priority)
- * 2. Custom dimensions (user-specific)
- * 3. Global dimensions (templates/fallback)
- * 
+ * Loads dimensions for a user using canonical precedence (account > custom > global).
+ * Single source of truth for dimension loading; Edge Functions use the same rules.
+ *
  * @param userId - The ID of the user
- * @param reportId - Optional report ID to get account-specific dimensions
- * @param options - Optional configuration for filtering
+ * @param reportId - Optional report ID (used to resolve account and for report-scoped custom dimensions)
+ * @param options - Optional configuration
  * @returns Promise<Dimension[]> - Array of unique dimensions
  */
 export async function loadDimensionsForUser(
   userId: string,
   reportId?: string,
   options: {
-    filterByDataAvailability?: boolean;  // Filter to only dimensions with data
-    alwaysIncludeDate?: boolean;         // Always include date dimensions
-    alwaysIncludeCalculated?: boolean;   // Always include calculated/formula dimensions
-    fallbackOnError?: boolean;           // Return all dimensions if filtering fails
+    accountId?: string;  // When provided, used directly instead of resolving from reportId
+    filterByDataAvailability?: boolean;
+    alwaysIncludeDate?: boolean;
+    alwaysIncludeCalculated?: boolean;
+    fallbackOnError?: boolean;
+    typeFilter?: 'text';  // When set, return only dimensions with this type
   } = {}
 ): Promise<Dimension[]> {
-  const { filterByDataAvailability = false, alwaysIncludeDate = true, alwaysIncludeCalculated = true, fallbackOnError = true } = options;
-  
-  // console.log('[testing] DimensionLoader - Loading dimensions for user:', userId, {
-  //   reportId,
-  //   filterByDataAvailability,
-  //   alwaysIncludeDate,
-  //   alwaysIncludeCalculated
-  // });
+  const {
+    accountId: optionsAccountId,
+    filterByDataAvailability = false,
+    alwaysIncludeDate = true,
+    alwaysIncludeCalculated = true,
+    fallbackOnError = true,
+    typeFilter,
+  } = options;
 
-  let accountId: string | null = null;
+  let accountId: string | null = optionsAccountId ?? null;
   let accountData: Dimension[] | null = null;
 
-  // Load account-specific dimensions if reportId is provided
-  if (reportId) {
+  if (!accountId && reportId) {
     accountId = await getAccountIdFromReport(reportId);
-    
-    if (accountId) {
-      const { data: accData, error: accountError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("scope", "account")
-        .eq("account_id", accountId)
-        .order("created_at", { ascending: false });
-
-      if (accountError) throw accountError;
-      accountData = accData as Dimension[];
-      // console.log('[testing] DimensionLoader - Loaded account-specific dimensions:', accData?.length || 0);
-    }
   }
 
-  // Load global dimensions (templates)
+  if (accountId) {
+    const { data: accData, error: accountError } = await supabase
+      .from("dimensions")
+      .select("*")
+      .eq("scope", "account")
+      .eq("account_id", accountId)
+      .order("created_at", { ascending: false });
+
+    if (accountError) throw accountError;
+    accountData = (accData || []) as Dimension[];
+  }
+
   const { data: globalData, error: globalError } = await supabase
     .from("dimensions")
     .select("*")
@@ -82,28 +97,33 @@ export async function loadDimensionsForUser(
 
   if (globalError) throw globalError;
 
-  // Load user's custom dimensions
-  const { data: customData, error: customError } = await supabase
+  let customQuery = supabase
     .from("dimensions")
     .select("*")
     .eq("scope", "custom")
     .eq("user_id", userId)
-    .or(`report_id.is.null,report_id.eq.${reportId}`)
     .order("created_at", { ascending: false });
 
+  if (reportId) {
+    customQuery = customQuery.or(`report_id.is.null,report_id.eq.${reportId}`);
+  } else {
+    customQuery = customQuery.is("report_id", null);
+  }
+
+  const { data: customData, error: customError } = await customQuery;
   if (customError) throw customError;
 
-  // Combine all dimensions with priority: account > custom > global
   const allDimensions = [
     ...(accountData || []),
     ...(customData || []),
-    ...(globalData || [])
-  ];
+    ...(globalData || []),
+  ] as Dimension[];
 
-  // Remove duplicates by name, keeping the first occurrence (most specific scope)
-  const uniqueDimensions = allDimensions.filter((dim, index, arr) => 
-    arr.findIndex(d => d.name === dim.name) === index
-  );
+  const uniqueDimensions = dedupeDimensionsByName(allDimensions);
+
+  let result = typeFilter === "text"
+    ? uniqueDimensions.filter((d) => d.type === "text")
+    : uniqueDimensions;
 
   // console.log('[testing] DimensionLoader - Loaded dimensions before filtering:', {
   //   global: globalData?.length || 0,
@@ -112,35 +132,26 @@ export async function loadDimensionsForUser(
   //   total: uniqueDimensions.length
   // });
 
-  // Filter by data availability if requested and reportId is provided
-  let finalDimensions = uniqueDimensions;
   if (filterByDataAvailability && reportId) {
     try {
-      // console.log('[testing] DimensionLoader - Filtering dimensions by data availability...');
-      finalDimensions = await filterDimensionsByDataAvailability(
-        uniqueDimensions,
+      result = await filterDimensionsByDataAvailability(
+        result,
         reportId,
         {
           alwaysIncludeDate,
           alwaysIncludeCalculated,
-          fallbackOnError
+          fallbackOnError,
         }
       );
-      // console.log('[testing] DimensionLoader - Data availability filtering:', {
-      //   original: uniqueDimensions.length,
-      //   filtered: finalDimensions.length,
-      //   excluded: uniqueDimensions.length - finalDimensions.length
-      // });
     } catch (filterError) {
-      console.error('[testing] DimensionLoader - Error filtering by data availability:', filterError);
+      console.error('[DimensionLoader] Error filtering by data availability:', filterError);
       if (fallbackOnError) {
-        finalDimensions = uniqueDimensions;
+        // keep result as-is
       } else {
         throw filterError;
       }
     }
   }
 
-  // console.log('[testing] DimensionLoader - Final dimensions loaded:', finalDimensions.length);
-  return finalDimensions;
+  return result;
 }

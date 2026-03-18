@@ -71,20 +71,20 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 
 ### Phase 2 — Canonical dimension loading + settings mapping (HIGH)
 
-- [ ] Define a single canonical dimension loading API (frontend) with precedence rules
-- [ ] Align Edge Functions to use the same rules (shared logic or identical implementation)
-- [ ] Canonicalize view settings mapping (visible columns/KPIs/orders)
+- [x] Define a single canonical dimension loading API (frontend) with precedence rules
+- [x] Align Edge Functions to use the same rules (shared logic or identical implementation)
+- [x] Canonicalize view settings mapping (visible columns/KPIs/orders)
 
 ### Phase 3 — Remove duplicate implementations (MED)
 
-- [ ] Migrate consumers to canonical PerformanceTable implementation
-- [ ] Delete legacy/duplicate table implementations and hooks after verification
-- [ ] Standardize “Apply” behavior across settings modals
+- [x] Migrate consumers to canonical PerformanceTable implementation
+- [x] Delete legacy/duplicate table implementations and hooks after verification
+- [x] Standardize “Apply” behavior across settings modals
 
 ### Phase 4 — Testing + regression harness (MED/LOW)
 
-- [ ] Add unit tests for dimension dedupe + mapping validation
-- [ ] Add integration tests around a representative report view
+- [x] Add unit tests for dimension dedupe + mapping validation
+- [x] Add integration tests around a representative report view
 
 ### Phase 5 — Cleanup (LOW)
 
@@ -140,6 +140,25 @@ Only after all above are checked, proceed to deletion.
   - **Deleted:** PerformanceTable.old.tsx, PerformanceTable.refactored.tsx, usePerformanceTableDataFixed.ts. No migration needed; consumers already use PerformanceTable and usePerformanceTableData.
   - **Verification:** npm run build ✅, npm run lint ✅ (warnings only).
 
+- **Phase 2 (Canonical dimension loading + view settings) — 2026-03-18:**
+  - **C1 — Canonical dimension loading API:** `src/lib/dimensionLoader.ts` is the single source of truth. Precedence: account > custom > global. Extended `loadDimensionsForUser(userId, reportId?, options)` with optional `accountId` (avoids resolving from report when already known), and `typeFilter: 'text'` for MasterFilter. Migrated: `usePerformanceTableDimensions` now calls `loadDimensionsForUser` and adds budget/fallback/essential KPIs on top; `DimensionsListModal` and `MasterFilter` use `loadDimensionsForUser` instead of inline fetches.
+  - **C2 — Edge Functions:** Documented in `supabase/functions/resync-data-source/utils/dimensions.ts` that precedence matches frontend (account → custom → global). No behavior change; already aligned.
+  - **C3 — View settings mapping:** Documented in `src/lib/performanceTable/viewSettingsMapper.ts` as the canonical module for mapping visible_columns, visible_kpis, kpi_order to account-scoped dimensions. usePerformanceTableViews and resync-report-views already use it.
+  - **Verification:** `pnpm run build` ✅, `pnpm run lint` ✅ (0 errors, warnings only).
+
+- **Phase 3 C6 (Standardize Apply behavior) — 2026-03-18:**
+  - **Standard:** Apply = persist (where applicable) + close modal/sheet; Cancel = revert local state + close.
+  - **KPISettingsModal:** Cancel now calls `onOpenChange(false)` after reverting state so the sheet closes (previously only reverted, sheet stayed open).
+  - **DimensionsListModal:** Cancel now calls `onOpenChange(false)` after reverting so the dialog closes.
+  - **ColumnVisibilitySheet:** Sheet is now controlled from TableHeader (`open` + `onOpenChange`). Apply and Cancel both call `onOpenChange(false)` after their action so the sheet closes. TableHeader holds `columnSheetOpen` state and passes it to ColumnVisibilitySheet.
+  - **Verification:** `pnpm run build` ✅, `pnpm run lint` ✅ (0 errors, warnings only).
+
+- **Phase 4 (Testing + regression harness) — 2026-03-18:**
+  - **Unit tests — dimension dedupe:** Exported pure `dedupeDimensionsByName<T>(dimensions: T[])` from `src/lib/dimensionLoader.ts` and added `src/lib/__tests__/dimensionLoader.test.ts` (5 tests: empty input, unique names, first-occurrence precedence, order preservation, case-sensitivity).
+  - **Unit tests — mapping validation:** Added `src/lib/__tests__/utils.kpi.test.ts` for `sortKPIsByDefaultOrder` and `getAccountDefaultKPIs` (9 tests: priority order, Roomstay exact casing, fallback for non-Roomstay, no duplicate KPIs).
+  - **Integration tests — report view:** Added `src/pages/__tests__/reportView.integration.test.tsx`: PerformanceTable (core report view) rendered with QueryClientProvider and minimal props; two tests (renders without crashing, shows loading or content when reportId is null).
+  - **Verification:** `pnpm run test -- --run` 49 tests passed; `pnpm run build` ✅; `pnpm run lint` ✅ (0 errors, warnings only).
+
 ---
 
 ## Master TODO plan
@@ -162,13 +181,13 @@ Only after all above are checked, proceed to deletion.
 
 ### C. Dimensions & KPI mapping (existing refactor)
 
-- [ ] **C1** — Phase 2: Canonical dimension loading API + precedence rules (frontend).
-- [ ] **C2** — Phase 2: Align Edge Functions to same dimension rules.
-- [ ] **C3** — Phase 2: Canonicalize view settings mapping (visible columns/KPIs/orders).
+- [x] **C1** — Phase 2: Canonical dimension loading API + precedence rules (frontend).
+- [x] **C2** — Phase 2: Align Edge Functions to same dimension rules.
+- [x] **C3** — Phase 2: Canonicalize view settings mapping (visible columns/KPIs/orders).
 - [x] **C4** — Phase 3: Migrate to canonical PerformanceTable; delete PerformanceTable.old and PerformanceTable.refactored after verification.
 - [x] **C5** — Phase 3: Delete or consolidate usePerformanceTableDataFixed; one canonical data hook.
-- [ ] **C6** — Phase 3: Standardize “Apply” behavior across settings modals.
-- [ ] **C7** — Phase 4: Unit tests for dimension dedupe + mapping validation.
+- [x] **C6** — Phase 3: Standardize “Apply” behavior across settings modals.
+- [x] **C7** — Phase 4: Unit tests for dimension dedupe + mapping validation.
 - [ ] **C8** — Phase 5: Delete unused utilities per “Used in current stack?” checklist.
 
 ### D. Database

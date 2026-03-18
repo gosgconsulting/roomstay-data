@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import type { Dimension } from "@/types/dimensions";
 import { useUser } from "@/lib/auth";
+import { loadDimensionsForUser } from "@/lib/dimensionLoader";
 
 interface DimensionsListModalProps {
   open: boolean;
@@ -296,11 +297,11 @@ export const DimensionsListModal = ({
   };
 
   const cancelVisibilityChanges = () => {
-    // Revert to initial state
     if (initialVisibleDimensions) {
       setVisibleDimensions(new Set(initialVisibleDimensions));
       console.log('[testing] Cancelled visibility changes, reverted to initial state');
     }
+    onOpenChange(false);
   };
 
   const hasUnsavedChanges = () => {
@@ -367,75 +368,22 @@ export const DimensionsListModal = ({
       setIsLoading(true);
       if (!user) throw new Error("User not authenticated");
 
-      console.log('[testing] Loading dimensions for user:', user.id, 'report:', reportId, 'account:', accountId);
-
-      // Load account-specific dimensions first (highest priority)
-      let accountData: Dimension[] = [];
-      if (accountId) {
-        const { data, error: accountError } = await supabase
-          .from("dimensions")
-          .select("*")
-          .eq("scope", "account")
-          .eq("account_id", accountId)
-          .order("created_at", { ascending: false });
-
-        if (accountError) throw accountError;
-        accountData = ((data || []) as any[]).map(d => ({
-          ...d,
-          conditions: Array.isArray(d.conditions) ? d.conditions : []
-        })) as Dimension[];
-      }
-
-      // Load custom dimensions for this user
-      let customData: Dimension[] = [];
-      const { data, error: customError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("scope", "custom")
-        .order("created_at", { ascending: false });
-
-      if (customError) throw customError;
-      customData = ((data || []) as any[]).map(d => ({
+      const uniqueDimensions = await loadDimensionsForUser(user.id, reportId, {
+        accountId: accountId ?? undefined,
+      });
+      const withConditions = uniqueDimensions.map((d) => ({
         ...d,
-        conditions: Array.isArray(d.conditions) ? d.conditions : []
+        conditions: Array.isArray(d.conditions) ? d.conditions : [],
       })) as Dimension[];
 
-      // Load global dimensions (lowest priority, fallback)
-      const { data: globalData, error: globalError } = await supabase
-        .from("dimensions")
-        .select("*")
-        .eq("scope", "global")
-        .order("created_at", { ascending: false });
-
-      if (globalError) throw globalError;
-
-      // Combine all dimensions with proper priority: account > custom > global
-      const allDimensions = [
-        ...accountData,
-        ...customData,
-        ...(globalData || [])
-      ] as Dimension[];
-
-      // Deduplicate by name, keeping highest priority (first occurrence)
-      const seenNames = new Set<string>();
-      const uniqueDimensions = allDimensions.filter(dim => {
-        if (seenNames.has(dim.name)) {
-          return false;
-        }
-        seenNames.add(dim.name);
-        return true;
-      });
-
-      console.log('[testing] Loaded dimensions - Account:', accountData?.length || 0, 'Custom:', customData?.length || 0, 'Global:', globalData?.length || 0, 'Unique:', uniqueDimensions.length);
-
-      // Separate into text and value dimensions
-      const textDims = uniqueDimensions.filter(d => d.type === 'text');
-      const valueDims = uniqueDimensions.filter(d => ['number', 'currency', 'percentage', 'date'].includes(d.type));
+      const textDims = withConditions.filter((d) => d.type === "text");
+      const valueDims = withConditions.filter((d) =>
+        ["number", "currency", "percentage", "date"].includes(d.type)
+      );
 
       setTextDimensions(textDims);
       setValueDimensions(valueDims);
-      setAllDimensions(uniqueDimensions);
+      setAllDimensions(withConditions);
     } catch (error) {
       console.error("Error loading dimensions:", error);
       toast({

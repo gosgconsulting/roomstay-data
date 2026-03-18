@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ColumnVisibilitySheet } from "./ColumnVisibilitySheet";
 import { DimensionSelectorGroup } from "./DimensionSelectorGroup";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
@@ -62,6 +63,8 @@ export function TableHeader({
   onOpenSettings,
   availableSelectorDimensions,
 }: TableHeaderProps) {
+  const [columnSheetOpen, setColumnSheetOpen] = useState(false);
+
   // Build available dimension options for selectors (text/date types)
   const selectorDimensions = dimensions
     .filter(d => d.type === 'text' || d.type === 'date')
@@ -106,6 +109,8 @@ export function TableHeader({
                 isSaving={isSavingColumnSettings}
                 onApply={onApplyColumnSettings}
                 onCancel={onCancelColumnSettings}
+                open={columnSheetOpen}
+                onOpenChange={setColumnSheetOpen}
                 onRefreshDimensions={onRefreshDimensions}
               />
               {isEditMode && (
