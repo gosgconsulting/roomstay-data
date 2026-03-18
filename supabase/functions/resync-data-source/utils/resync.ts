@@ -1,8 +1,8 @@
 import type { DataSource, ResponseBody } from './types.ts';
-import { extractSpreadsheetId } from './utils.ts';
+import { extractSpreadsheetId, parseDate } from './utils.ts';
 import { fetchGoogleSheetsData } from './google-sheets.ts';
 import { fetchCSVUrlData } from './csv-url.ts';
-import { deleteExistingData, deleteCustomDimensions, fixColumnMappings } from './database.ts';
+import { deleteExistingData, deleteRecentData, deleteCustomDimensions, fixColumnMappings } from './database.ts';
 import { buildDimensionMappingWithAutoDetection } from './dimensions.ts';
 import { transformDataRows, insertDataInBatches, updateColumnMappings } from './transform.ts';
 
@@ -46,12 +46,21 @@ import { transformDataRows, insertDataInBatches, updateColumnMappings } from './
  *   console.error(result.error);
  * }
  */
+/**
+ * refreshMode:
+ *  'full'   — delete ALL existing rows for the data source, then re-insert everything (default).
+ *  'recent' — delete only rows from the last 2 months, then re-insert only those rows.
+ *             Older historical data is preserved. Useful for fast daily/weekly refreshes.
+ */
+export type RefreshMode = 'full' | 'recent';
+
 export const resyncDataSource = async (
   supabase: any,
   supabaseUrl: string,
   supabaseAnonKey: string,
   dataSource: DataSource,
-  userId: string
+  userId: string,
+  refreshMode: RefreshMode = 'full'
 ): Promise<ResponseBody> => {
   try {
     // Get report_id and account_id
@@ -87,16 +96,20 @@ export const resyncDataSource = async (
       }
     }
 
-    console.log(`[RESYNC] Starting resync for data source: ${dataSource.name} (account: ${accountId || 'none'})`);
+    console.log(`[RESYNC] Starting resync for data source: ${dataSource.name} (account: ${accountId || 'none'}, mode: ${refreshMode})`);
     
     // Step 1: Fix problematic column mappings
     await fixColumnMappings(supabase, dataSource.id);
-    
-    // Step 2: Delete existing data (always true for resync)
-    await deleteExistingData(supabase, dataSource.id);
-    
-    // Step 3: Delete custom dimensions (always true for resync)
-    await deleteCustomDimensions(supabase, dataSource.id);
+
+    // For 'full' mode: delete all data and dimensions upfront.
+    // For 'recent' mode: we defer deletion until after we've fetched + filtered rows
+    // (we need the date column info from the data itself).
+    if (refreshMode === 'full') {
+      // Step 2: Delete existing data
+      await deleteExistingData(supabase, dataSource.id);
+      // Step 3: Delete custom dimensions (recreate from scratch)
+      await deleteCustomDimensions(supabase, dataSource.id);
+    }
 
     // Step 4: Determine source type and fetch headers/data
     const sourceType = dataSource.source_type || 'google_sheets'; // Default to google_sheets for backward compatibility
@@ -238,6 +251,9 @@ export const resyncDataSource = async (
     // Step 6: Build dimension mapping with auto-detection
     // Use first 10 rows as sample data for auto-detection
     const sampleDataForAutoDetection = allData.slice(0, 10);
+
+    // For 'recent' mode, do NOT recreate dimensions — they already exist from the full sync.
+    const recreateDimensions = refreshMode === 'full';
     
     const { dimensionIdMap, columnIndexMap, createdCount } = await buildDimensionMappingWithAutoDetection(
       supabase,
@@ -247,14 +263,47 @@ export const resyncDataSource = async (
       userId,
       reportId,
       dataSource.id,
-      true, // recreateDimensions = true for resync
+      recreateDimensions,
       accountId
     );
 
-    // Step 7: Transform data
+    // Step 7: For 'recent' mode, filter allData to only the last 2 months before transforming.
+    let dataToProcess = allData;
+    if (refreshMode === 'recent') {
+      // Find the date column index from column mappings or auto-detection
+      const dateColIndex = findDateColumnIndex(headers, dataSource.column_mappings || []);
+      if (dateColIndex >= 0) {
+        const cutoffDate = getTwoMonthsCutoff();
+        const cutoffStr = cutoffDate.toISOString().split('T')[0]; // YYYY-MM-DD
+        const before = allData.length;
+        dataToProcess = allData.filter((row) => {
+          const rawVal = row[dateColIndex];
+          if (rawVal == null || rawVal === '') return false;
+          const parsed = parseDate(String(rawVal));
+          if (!parsed) return false;
+          return parsed >= cutoffDate;
+        });
+        console.log(`[RESYNC] Recent mode: filtered ${before} rows to ${dataToProcess.length} rows (>= ${cutoffStr})`);
+
+        // Now delete only the rows in the last 2 months from the DB (find date dim ID)
+        const dateDimId = findDateDimensionId(dimensionIdMap, dataSource.column_mappings || [], headers, dateColIndex);
+        if (dateDimId) {
+          await deleteRecentData(supabase, dataSource.id, dateDimId, cutoffStr);
+        } else {
+          console.warn('[RESYNC] Recent mode: could not find date dimension ID, falling back to full delete');
+          await deleteExistingData(supabase, dataSource.id);
+        }
+      } else {
+        console.warn('[RESYNC] Recent mode: no date column found, falling back to full delete');
+        await deleteExistingData(supabase, dataSource.id);
+        dataToProcess = allData;
+      }
+    }
+
+    // Step 8: Transform data
     const rowsToInsert = await transformDataRows(
       supabase,
-      allData,
+      dataToProcess,
       dataSource.column_mappings || [],
       dimensionIdMap,
       columnIndexMap,
@@ -262,21 +311,21 @@ export const resyncDataSource = async (
       dataSource.id
     );
 
-    // Step 8: Insert data
+    // Step 9: Insert data
     await insertDataInBatches(supabase, rowsToInsert, (message) => {
       console.log(`[RESYNC] ${message}`);
     });
 
-    // Step 9: Update column mappings if dimensions were created
+    // Step 10: Update column mappings if dimensions were created
     if (createdCount > 0) {
       await updateColumnMappings(supabase, dataSource.id, dataSource.column_mappings || [], dimensionIdMap);
     }
 
-    console.log(`[RESYNC] Complete! Processed ${allData.length} rows with ${Object.keys(dimensionIdMap).length} dimensions`);
+    console.log(`[RESYNC] Complete! Processed ${dataToProcess.length} rows with ${Object.keys(dimensionIdMap).length} dimensions (mode: ${refreshMode})`);
 
     return {
       success: true,
-      rowsProcessed: allData.length,
+      rowsProcessed: dataToProcess.length,
       dimensionsCreated: createdCount,
     };
 
@@ -309,4 +358,52 @@ export const resyncDataSource = async (
     };
   }
 };
+
+// ─── Private helpers for 'recent' mode ───────────────────────────────────────
+
+/** Returns a Date representing the start of the 2-months-ago month (first day). */
+function getTwoMonthsCutoff(): Date {
+  const now = new Date();
+  // Go back 2 full months from the 1st of the current month
+  return new Date(now.getFullYear(), now.getMonth() - 2, 1);
+}
+
+/**
+ * Find the 0-based column index of the date column.
+ * Checks column_mappings for a dimension of type 'date', then falls back to
+ * header name heuristics ('date', 'day').
+ */
+function findDateColumnIndex(headers: string[], columnMappings: any[]): number {
+  // Check column_mappings for a date-type mapping
+  for (const mapping of columnMappings) {
+    if (mapping.type === 'date' || mapping.dimensionType === 'date') {
+      const idx = headers.findIndex(
+        (h) => h.toLowerCase().trim() === String(mapping.column || '').toLowerCase().trim()
+      );
+      if (idx >= 0) return idx;
+    }
+  }
+  // Fallback: header name heuristics
+  for (let i = 0; i < headers.length; i++) {
+    const h = headers[i].toLowerCase().trim();
+    if (h === 'date' || h === 'day' || h === 'report date') return i;
+  }
+  return -1;
+}
+
+/**
+ * Find the dimension ID (UUID) for the date column so we can delete by JSONB key.
+ * Looks up the column name in dimensionIdMap (which maps column header → dimension UUID).
+ */
+function findDateDimensionId(
+  dimensionIdMap: Record<string, string>,
+  columnMappings: any[],
+  headers: string[],
+  dateColIndex: number
+): string | null {
+  if (dateColIndex < 0 || dateColIndex >= headers.length) return null;
+  const colName = headers[dateColIndex];
+  // dimensionIdMap is keyed by column header name
+  return dimensionIdMap[colName] || null;
+}
 

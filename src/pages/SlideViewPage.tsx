@@ -1342,6 +1342,10 @@ export default function SlideViewPage() {
     5: 'pending',
   });
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [activeRefreshMode, setActiveRefreshMode] = useState<'full' | 'recent'>('recent');
+  const [refreshRowsProcessed, setRefreshRowsProcessed] = useState<number | null>(null);
+  // True only after user explicitly clicks "Start Refresh" in the modal — gates the refresh useEffect.
+  const [refreshPending, setRefreshPending] = useState(false);
 
   const [breakdownDimensions, setBreakdownDimensions] = useState<Record<string, Dimension[]>>({
     metasearch: [],
@@ -2763,11 +2767,20 @@ export default function SlideViewPage() {
       toast({ title: "No report", description: "Please configure your report first.", variant: "destructive" });
       return;
     }
+    // Reset everything — modal opens in mode-selection state, refresh does NOT start yet.
     setRefreshStep(0);
+    setRefreshPending(false);
+    setRefreshRowsProcessed(null);
     setRefreshStepStatus({ 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'pending' });
     setRefreshError(null);
     setIsRefreshModalOpen(true);
   }, [slideReportId]);
+
+  // Called by RefreshDataModal when user clicks "Start Refresh" with a chosen mode.
+  const handleStartRefresh = useCallback((mode: 'full' | 'recent') => {
+    setActiveRefreshMode(mode);
+    setRefreshPending(true); // This is the only thing that triggers the refresh useEffect.
+  }, []);
 
   // Invoke edge function with retries to handle transient "Failed to send request" errors
   const invokeWithRetry = useCallback(
@@ -2793,7 +2806,11 @@ export default function SlideViewPage() {
   // Data Studio: workflow resyncs only (skipRefresh), then client recomputes pivot and updates slide_reports.
   // Master Report: workflow resyncs and runs refresh-slide-report.
   useEffect(() => {
-    if (!isRefreshModalOpen || refreshStep !== 0 || !slideReportId || !slideReport) return;
+    // Only fire when the user has explicitly clicked "Start Refresh" in the modal.
+    if (!refreshPending || !isRefreshModalOpen || !slideReportId || !slideReport) return;
+
+    // Consume the pending flag immediately so this effect doesn't re-run.
+    setRefreshPending(false);
 
     const workflowAccountId = accountId || (slideReport.account_id as string);
     if (!workflowAccountId) {
@@ -2807,12 +2824,17 @@ export default function SlideViewPage() {
 
     (async () => {
       try {
-        await runRefreshWorkflow({
+        const result = await runRefreshWorkflow({
           accountId: workflowAccountId,
           slideReportId,
           clearFirst: false,
           skipRefresh: isDataStudio,
+          refreshMode: activeRefreshMode,
         });
+
+        if (result.rowsProcessed != null) {
+          setRefreshRowsProcessed(result.rowsProcessed);
+        }
 
         setRefreshStepStatus((prev) => ({ ...prev, 1: 'complete' }));
 
@@ -2864,7 +2886,7 @@ export default function SlideViewPage() {
         setRefreshStepStatus((prev) => ({ ...prev, 1: prev[1] === 'loading' ? 'error' : prev[1], 2: 'error', 3: 'error', 4: 'error', 5: 'error' }));
       }
     })();
-  }, [isRefreshModalOpen, refreshStep, slideReportId, slideReport, queryClient, isDataStudio, accountId]);
+  }, [refreshPending, isRefreshModalOpen, slideReportId, slideReport, queryClient, isDataStudio, accountId, activeRefreshMode]);
 
   // ========== Budget edit handlers ==========
   const handleStartEditBudget = useCallback((month: string, channel: string | null, currentBudget: number) => {
@@ -3355,6 +3377,9 @@ export default function SlideViewPage() {
         refreshError={refreshError}
         setRefreshError={setRefreshError}
         isDataStudio={isDataStudio}
+        onStartRefresh={handleStartRefresh}
+        refreshMode={activeRefreshMode}
+        rowsProcessed={refreshRowsProcessed}
       />
 
       {isDataModalOpen && slideReportId && (

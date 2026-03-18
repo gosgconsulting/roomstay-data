@@ -173,6 +173,22 @@ Root cause analysis: three separate paths were bypassing the channel filter, cau
 
 ---
 
+### Refresh mode selection (2026-03-19)
+
+Added two refresh modes to the refresh workflow:
+
+- [x] **RM-1** — `resync-data-source` edge function: added `refreshMode: 'full' | 'recent'` param. `full` = delete all rows + re-insert everything (existing behavior). `recent` = delete only rows from the last 2 months (by date dimension), then re-insert only those rows. Older historical data is preserved.
+- [x] **RM-2** — `run-refresh-workflow` edge function: accepts and forwards `refreshMode` to each `resync-data-source` call.
+- [x] **RM-3** — `src/lib/refreshWorkflow.ts`: added `refreshMode?: 'full' | 'recent'` to `RunRefreshWorkflowParams`.
+- [x] **RM-4** — `RefreshDataModal`: redesigned with a mode selection step (step 0) before refresh starts. User picks "Last 2 Months" (default) or "Full Refresh". Modal shows mode label during progress. "Close (runs in background)" button shown while running.
+- [x] **RM-5** — `SlideViewPage`: added `activeRefreshMode` state, `handleStartRefresh(mode)` callback. Modal opens in selection mode; refresh only starts when user clicks "Start Refresh".
+
+**Deployed:** `run-refresh-workflow` v5, `resync-data-source` v210.
+
+**Verification:** `npm run build` ✅ (exit 0), no lint errors.
+
+---
+
 ### Next steps
 
 - [ ] **NS-1** — Audit `run-refresh-workflow` edge function: remove legacy `slideReportId` refresh branch; keep only `resync-data-source` orchestration.

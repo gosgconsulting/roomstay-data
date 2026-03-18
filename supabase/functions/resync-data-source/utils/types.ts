@@ -77,6 +77,12 @@ export interface ColumnMapping {
  */
 export interface RequestBody {
   dataSourceId: string;
+  /**
+   * 'full'   — delete all existing rows and re-insert everything (default).
+   * 'recent' — delete only the last 2 months of rows and re-insert only those rows.
+   *            Older historical data is preserved.
+   */
+  refreshMode?: 'full' | 'recent';
   updates?: {
     name?: string;
     google_sheets_url?: string;

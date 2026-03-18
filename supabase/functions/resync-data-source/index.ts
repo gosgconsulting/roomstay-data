@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.77.0';
 import type { DataSource, RequestBody, ResponseBody } from './utils/types.ts';
 import { extractSpreadsheetId } from './utils/utils.ts';
-import { resyncDataSource } from './utils/resync.ts';
+import { resyncDataSource, type RefreshMode } from './utils/resync.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -258,12 +258,14 @@ Deno.serve(async (req) => {
     }
 
     // Perform resync
+    const refreshMode: RefreshMode = requestBody.refreshMode === 'recent' ? 'recent' : 'full';
     const result = await resyncDataSource(
       supabase,
       supabaseUrl,
       supabaseAnonKey,
       updatedDataSource,
-      userId
+      userId,
+      refreshMode
     );
 
     // If resync was successful, apply vlookup mappings

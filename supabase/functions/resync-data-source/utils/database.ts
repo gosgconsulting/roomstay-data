@@ -96,6 +96,57 @@ export const deleteExistingData = async (supabase: any, dataSourceId: string): P
 };
 
 /**
+ * Deletes dimension_data rows for a data source that fall within a date range.
+ * Used by "recent" refresh mode to remove only the last N months of data before re-inserting.
+ *
+ * @param supabase - Supabase client instance
+ * @param dataSourceId - UUID of the data source
+ * @param dateDimId - UUID of the date dimension key in dimension_values JSONB
+ * @param fromDate - ISO date string (inclusive lower bound, e.g. '2026-01-01')
+ * @returns Total rows deleted
+ */
+export const deleteRecentData = async (
+  supabase: any,
+  dataSourceId: string,
+  dateDimId: string,
+  fromDate: string
+): Promise<number> => {
+  console.log(`[RESYNC] Deleting recent rows (>= ${fromDate}) for data source: ${dataSourceId}`);
+
+  const batchSize = 200;
+  let totalDeleted = 0;
+  let batchNumber = 0;
+
+  while (true) {
+    batchNumber++;
+    // Select IDs of rows whose date dimension value is >= fromDate
+    const { data: idsToDelete, error: selectError } = await supabase
+      .from('dimension_data')
+      .select('id')
+      .eq('data_source_id', dataSourceId)
+      .gte(`dimension_values->>${dateDimId}`, fromDate)
+      .limit(batchSize);
+
+    if (selectError) throw selectError;
+    if (!idsToDelete || idsToDelete.length === 0) break;
+
+    const ids = idsToDelete.map((row: any) => row.id);
+    const { error: deleteError } = await supabase
+      .from('dimension_data')
+      .delete()
+      .in('id', ids);
+
+    if (deleteError) throw deleteError;
+
+    totalDeleted += ids.length;
+    if (ids.length < batchSize) break;
+  }
+
+  console.log(`[RESYNC] Deleted ${totalDeleted} recent rows in ${batchNumber} batches`);
+  return totalDeleted;
+};
+
+/**
  * Deletes custom dimensions created by a data source
  * 
  * Removes all custom dimensions (scope='custom') associated with the data source.

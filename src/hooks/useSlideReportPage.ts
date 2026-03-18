@@ -203,10 +203,13 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
 
   const { data: slideReport } = useSlideReport(slideReportId);
 
-  // Data Studio: fetch raw rows from dimension_data (canonical DB cache)
-  const { data: dataStudioResult } = useDataStudioRawRows(
+  // Data Studio: fetch raw rows from dimension_data (canonical DB cache).
+  // Passes selectedYear/selectedMonth so the hook uses server-side date filtering
+  // (RPC) instead of fetching all rows and filtering client-side.
+  const { data: dataStudioResult, isLoading: isLoadingRawRows } = useDataStudioRawRows(
     slideReport,
     !!slideReportId,
+    selectedYear,
   );
   const dataStudioRawRows = dataStudioResult?.rawRows;
   const dataStudioDimensionMaps = dataStudioResult?.dimensionMaps;
@@ -342,6 +345,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     isLoadingViews,
     isLoadingViewBudgets,
     isLoadingMonthlyData,
+    isLoadingRawRows,
     needEditSourceForMasterReport,
     createSlideReport: createSlideReportMutation,
     updateSlideReport,

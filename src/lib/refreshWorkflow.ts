@@ -18,12 +18,20 @@ export interface RunRefreshWorkflowParams {
   skipResync?: boolean;
   /** When true and slideReportId is set, resync data sources but do not call refresh-slide-report (e.g. Data Studio). */
   skipRefresh?: boolean;
+  /**
+   * 'full'   — delete all existing rows and re-insert everything from source (default).
+   * 'recent' — delete only the last 2 months of rows and re-insert only those rows.
+   *            Older historical data is preserved. Faster for routine daily/weekly refreshes.
+   */
+  refreshMode?: 'full' | 'recent';
 }
 
 export interface RunRefreshWorkflowResult {
   success: boolean;
   cleared?: boolean;
   resynced?: number;
+  /** Total rows inserted across all data sources in this refresh. */
+  rowsProcessed?: number;
   resyncErrors?: Array<{ dataSourceId: string; error: string }>;
   refreshSuccess?: boolean;
   error?: string;

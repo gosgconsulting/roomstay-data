@@ -126,6 +126,7 @@ Deno.serve(async (req: Request) => {
   const clearFirst = body.clearFirst === true;
   const skipResync = body.skipResync === true;
   const skipRefresh = body.skipRefresh === true;
+  const refreshMode = (body.refreshMode === 'recent' ? 'recent' : 'full') as 'full' | 'recent';
 
   if (!accountId) {
     return jsonResponse({ error: 'accountId is required' }, 400, cors);
@@ -135,6 +136,7 @@ Deno.serve(async (req: Request) => {
   let cleared = false;
   const resyncErrors: Array<{ dataSourceId: string; error: string }> = [];
   let resyncedCount = 0;
+  let totalRowsProcessed = 0;
   let refreshSuccess: boolean | undefined;
 
   try {
@@ -235,22 +237,28 @@ Deno.serve(async (req: Request) => {
           supabaseUrl,
           serviceRoleKey,
           'resync-data-source',
-          { dataSourceId: ds.id },
+          { dataSourceId: ds.id, refreshMode },
           RESYNC_RETRIES
         );
-        if (ok && (data as { success?: boolean })?.success !== false) {
-          return { id: ds.id, success: true as const };
+        const resyncData = data as { success?: boolean; error?: string; rowsProcessed?: number } | null;
+        if (ok && resyncData?.success !== false) {
+          return { id: ds.id, success: true as const, rowsProcessed: resyncData?.rowsProcessed ?? 0 };
         }
         return {
           id: ds.id,
           success: false as const,
-          error: (data as { error?: string })?.error || 'resync failed',
+          rowsProcessed: 0,
+          error: resyncData?.error || 'resync failed',
         };
       });
 
       for (const r of results) {
-        if (r.success) resyncedCount++;
-        else resyncErrors.push({ dataSourceId: r.id, error: r.error });
+        if (r.success) {
+          resyncedCount++;
+          totalRowsProcessed += r.rowsProcessed;
+        } else {
+          resyncErrors.push({ dataSourceId: r.id, error: r.error });
+        }
       }
     }
 
@@ -291,6 +299,7 @@ Deno.serve(async (req: Request) => {
       success: true,
       cleared,
       resynced: resyncedCount,
+      rowsProcessed: totalRowsProcessed,
       resyncErrors: resyncErrors.length > 0 ? resyncErrors : undefined,
       refreshSuccess: slideReportId ? refreshSuccess : undefined,
     }, 200, cors);
@@ -301,6 +310,7 @@ Deno.serve(async (req: Request) => {
       error: message,
       cleared,
       resynced: resyncedCount,
+      rowsProcessed: totalRowsProcessed,
       resyncErrors,
       refreshSuccess,
     }, 500, cors);
