@@ -6,6 +6,7 @@ import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { UnifiedBreakdownTable } from "@/components/slides/BreakdownTableSection";
 import type { ChartTimeRange } from "@/components/slides/MonthlyChartSection";
 import { formatNumber } from "@/lib/slideViewHelpers";
+import { MoreHorizontal } from "lucide-react";
 
 interface Dimension {
   id: string;
@@ -51,6 +52,7 @@ interface ChannelTabProps {
   comparisonTotals?: Record<string, any> | null;
   comparisonType?: string;
   displayCurrency?: 'AUD' | 'USD';
+  onOpenBreakdownDimensionSettings?: (channel: 'metasearch' | 'sem' | 'social') => void;
 }
 
 export function ChannelTab({
@@ -87,6 +89,7 @@ export function ChannelTab({
   comparisonTotals,
   comparisonType,
   displayCurrency,
+  onOpenBreakdownDimensionSettings,
 }: ChannelTabProps) {
   const gradientId = `${channel}Gradient`;
   const compGradientId = `${channel}CompGradient`;
@@ -180,7 +183,20 @@ export function ChannelTab({
 
           {/* Unified Breakdown Table */}
           <Card>
-            <CardHeader><CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base font-medium">Breakdown Analysis</CardTitle>
+              {onOpenBreakdownDimensionSettings && (
+                <button
+                  type="button"
+                  onClick={() => onOpenBreakdownDimensionSettings(channel)}
+                  className="h-8 w-8 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center"
+                  title="Breakdown settings"
+                  aria-label="Breakdown settings"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              )}
+            </CardHeader>
             <CardContent>
               {(() => {
                 const pivotData = pivotDataProp ?? (slideReport?.pivot_data as SlideReportPivotData | null);
