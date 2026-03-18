@@ -13,6 +13,7 @@ import {
   Share2,
   RefreshCw,
   Loader2,
+  MoreHorizontal,
 } from "lucide-react";
 
 interface Tab {
@@ -41,6 +42,7 @@ interface ReportSidebarProps {
   onDimensions: () => void;
   onForecast: () => void;
   onPriceWidget: () => void;
+  onOpenFilterDimensionSettings?: () => void;
   reportName?: string;
 }
 
@@ -54,19 +56,33 @@ export function ReportSidebar({
   onDimensions,
   onForecast,
   onPriceWidget,
+  onOpenFilterDimensionSettings,
   reportName,
 }: ReportSidebarProps) {
   return (
     <aside className="flex flex-col w-56 shrink-0 border-r bg-card h-screen sticky top-0 overflow-y-auto">
       {/* Brand / report name */}
       <div className="px-4 py-5 border-b">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 justify-between">
           <div className="h-7 w-7 rounded-md bg-primary flex items-center justify-center">
             <BarChart2 className="h-4 w-4 text-primary-foreground" />
           </div>
-          <span className="font-semibold text-sm truncate leading-tight">
-            {reportName || "Data Studio"}
-          </span>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="font-semibold text-sm truncate leading-tight">
+              {reportName || "Data Studio"}
+            </span>
+          </div>
+          {onOpenFilterDimensionSettings && (
+            <button
+              type="button"
+              onClick={onOpenFilterDimensionSettings}
+              className="h-8 w-8 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center shrink-0"
+              title="Filter settings"
+              aria-label="Filter settings"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 

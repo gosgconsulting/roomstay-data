@@ -32,10 +32,6 @@ interface EditSourceModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   modalStep: ModalStep;
-  sinceMonth: string;
-  setSinceMonth: (month: string) => void;
-  sinceYear: number;
-  setSinceYear: (year: number) => void;
   selectedDimensions: {
     metasearch: boolean;
     sem: boolean;
@@ -78,10 +74,6 @@ export function EditSourceModal({
   isOpen,
   onOpenChange,
   modalStep,
-  sinceMonth,
-  setSinceMonth,
-  sinceYear,
-  setSinceYear,
   selectedDimensions,
   handleDimensionToggle,
   selectedChannels,
@@ -123,12 +115,11 @@ export function EditSourceModal({
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
               <DialogTitle>
-                {modalStep === 1 && "Date Range"}
-                {modalStep === 2 && "Select Channels"}
-                {modalStep === 3 && "Value Dimensions"}
-                {modalStep === 4 && "Data Source"}
-                {modalStep === 5 && "Breakdown Dimensions"}
-                {modalStep === 6 && "Filters"}
+                {modalStep === 1 && "Select Channels"}
+                {modalStep === 2 && "Value Dimensions"}
+                {modalStep === 3 && "Data Source"}
+                {modalStep === 4 && "Breakdown Dimensions"}
+                {modalStep === 5 && "Filters"}
               </DialogTitle>
             </div>
             <Button
@@ -141,133 +132,59 @@ export function EditSourceModal({
             </Button>
           </div>
           <p className="text-sm text-muted-foreground mt-2">
-            {modalStep === 1 && "Set the starting date for your report data. All data from this date onwards will be included."}
-            {modalStep !== 1 && "Tip: \"Breakdown by\" tables render on the specific report tab, not on Overview/Budget. After saving, select the report tab to view the breakdown."}
+            Tip: &quot;Breakdown by&quot; tables render on the specific report tab, not on Overview/Budget. After saving, select the report tab to view the breakdown.
           </p>
         </DialogHeader>
 
         <ScrollArea className="flex-1 min-h-0">
-          {/* Step 1: Date Range */}
+          {/* Step 1: Channel Selection */}
           {modalStep === 1 && (
-            <div className="space-y-6 py-4">
-              <div className="bg-muted/30 rounded-lg p-4">
-                <p className="text-sm text-muted-foreground">
-                  Select the starting point for your report. Data will be fetched from this date to the present.
-                </p>
-              </div>
-              
-              <div className="space-y-4">
-                <Label className="text-sm font-medium">Since</Label>
-                <div className="flex items-center gap-4">
-                  <Select value={sinceMonth} onValueChange={setSinceMonth}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Select month" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="January">January</SelectItem>
-                      <SelectItem value="February">February</SelectItem>
-                      <SelectItem value="March">March</SelectItem>
-                      <SelectItem value="April">April</SelectItem>
-                      <SelectItem value="May">May</SelectItem>
-                      <SelectItem value="June">June</SelectItem>
-                      <SelectItem value="July">July</SelectItem>
-                      <SelectItem value="August">August</SelectItem>
-                      <SelectItem value="September">September</SelectItem>
-                      <SelectItem value="October">October</SelectItem>
-                      <SelectItem value="November">November</SelectItem>
-                      <SelectItem value="December">December</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  
-                  <Select value={sinceYear.toString()} onValueChange={(v) => setSinceYear(parseInt(v))}>
-                    <SelectTrigger className="w-[120px]">
-                      <SelectValue placeholder="Select year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="2023">2023</SelectItem>
-                      <SelectItem value="2024">2024</SelectItem>
-                      <SelectItem value="2025">2025</SelectItem>
-                      <SelectItem value="2026">2026</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="mt-4 p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                  <p className="text-sm">
-                    <span className="font-medium">Data range: </span>
-                    {sinceMonth} {sinceYear} → Present
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Channel Selection */}
-          {modalStep === 2 && (
             <div className="space-y-4">
-              {availableChannels.length === 0 ? (
-                <div className="bg-muted/30 rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground">
-                    No reports found for this account. Please create reports (Metasearch, SEM, or Social) before configuring the slide report.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {availableChannels.includes('metasearch') && (
-                    <div 
+              {/* Always show all 3 channels. When availableChannels is empty (still loading),
+                  show all as selectable. Channels not yet matched to a report are shown
+                  with a note but remain clickable — validation happens at save time. */}
+              <div className="space-y-3">
+                {(['metasearch', 'sem', 'social'] as const).map((ch) => {
+                  const labels: Record<string, string> = { metasearch: 'Metasearch', sem: 'SEM', social: 'Social' };
+                  const isAvailable = availableChannels.length === 0 || availableChannels.includes(ch);
+                  const isChecked = selectedDimensions[ch];
+                  return (
+                    <div
+                      key={ch}
                       className={cn(
                         "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                        selectedDimensions.metasearch ? 'border-primary bg-primary/5' : 'border-border'
+                        isChecked ? 'border-primary bg-primary/5' : 'border-border',
+                        !isAvailable && availableChannels.length > 0 ? 'opacity-40 cursor-not-allowed' : ''
                       )}
-                      onClick={() => handleDimensionToggle('metasearch')}
+                      onClick={() => {
+                        if (!isAvailable && availableChannels.length > 0) return;
+                        handleDimensionToggle(ch);
+                      }}
                     >
-                      <Checkbox 
-                        checked={selectedDimensions.metasearch}
-                        onCheckedChange={() => handleDimensionToggle('metasearch')}
+                      <Checkbox
+                        checked={isChecked}
+                        disabled={!isAvailable && availableChannels.length > 0}
+                        onCheckedChange={() => {
+                          if (!isAvailable && availableChannels.length > 0) return;
+                          handleDimensionToggle(ch);
+                        }}
                         className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                       />
-                      <span className="font-medium">Metasearch</span>
+                      <div className="flex-1">
+                        <span className="font-medium">{labels[ch]}</span>
+                        {!isAvailable && availableChannels.length > 0 && (
+                          <p className="text-xs text-muted-foreground mt-0.5">No report found — create a &quot;{labels[ch]}&quot; report first</p>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  {availableChannels.includes('sem') && (
-                    <div 
-                      className={cn(
-                        "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                        selectedDimensions.sem ? 'border-primary bg-primary/5' : 'border-border'
-                      )}
-                      onClick={() => handleDimensionToggle('sem')}
-                    >
-                      <Checkbox 
-                        checked={selectedDimensions.sem}
-                        onCheckedChange={() => handleDimensionToggle('sem')}
-                        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                      />
-                      <span className="font-medium">SEM</span>
-                    </div>
-                  )}
-                  {availableChannels.includes('social') && (
-                    <div 
-                      className={cn(
-                        "flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-colors",
-                        selectedDimensions.social ? 'border-primary bg-primary/5' : 'border-border'
-                      )}
-                      onClick={() => handleDimensionToggle('social')}
-                    >
-                      <Checkbox 
-                        checked={selectedDimensions.social}
-                        onCheckedChange={() => handleDimensionToggle('social')}
-                        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
-                      />
-                      <span className="font-medium">Social</span>
-                    </div>
-                  )}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
           )}
 
-          {/* Step 3: Value Dimensions - Applies to all selected channels */}
-          {modalStep === 3 && (
+          {/* Step 2: Value Dimensions - Applies to all selected channels */}
+          {modalStep === 2 && (
             <div className="flex flex-col gap-4 pb-4">
               {loadingAvailableDimensions ? (
                 <div className="flex-1 flex items-center justify-center">
@@ -348,8 +265,8 @@ export function EditSourceModal({
             </div>
           )}
 
-          {/* Step 4: Dimension & Value Selection (Data Source) */}
-          {modalStep === 4 && (
+          {/* Step 3: Dimension & Value Selection (Data Source) */}
+          {modalStep === 3 && (
             <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
               {/* Left: Channel tabs */}
               <ChannelTabsList
@@ -419,8 +336,8 @@ export function EditSourceModal({
             </div>
           )}
 
-          {/* Step 5: Breakdown Dimensions */}
-          {modalStep === 5 && (
+          {/* Step 4: Breakdown Dimensions */}
+          {modalStep === 4 && (
             <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
               {/* Left: Channel tabs */}
               <div className="w-48 border-r pr-4">
@@ -509,8 +426,8 @@ export function EditSourceModal({
             </div>
           )}
 
-          {/* Step 6: Filters */}
-          {modalStep === 6 && (
+          {/* Step 5: Filters */}
+          {modalStep === 5 && (
             <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
               {/* Left: Channel tabs */}
               <div className="w-48 border-r pr-4">
@@ -611,10 +528,10 @@ export function EditSourceModal({
           </Button>
           <Button
             onClick={handleNext}
-            disabled={modalStep === 2 && selectedChannels.length === 0}
+            disabled={modalStep === 1 && selectedChannels.length === 0 && !selectedDimensions.metasearch && !selectedDimensions.sem && !selectedDimensions.social}
           >
-            {modalStep === 6 ? "Save" : "Next"}
-            {modalStep !== 6 && <ChevronRight className="h-4 w-4 ml-1" />}
+            {modalStep === 5 ? "Save" : "Next"}
+            {modalStep !== 5 && <ChevronRight className="h-4 w-4 ml-1" />}
           </Button>
         </div>
       </DialogContent>

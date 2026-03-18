@@ -1,11 +1,11 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { Calendar } from "lucide-react";
-import { format } from "date-fns";
+import { format, isAfter, isBefore } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar-with-presets";
 
@@ -52,6 +52,66 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
   showCompare = true,
 }) => {
   const presets = presetsProp ?? DEFAULT_PRESETS;
+  const [open, setOpen] = useState(false);
+
+  // Pending range — only committed on Apply
+  const [pendingRange, setPendingRange] = useState<DateRange | undefined>(dateRange);
+  const [pendingPreset, setPendingPreset] = useState(datePreset);
+
+  // Selection phase: 'idle' = no click yet / range complete, 'picking-end' = from set, waiting for to
+  const [phase, setPhase] = useState<'idle' | 'picking-end'>('idle');
+  // Hovered date for live range preview while picking end
+  const [hoverDate, setHoverDate] = useState<Date | undefined>(undefined);
+
+  // The range shown in the calendar — while picking end, preview up to hoverDate
+  const displayedRange: DateRange | undefined = (() => {
+    if (phase === 'picking-end' && pendingRange?.from && hoverDate) {
+      const from = pendingRange.from;
+      const to = hoverDate;
+      return isAfter(to, from) ? { from, to } : { from: to, to: from };
+    }
+    return pendingRange;
+  })();
+
+  // Sync pending state when popover opens
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
+      setPendingRange(dateRange);
+      setPendingPreset(datePreset);
+      setPhase('idle');
+      setHoverDate(undefined);
+    }
+    setOpen(next);
+  };
+
+  const handlePresetClick = (id: string) => {
+    setPendingPreset(id);
+    setPhase('idle');
+    setHoverDate(undefined);
+    onDatePresetChange(id);
+  };
+
+  // Custom day click: two-phase selection
+  const handleDayClick = useCallback((day: Date) => {
+    if (phase === 'idle') {
+      // First click — set start, clear end, enter picking-end phase
+      setPendingRange({ from: day, to: undefined });
+      setHoverDate(undefined);
+      setPhase('picking-end');
+    } else {
+      // Second click — set end (swap if needed), complete selection
+      const from = pendingRange?.from!;
+      const [start, end] = isAfter(day, from) ? [from, day] : [day, from];
+      setPendingRange({ from: start, to: end });
+      setHoverDate(undefined);
+      setPhase('idle');
+    }
+  }, [phase, pendingRange?.from]);
+
+  const handleApply = () => {
+    onDateRangeChange(pendingRange);
+    setOpen(false);
+  };
 
   const renderButtonLabel = () => {
     if (datePreset === "all_time") return "All Time";
@@ -69,14 +129,14 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
       }
       return format(dateRange.from, "MMM d, yyyy");
     }
-    // Show the active preset label if no explicit range
     const active = presets.find((p) => p.id === datePreset);
     return active?.label ?? "This Month";
   };
 
-  // Keep calendar anchored to the start of the selected range
-  const displayMonth = dateRange?.from
-    ? new Date(dateRange.from.getFullYear(), dateRange.from.getMonth(), 1)
+  // Anchor calendar to the start of the pending/committed range (or current month)
+  const anchorDate = pendingRange?.from ?? dateRange?.from;
+  const displayMonth = anchorDate
+    ? new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1)
     : new Date();
   const displayMonthKey = `${displayMonth.getFullYear()}-${displayMonth.getMonth()}`;
 
@@ -85,7 +145,7 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
         Date Range:
       </label>
-      <Popover>
+      <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -111,11 +171,11 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
                     type="button"
                     className={cn(
                       "text-left text-sm px-2.5 py-1.5 rounded-md transition-colors",
-                      datePreset === p.id
+                      (pendingPreset === p.id || datePreset === p.id)
                         ? "font-semibold text-foreground bg-accent"
                         : "font-normal text-muted-foreground hover:text-foreground hover:bg-accent/60"
                     )}
-                    onClick={() => onDatePresetChange(p.id)}
+                    onClick={() => handlePresetClick(p.id)}
                   >
                     {p.label}
                   </button>
@@ -123,15 +183,19 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
               </div>
             </div>
 
-            {/* Right: calendar — 2 months for easy cross-month range selection */}
+            {/* Right: single-month calendar */}
             <div className="p-4">
               <CalendarComponent
                 mode="range"
-                selected={dateRange}
-                onSelect={(range) => onDateRangeChange(range)}
-                numberOfMonths={2}
+                selected={displayedRange}
+                onDayClick={handleDayClick}
+                onDayMouseEnter={(day) => phase === 'picking-end' && setHoverDate(day)}
+                onDayMouseLeave={() => phase === 'picking-end' && setHoverDate(undefined)}
+                numberOfMonths={1}
                 defaultMonth={displayMonth}
                 key={displayMonthKey}
+                // Suppress built-in range onSelect so our two-phase handler is the only driver
+                onSelect={() => {}}
               />
             </div>
           </div>
@@ -172,18 +236,26 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
             </div>
           )}
 
-          {showCompare && (
-            <div className="px-3 py-2 border-t flex items-center justify-between gap-2">
-              <Label htmlFor="compare-toggle" className="text-sm cursor-pointer text-muted-foreground">
-                Compare periods
-              </Label>
-              <Switch
-                id="compare-toggle"
-                checked={compareEnabled}
-                onCheckedChange={onCompareEnabledChange}
-              />
-            </div>
-          )}
+          {/* Footer: Compare toggle + Apply */}
+          <div className="px-3 py-2 border-t flex items-center justify-between gap-2">
+            {showCompare ? (
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="compare-toggle"
+                  checked={compareEnabled}
+                  onCheckedChange={onCompareEnabledChange}
+                />
+                <Label htmlFor="compare-toggle" className="text-sm cursor-pointer text-muted-foreground">
+                  Compare periods
+                </Label>
+              </div>
+            ) : (
+              <span />
+            )}
+            <Button size="sm" className="h-7 px-3 text-xs" onClick={handleApply}>
+              Apply
+            </Button>
+          </div>
         </PopoverContent>
       </Popover>
     </div>

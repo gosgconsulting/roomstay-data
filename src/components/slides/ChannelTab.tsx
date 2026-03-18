@@ -1,12 +1,11 @@
 import { TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
-import { JAN_2026_BREAKDOWN_DIMENSIONS } from "@/lib/metasearchJan2026Utils";
-import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
+import { UnifiedBreakdownTable } from "@/components/slides/BreakdownTableSection";
+import type { ChartTimeRange } from "@/components/slides/MonthlyChartSection";
+import { formatNumber } from "@/lib/slideViewHelpers";
 
 interface Dimension {
   id: string;
@@ -29,8 +28,8 @@ interface ChannelTabProps {
   currentTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   channelChartData: Record<string, Array<{ month: string; revenue: number }>>;
   comparisonChannelChartData?: Record<string, Array<{ month: string; revenue: number }>> | null;
-  chartTimeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
-  setChartTimeRange: (range: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months') => void;
+  chartTimeRange: ChartTimeRange;
+  setChartTimeRange: (range: ChartTimeRange) => void;
   groupByDimension: string;
   breakdownByDimension: string;
   expandedRow: string | null;
@@ -49,12 +48,8 @@ interface ChannelTabProps {
   getReportKPICards: (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => any[];
   getChannelComparisonMetrics: (channel: 'metasearch' | 'sem' | 'social') => any;
   setBreakdownTotals: (updater: (prev: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>) => Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>) => void;
-  UnifiedBreakdownTable: React.ComponentType<any>;
   comparisonTotals?: Record<string, any> | null;
   comparisonType?: string;
-  displayDataFromApi?: boolean;
-  apiBreakdowns?: { groupBy: string; rows: Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number; cpc?: number; roas?: number; costOfSale?: number }>; expanded?: Record<string, Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>> };
-  suppressExpandedBreakdown?: boolean;
   displayCurrency?: 'AUD' | 'USD';
 }
 
@@ -89,21 +84,17 @@ export function ChannelTab({
   getReportKPICards,
   getChannelComparisonMetrics,
   setBreakdownTotals,
-  UnifiedBreakdownTable,
   comparisonTotals,
   comparisonType,
-  displayDataFromApi,
-  apiBreakdowns,
-  suppressExpandedBreakdown,
   displayCurrency,
 }: ChannelTabProps) {
   const gradientId = `${channel}Gradient`;
   const compGradientId = `${channel}CompGradient`;
-  
+
   // Merge comparison data into channel chart data
   const currentData = channelChartData[channel] || [];
   const compData = comparisonChannelChartData?.[channel];
-  const mergedData = currentData.map((point, i) => ({
+  const mergedChartData = currentData.map((point, i) => ({
     ...point,
     comparisonRevenue: compData?.[i]?.revenue ?? undefined,
   }));
@@ -116,24 +107,24 @@ export function ChannelTab({
       ) : (
         <>
           {(() => {
-            // Use breakdownTotals as fallback when currentTotals has no cost data (mapping mismatch)
+            // Primary source: currentTotals from useFilteredSlideData (canonical, computed from rawDataRows).
+            // Secondary: breakdownTotals from the breakdown table (only when currentTotals is empty).
             const ct = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
             const bt = breakdownTotals[channel];
-            // Always prefer breakdownTotals when available — the breakdown table is the source of truth
-            const effectiveTotals = (bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0))
-              ? bt
-              : ct;
+            const ctHasData = ct.impressions > 0 || ct.clicks > 0 || ct.cost > 0 || ct.revenue > 0 || ct.bookings > 0;
+            const btHasData = bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0);
+            const effectiveTotals = ctHasData ? ct : (btHasData ? bt : ct);
             return renderKPICards(
               getReportKPICards(effectiveTotals),
               getChannelComparisonMetrics(channel)
             );
           })()}
-        
+
           {/* Monthly Revenue Chart */}
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-base font-medium">Revenue</CardTitle>
-              <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)}>
+              <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as ChartTimeRange)}>
                 <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
                   <SelectValue />
                 </SelectTrigger>
@@ -148,7 +139,7 @@ export function ChannelTab({
             <CardContent>
               <div className="h-[200px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={mergedData}>
+                  <AreaChart data={mergedChartData}>
                     <defs>
                       <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
@@ -161,8 +152,8 @@ export function ChannelTab({
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}`} />
-                    <Tooltip 
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value: number) => `${(value / 1000).toFixed(0)}`} />
+                    <Tooltip
                       formatter={(value: number, name: string) => [
                         formatNumber(value, 'currency', displayCurrency),
                         name === 'comparisonRevenue' ? 'Previous Period' : 'Revenue'
@@ -170,10 +161,10 @@ export function ChannelTab({
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                     />
                     {hasComparison && (
-                      <Area 
-                        type="monotone" 
-                        dataKey="comparisonRevenue" 
-                        stroke="#94a3b8" 
+                      <Area
+                        type="monotone"
+                        dataKey="comparisonRevenue"
+                        stroke="#94a3b8"
                         strokeWidth={1.5}
                         strokeDasharray="5 3"
                         fill={`url(#${compGradientId})`}
@@ -193,13 +184,10 @@ export function ChannelTab({
             <CardContent>
               {(() => {
                 const pivotData = pivotDataProp ?? (slideReport?.pivot_data as SlideReportPivotData | null);
-                const channelData = pivotData?.channels?.[channel];
                 const savedBreakdownConfigs = slideReport?.configuration?.breakdownConfigs?.[channel];
                 const configuredBreakdowns = savedBreakdownConfigs?.breakdownDimensionIds || breakdownConfigs[channel]?.breakdownDimensionIds || [];
-                const hasJan2026Override = channel === 'metasearch' && !!displayDataFromApi && !!apiBreakdowns?.rows?.length;
-                const useJan2026FallbackDimensions = configuredBreakdowns.length === 0 && hasJan2026Override;
 
-                if (configuredBreakdowns.length === 0 && !hasJan2026Override) {
+                if (configuredBreakdowns.length === 0) {
                   return (
                     <div className="text-center py-8 text-muted-foreground">
                       <p>No breakdown dimensions configured.</p>
@@ -208,15 +196,13 @@ export function ChannelTab({
                   );
                 }
 
-                const availableDimensionsList = useJan2026FallbackDimensions
-                  ? JAN_2026_BREAKDOWN_DIMENSIONS
-                  : [
-                      ...new Map([
-                        ...(breakdownDimensions[channel] || []).filter(dim =>
-                          configuredBreakdowns.includes(dim.id)
-                        ),
-                      ].map(dim => [dim.id, dim])).values()
-                    ];
+                const availableDimensionsList = [
+                  ...new Map([
+                    ...(breakdownDimensions[channel] || []).filter(dim =>
+                      configuredBreakdowns.includes(dim.id)
+                    ),
+                  ].map(dim => [dim.id, dim])).values()
+                ];
 
                 return (
                   <UnifiedBreakdownTable
@@ -234,9 +220,6 @@ export function ChannelTab({
                     filterValues={filterValues}
                     filterDimensionValues={filterDimensionValues}
                     onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, [channel]: totals }))}
-                    displayDataFromApi={displayDataFromApi}
-                    apiBreakdowns={apiBreakdowns}
-                    suppressExpandedBreakdown={suppressExpandedBreakdown}
                     displayCurrency={displayCurrency}
                     availableDimensions={availableDimensionsList}
                     comparisonChannelTotals={comparisonTotals}

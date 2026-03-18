@@ -134,45 +134,17 @@ export default function SharedReport() {
         if (slideReportId) {
           // no-op
         } else if (hasViewId) {
-          // Legacy: Use view_id to look up slide_report_id (backward compatibility)
-          
-          // Query slide_report_views using view_id
+          // Legacy: Use view_id to look up slide_report_id via the canonical `views` table
           try {
-            const { data: shareLinkWithView, error: shareLinkError } = await supabase
-              .from("share_links")
-              .select(`
-                view_id,
-                slide_report_views!inner (
-                  slide_report_id,
-                  account_id
-                )
-              `)
-              .eq("slug", slug)
-              .eq("view_id", linkData.view_id)
+            const { data: view, error: viewError } = await supabase
+              .from("views")
+              .select("slide_report_id, account_id")
+              .eq("id", linkData.view_id)
               .maybeSingle();
 
-            if (!shareLinkError && shareLinkWithView) {
-              const view = (shareLinkWithView as any).slide_report_views;
-              if (view && Array.isArray(view) && view.length > 0) {
-                finalSlideReportId = view[0].slide_report_id;
-                accountId = view[0].account_id || accountId;
-              } else if (view && view.slide_report_id) {
-                finalSlideReportId = view.slide_report_id;
-                accountId = view.account_id || accountId;
-              }
-            }
-
-            // Fallback: Try direct query if join didn't work
-            if (!finalSlideReportId) {
-              const { data: view, error: viewError } = await (supabase.from("slide_report_views" as any) as any)
-                .select("slide_report_id, account_id")
-                .eq("id", linkData.view_id)
-                .maybeSingle();
-
-              if (!viewError && view && view.slide_report_id) {
-                finalSlideReportId = view.slide_report_id;
-                accountId = view.account_id || accountId;
-              }
+            if (!viewError && view && view.slide_report_id) {
+              finalSlideReportId = view.slide_report_id;
+              accountId = (view as any).account_id || accountId;
             }
           } catch (err) {
             console.error('Exception while querying view:', err);

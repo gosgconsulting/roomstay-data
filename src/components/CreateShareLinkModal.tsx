@@ -135,8 +135,9 @@ export const CreateShareLinkModal = ({
       try {
         console.log("[testing] Loading view filters for view:", selectedViewId);
         
-        // Load the view
-        const { data: view, error: viewError } = await (supabase.from("slide_report_views" as any) as any)
+        // Load the view from the canonical views table
+        const { data: view, error: viewError } = await supabase
+          .from("views")
           .select("filter_values")
           .eq("id", selectedViewId)
           .single();

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Roomstay is a hotel performance analytics SaaS. It ingests data from Google Sheets and CSV sources, maps columns to typed dimensions, and renders a single canonical **Data Studio** report view with KPI cards, a performance table, channel breakdowns, budget tracking, and AI-generated summaries. Reports can be shared publicly via a slug link.
+Roomstay is a hotel performance analytics SaaS. It ingests data from Google Sheets and CSV sources, maps columns to typed dimensions, and renders a single canonical **Data Studio** report view with KPI cards, a performance table, channel breakdowns, and budget tracking. Reports can be shared publicly via a slug link.
 
 ---
 
@@ -49,7 +49,7 @@ Browser (React + Vite)
   ├── Integration Layer src/lib/data-sources/, src/lib/composio-proxy.ts
   │
   └── Supabase
-        ├── Postgres    dimension_data, dimensions, report_views, accounts, …
+        ├── Postgres    dimension_data, dimensions, views, accounts, reports, …
         ├── Auth        supabase.auth (session stored in localStorage)
         └── Edge Funcs  supabase/functions/   Secret-bearing API calls, data sync
 ```
@@ -87,16 +87,11 @@ Defined in `src/App.tsx`. All `:accountId` routes resolve the account from `useU
 | `/tools/price-widget` | `PriceWidgetPage` | Price widget listing |
 | `/tools/price-widget/:accountId` | `PriceWidgetPage` | Account-scoped alias |
 | `/tools/price-widget/:accountId/:widgetId` | `PriceWidgetDetailPage` | Widget detail |
-| `/tools/report/:reportName` | `AISummaryPage` | AI summary by report name |
-| `/tools/report/:accountId/:summaryId` | `AISummaryPage` | Legacy deep link |
 | `/integrations` | `Integrations` | Composio integrations |
 | `/shared/:slug` | `SharedReport` | Public shared report |
-| `/shared/reports/:slug` | `SharedAISummary` | Public shared AI summary |
 | `/:slug` | `SharedReport` | Catch-all slug alias |
 
-**Removed routes:** `/tools/reports/:accountId/brady`, `/tools/reports/:accountId/master-report`, `/tools/reports/:accountId/view/:slideId`
-
-**Not in router (files exist but unused):** `SlidesPage.tsx`, `ForecastingPage.tsx`, `ReportDashboard.tsx` — these are dead code candidates for Phase 9 cleanup.
+**Removed routes:** `/tools/reports/:accountId/brady`, `/tools/reports/:accountId/master-report`, `/tools/reports/:accountId/view/:slideId`, `/tools/report/:reportName` (AI summary), `/shared/reports/:slug` (AI summary)
 
 ---
 
@@ -126,14 +121,13 @@ Google Sheets / CSV URL
 ### 3. Data Studio / Report View
 
 - **Entry point:** `/` renders `SlideViewPage` directly — Data Studio is the app homepage.
-- **Orchestrator hook:** `src/hooks/useSlideReportPage.ts` — composes ~8 sub-hooks.
+- **Orchestrator hook:** `src/hooks/useSlideReportPage.ts` — composes sub-hooks for report identity, raw rows, filtered data, views, budgets, and mutations.
 - **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads `dimension_data` directly (no live fetch).
-- **Pivot / aggregation:** `src/lib/slideReportPivotComputation.ts` (legacy; still used — Phase 7-F3).
+- **Filtered data:** `src/hooks/useFilteredSlideData.ts` — pure client-side filtering and aggregation.
 - **Performance table:** `src/components/PerformanceTable/` + `src/hooks/performanceTable/`.
-- **View settings:** stored in `report_views`; repaired by `src/lib/resync-report-views.ts`.
+- **View settings:** stored in `views` table (canonical, replaces legacy `report_views` + `slide_report_views`).
 - **Layout:** `flex h-screen overflow-hidden` root → `ReportSidebar` (left nav: tabs + Actions/Manage/Tools sections) + main column (`flex-col flex-1`) → `SlideViewHeader` (topbar: back, report name, Data Sources, Dimensions, Share, Refresh Data) + scrollable tab content.
 - **Filters:** `FiltersRow` component (date range + channel filters); uses `DateRangeFilter` from `src/components/filters/`.
-- **AI summary display:** `AISummaryDisplay` component (markdown renderer with design system styling).
 
 ### 4. KPI / Metrics System
 
@@ -141,28 +135,55 @@ Google Sheets / CSV URL
 - **Default KPIs:** `getAccountDefaultKPIs()` returns exact KPI names matched case-insensitively from available dimensions.
 - **KPI repair:** `resyncReportViews()` normalizes and repairs `kpi_order` to stay consistent with `visible_kpis`.
 
-### 5. AI Summary System
-
-- **Generation:** `generate-ai-summary` edge function (LLM via LLMGateway).
-- **Storage:** `ai_summary_cards` table (canonical). `slide_report_summaries` is legacy — migration path: Phase 7-F5.
-- **Client:** `src/lib/generate-ai-summary-client.ts`.
-
-### 6. Refresh / Sync Workflow
+### 5. Refresh / Sync Workflow
 
 - **Entry point:** `src/lib/refreshWorkflow.ts` → `run-refresh-workflow` edge function.
 - **Workflow:** clears `dimension_data` for the report → calls `resync-data-source` for each data source.
-- **Legacy gate:** `SLIDE_REPORT_CACHE_ENABLED` env var (default off) gates legacy pivot cache writes.
 
-### 7. Sharing System
+### 6. Sharing System
 
-- **Public links:** `/shared/:slug` and `/shared/reports/:slug`.
+- **Public links:** `/shared/:slug`.
 - **Shared report:** `SharedReport.tsx` — no auth required.
 - **Slug contract:** shared links do **not** redirect into `/tools/*` routes.
 
-### 8. Integrations
+### 7. Integrations
 
 - **Composio:** all tool execution is server-side via `composio-proxy` edge function.
 - **FX rates:** `get-fx-rate` edge function.
+
+---
+
+## Active Edge Functions
+
+| Function | Purpose |
+|---|---|
+| `resync-data-source` | Sole writer to `dimension_data` |
+| `run-refresh-workflow` | Orchestrates full resync per account |
+| `auto-sync-data-sources` | Cron-triggered auto-sync |
+| `fetch-google-sheets` | Fetches Google Sheets data (server-side API key) |
+| `fetch-csv-url` | Fetches CSV from URL |
+| `get-performance-data` | Reads `dimension_data` with dimension loading |
+| `get-unique-dimension-values` | Returns unique values for filter dropdowns |
+| `composio-proxy` | Composio integration proxy |
+| `get-fx-rate` | FX rate lookup |
+| `update-user-password` | Admin password update |
+| `create-admin-user` | Admin user creation |
+
+---
+
+## Active DB Tables
+
+| Table | Purpose |
+|---|---|
+| `dimension_data` | Canonical fact store (post-mapping, dimension-id keyed rows) |
+| `dimensions` | Dimension registry (account, custom, global scopes) |
+| `data_sources` | Google Sheets / CSV source configs |
+| `reports` | Report identity per account |
+| `slide_reports` | Data Studio workspace record per account |
+| `views` | Unified view settings (replaces legacy `report_views` + `slide_report_views`) |
+| `share_links` | Public share link slugs |
+| `budgets` | Budget data per view |
+| `accounts` | Account records |
 
 ---
 
@@ -183,17 +204,17 @@ Google Sheets / CSV URL
 3. User opens Data Studio (homepage `/`)
    → SlideViewPage → useSlideReportPage
    → useDataStudioRawRows → supabase.from('dimension_data').select(...)
-   → slideReportPivotComputation → pivot rows
+   → useFilteredSlideData → client-side filtering + aggregation
    → ReportSidebar (left nav) + SlideViewHeader (topbar) + tab content
    → PerformanceTable / KPICards / Charts rendered
 
 4. User saves a view
-   → usePerformanceTableViews → supabase.from('report_views').upsert(...)
+   → usePerformanceTableViews → supabase.from('views').upsert(...)
    → viewSettingsMapper resolves IDs on next load
 
-5. User generates AI summary
-   → GenerateAISummaryModal → generate-ai-summary-client.ts
-   → generate-ai-summary (Edge) → LLM → ai_summary_cards upsert
+5. User shares a report
+   → CreateShareLinkModal → supabase.from('share_links').insert(...)
+   → /shared/:slug → SharedReport.tsx (public, no auth)
 ```
 
 ---
@@ -208,27 +229,25 @@ Google Sheets / CSV URL
 | `SlideViewHeader` | `src/components/slides/SlideViewHeader.tsx` | Topbar: back, report name, Data Sources, Dimensions, Share, Refresh Data |
 | `FiltersRow` | `src/components/slides/FiltersRow.tsx` | Date range + channel filter dropdowns row |
 | `DateRangeFilter` | `src/components/filters/DateRangeFilter.tsx` | Date range picker with presets + compare toggle |
-| `AISummaryDisplay` | `src/components/slides/AISummaryDisplay.tsx` | Markdown AI summary card with design system styling |
 | `PerformanceTable` | `src/components/PerformanceTable/` | Core data table with dimensions, sorting, column visibility |
-| `DashboardHeader` | `src/components/DashboardHeader.tsx` | Top nav (used in ReportDashboard / legacy views) |
-| `FiltersBar` | `src/components/FiltersBar.tsx` | Date + dimension filter bar (used in ReportDashboard) |
-| `KPICardsSection` / `KPICardItem` | `src/components/slides/KPICardsSection.tsx` | **Canonical** KPI card grid — minimalist, no icons, no left bar. Used by `renderKPICards` (SlideViewPage) and `KPIMetricsCards`. |
-| `KPIMetricsCards` | `src/components/KPIMetricsCards.tsx` | Self-contained KPI cards with data fetching (used by SharedReport). Renders via `KPICardItem`. |
-| `KPIChartsGrid` | `src/components/KPIChartsGrid.tsx` | KPI chart grid |
+| `DashboardHeader` | `src/components/DashboardHeader.tsx` | Top nav (used in SharedReport) |
+| `FiltersBar` | `src/components/FiltersBar.tsx` | Date + dimension filter bar (used in SharedReport) |
+| `KPICardsSection` / `KPICardItem` | `src/components/slides/KPICardsSection.tsx` | Canonical KPI card grid |
+| `KPIMetricsCards` | `src/components/KPIMetricsCards.tsx` | Self-contained KPI cards with data fetching (used by SharedReport) |
 | `EditSourceModal` | `src/components/slides/EditSourceModal/` | Multi-step data source config wizard |
 | `UnifiedDataSourceModal` | `src/components/UnifiedDataSourceModal.tsx` | Add/edit data source |
 | `ShareModal` | `src/components/ShareModal.tsx` | Public link sharing |
-| `MasterFilter` | `src/components/MasterFilter.tsx` | Master dimension filter |
 
 ### Hooks
 
 | Hook | Location | Purpose |
 |---|---|---|
 | `useSlideReportPage` | `src/hooks/useSlideReportPage.ts` | Master orchestrator for report view |
+| `useFilteredSlideData` | `src/hooks/useFilteredSlideData.ts` | Client-side filtering + aggregation |
+| `useDataStudioRawRows` | `src/hooks/useDataStudioRawRows.ts` | Raw `dimension_data` rows |
 | `useUser` / `getUser` | `src/lib/auth.ts` | Auth state (React Query backed) |
 | `useUserAccount` | `src/hooks/useUserAccount.ts` | Resolves current user's account |
 | `useCachedSourceData` | `src/hooks/dataSources/useCachedSourceData.ts` | Cache-first data source rows |
-| `useDataStudioRawRows` | `src/hooks/useDataStudioRawRows.ts` | Raw `dimension_data` rows |
 | `usePerformanceTableData` | `src/hooks/performanceTable/usePerformanceTableData.ts` | Table row data |
 | `usePerformanceTableViews` | `src/hooks/performanceTable/usePerformanceTableViews.ts` | Saved table views |
 
@@ -239,7 +258,7 @@ Google Sheets / CSV URL
 | `dimensionLoader` | `src/lib/dimensionLoader.ts` | Canonical dimension loading |
 | `viewSettingsMapper` | `src/lib/performanceTable/viewSettingsMapper.ts` | View settings ID resolution |
 | `metricsCalculations` | `src/lib/metricsCalculations.ts` | KPI derivation |
-| `slideReportPivotComputation` | `src/lib/slideReportPivotComputation.ts` | Pivot table engine |
+| `monthUtils` | `src/lib/monthUtils.ts` | Month/date range utilities |
 | `refreshWorkflow` | `src/lib/refreshWorkflow.ts` | Data sync entry point |
 | `resync-all-dimensions/` | `src/lib/resync-all-dimensions/` | Canonical dimension resync (modular) |
 | `composio-proxy` | `src/lib/composio-proxy.ts` | Composio integration client |
@@ -272,7 +291,7 @@ Google Sheets / CSV URL
 ### Data access
 
 - Never call Supabase directly from a UI component. Use hooks.
-- Never call external APIs (Google Sheets, LLM, FX) from the browser. Use Edge Functions.
+- Never call external APIs (Google Sheets, FX) from the browser. Use Edge Functions.
 - Use React Query for all async data. Prefer `staleTime` + `gcTime` for caching strategy.
 
 ### Apply / Cancel behavior (modals and sheets)
@@ -298,26 +317,8 @@ Before deleting any module:
 | `VITE_API_BASE_URL` | `src/lib/api-url.ts` | Base URL for Express server (default: `http://localhost:3000`) |
 | `SUPABASE_URL` | Edge Functions (Deno runtime) | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Edge Functions (Deno runtime) | Service role key for admin DB access |
-| `SLIDE_REPORT_CACHE_ENABLED` | Edge Functions | Gates legacy pivot cache writes (default: off) |
 
 Supabase anon key and project URL are hardcoded in `src/integrations/supabase/client.ts` (auto-generated by Supabase tooling).
-
----
-
-## Current Known Issues
-
-- `slide_report_summaries` reads in `useSlideReportSummaries` should migrate to `ai_summary_cards` (Phase 7-F5).
-- `slide_report_views` is still read by `useSlideReportViews`; canonical target is `report_views` (Phase 8-F1).
-- `useSlideReportDisplayData` still calls `get-slide-report-display-data` edge function (Phase 7-EF4 deferred).
-- `slideReportPivotComputation.ts` still used by `SlideViewPage` + `useSlideReports` (Phase 7-F3 deferred).
-- `slideRefreshHelpers.ts` still used by `SlideViewPage` (Phase 7-F4 deferred).
-- `refreshPivotDataHelpers.ts` still used by `AISummaryPage.tsx` (Phase 7-F2 deferred).
-- Legacy edge functions (`refresh-slide-report`, `get-slide-report-data`, etc.) are gated but not yet removed (Phase 7).
-- `resync-dimensions.ts` (flat) and `resync-all-dimensions.ts` (flat orchestrator) still active — superseded by `resync-all-dimensions/` folder pending (Phase 8-F2).
-- `data-loading-fix.ts` still imported by `KPIChart.tsx` — cannot delete until KPIChart is migrated (Phase 8-F3).
-- `monthly_dimension_data` and `aggregated_breakdown_data` tables — writer/consumer audit pending (Phase 8-F5/F6).
-- `SlidesPage.tsx`, `ForecastingPage.tsx`, `ReportDashboard.tsx` — files exist but are not in `App.tsx` router; dead code candidates for removal.
-- `FormattedAISummary.tsx` — older markdown formatter; `AISummaryDisplay.tsx` is the new canonical component; consolidation pending.
 
 ---
 
@@ -325,26 +326,15 @@ Supabase anon key and project URL are hardcoded in `src/integrations/supabase/cl
 
 See `docs/REFACTOR.md` for the full refactor plan, phase-by-phase progress, and the Verify → Migrate → Delete protocol.
 
-**Summary of completed phases:**
-- Phase 1: DB integrity + mapping references ✅
-- Phase 2: Canonical dimension loading + view settings ✅
-- Phase 3: Remove duplicate PerformanceTable + hooks ✅
-- Phase 4: Unit + integration tests ✅
-- Phase 5: Cleanup (unused utilities, legacy routes, account modals) ✅
-- Phase 6: Data source unification + canonical Data Studio fetch path ✅ (6-F1 through 6-F6)
-- Phase A: Account removal + post-login index ✅
-- Phase B: Single Data Studio (reports consolidation) ✅
-- Layout redesign: Left sidebar + topbar for Data Studio ✅ (L-1 through L-3)
-- Design system: Light-only luxury minimalist theme ✅ (DS-1 through DS-6)
-- Route simplification: `/` = Data Studio homepage ✅ (R-1, R-2)
-
-**In progress / next:**
-- Phase 6: 6-DB1, 6-DB2 (document `dimension_data` as single read path)
-- Phase 7: Legacy pivot cache + edge function cleanup (EF4, F2, F3, F4, F5 deferred)
-- Phase 8: View settings + resync consolidation (F1, F2, F3, F5, F6 deferred)
-- Phase 9: DB table drops (after proof)
-- Dead code removal: `SlidesPage.tsx`, `ForecastingPage.tsx`, `ReportDashboard.tsx` (not in router)
-- AI summary consolidation: `FormattedAISummary.tsx` → `AISummaryDisplay.tsx`
+**Looker Studio Refactor — completed 2026-03-18:**
+- Dropped AI summary tables: `ai_summary_cards`, `ai_summary_budgets`, `ai_summary_forecasts`, `slide_report_summaries`
+- Dropped legacy pivot cache tables: `slide_report_channel_*`, `slide_report_monthly_data`, `monthly_dimension_data`, `aggregated_breakdown_data`, `sheet_data`, `report_api_data`
+- Dropped legacy view tables: `report_views`, `slide_report_views` (replaced by `views`)
+- Deleted 12 retired edge functions (AI summary, legacy pivot cache, vlookup, sheet migration)
+- Deleted ~30 dead frontend files (Kanban cluster, AI components, legacy pivot engine, dead hooks)
+- Migrated `SharedReport.tsx` + `CreateShareLinkModal.tsx` to `views` table
+- Removed `report_api_data` fast-path from `get-performance-data`
+- `useSlideReportPage` now uses `useFilteredSlideData` directly (no intermediate passthrough hook)
 
 ---
 
@@ -353,19 +343,7 @@ See `docs/REFACTOR.md` for the full refactor plan, phase-by-phase progress, and 
 | Decision | Rationale | Date |
 |---|---|---|
 | One account per user | Simplifies routing; no account selector UI needed | 2026-03-18 |
-| `dimension_data` as canonical fact table | Single typed, dimension-id-keyed store; replaces `sheet_data` + legacy pivot caches | 2026-03-18 |
-| Data Studio as the only report view | Removes parallel report systems (Brady, Master Report) | 2026-03-18 |
-| Short entry routes (`/tools/reports` etc.) | User-friendly URLs; account resolved from auth context | 2026-03-18 |
-| `SLIDE_REPORT_CACHE_ENABLED` gate | Allows temporary backward compatibility while legacy edge functions are phased out | 2026-03-18 |
-| `report_views` as canonical view settings table | Single source of truth for column/KPI visibility and ordering | 2026-03-18 |
-
----
-
-## Next Milestones
-
-1. **Dead code removal** — Delete `SlidesPage.tsx`, `ForecastingPage.tsx`, `ReportDashboard.tsx` (not in router; verify zero imports first).
-2. **AI summary consolidation** — Migrate all callers of `FormattedAISummary` to `AISummaryDisplay`; delete `FormattedAISummary.tsx`.
-3. **Phase 6-DB** — Document `dimension_data` as single read path; verify `resync-data-source` is sole writer.
-4. **Phase 7** — Retire legacy pivot cache edge functions; unblock deferred items (EF4, F2, F3, F4, F5).
-5. **Phase 8** — Unify view settings (`report_views` only); consolidate resync utilities.
-6. **Phase 9** — Drop confirmed-unused legacy DB tables after full verification.
+| `dimension_data` as canonical fact table | Single typed, dimension-id-keyed store; replaces all legacy pivot caches | 2026-03-18 |
+| Data Studio as the only report view | Removes parallel report systems (Brady, Master Report, AI summary) | 2026-03-18 |
+| `views` as canonical view settings table | Single source of truth for column/KPI visibility, ordering, and filter presets | 2026-03-18 |
+| No AI summary features | Replaced by Looker Studio-style direct data exploration | 2026-03-18 |

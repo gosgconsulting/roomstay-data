@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,7 @@ const passwordSchema = z.string().min(6, "Password must be at least 6 characters
 
 const Auth = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [signInEmail, setSignInEmail] = useState("");
@@ -24,11 +25,14 @@ const Auth = () => {
   const [signUpEmail, setSignUpEmail] = useState("");
   const [signUpPassword, setSignUpPassword] = useState("");
 
+  // Redirect destination after login — use the page the user was trying to reach
+  const from = (location.state as { from?: Location })?.from?.pathname || "/";
+
   useEffect(() => {
     // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/");
+        navigate(from, { replace: true });
       }
     });
 
@@ -40,12 +44,12 @@ const Auth = () => {
       }
       
       if (session) {
-        navigate("/");
+        navigate(from, { replace: true });
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate, queryClient]);
+  }, [navigate, queryClient, from]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();

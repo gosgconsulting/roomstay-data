@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { SlideReport, SlideReportConfiguration, SlideReportPivotData, SlideReportDateRange } from "@/types/slideReports";
+import { SlideReport, SlideReportConfiguration, SlideReportPivotData } from "@/types/slideReports";
 import { toast } from "@/hooks/use-toast";
 import { Json } from "@/integrations/supabase/types";
 
@@ -165,61 +165,3 @@ export function useDeleteSlideReport() {
   });
 }
 
-export function useRefreshSlideReportData() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (slideReportId: string) => {
-      // Fetch the slide report
-      const { data: slideReport, error: slideError } = await supabase
-        .from("slide_reports")
-        .select("*")
-        .eq("id", slideReportId)
-        .single();
-
-      if (slideError) throw slideError;
-      if (!slideReport) throw new Error("Slide report not found");
-
-      // Import computation function
-      const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
-
-      // Compute pivot data
-      if (!slideReport.date_range) {
-        throw new Error("Date range not set for slide report");
-      }
-
-      const pivotData = await computeSlideReportPivotData(
-        slideReport.report_ids as unknown as Record<string, string>,
-        slideReport.configuration as unknown as SlideReportConfiguration,
-        slideReport.date_range as unknown as SlideReportDateRange
-      );
-
-      // Update the slide report with computed pivot data
-      const { data: updatedReport, error: updateError } = await supabase
-        .from("slide_reports")
-        .update({
-          pivot_data: pivotData as unknown as Json,
-          last_refreshed_at: new Date().toISOString(),
-        })
-        .eq("id", slideReportId)
-        .select()
-        .single();
-
-      if (updateError) throw updateError;
-      return updatedReport;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: slideReportKeys.detail(data.id) });
-      queryClient.invalidateQueries({ queryKey: slideReportKeys.list(data.account_id || "") });
-      toast({ title: "Data refreshed", description: "Slide report data has been updated." });
-    },
-    onError: (error) => {
-      console.error("Error refreshing slide report data:", error);
-      toast({ 
-        title: "Error", 
-        description: error instanceof Error ? error.message : "Failed to refresh.", 
-        variant: "destructive" 
-      });
-    },
-  });
-}

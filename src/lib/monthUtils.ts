@@ -334,3 +334,17 @@ export function dateRangeFromPreset(preset: string): DateRange | undefined {
       return undefined;
   }
 }
+
+/**
+ * Returns the date range for the current calendar month (from first to last day).
+ * Migrated from data-loading-fix.ts.
+ */
+export function getCurrentMonthDateRange(): { from: Date; to: Date } {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  return {
+    from: new Date(year, month, 1),
+    to: new Date(year, month + 1, 0),
+  };
+}

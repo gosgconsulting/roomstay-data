@@ -83,8 +83,11 @@ export default function DataSourcesPage() {
     if (accountId) {
       loadReports();
       loadDataSources();
+    } else if (!isResolvingAccount) {
+      // Account resolution finished but no accountId — stop the spinner
+      setIsLoading(false);
     }
-  }, [accountId]);
+  }, [accountId, isResolvingAccount]);
 
   const checkAuth = async () => {
     try {

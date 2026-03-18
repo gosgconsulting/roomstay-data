@@ -21,7 +21,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useSlideReportPage } from "@/hooks/useSlideReportPage";
 import { useUserAccount } from "@/hooks/useUserAccount";
-import { isMetasearchJan2026, getJan2026BreakdownRowsForTable } from "@/lib/metasearchJan2026Utils";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
 import { useEditSourceModal } from "@/hooks/useEditSourceModal";
 import { useDataLoadingCache } from "@/hooks/useDataLoadingCache";
@@ -29,7 +28,7 @@ import { useOverviewMetrics } from "@/hooks/useOverviewMetrics";
 import { useComparisonMetrics, useChannelComparisonMetrics } from "@/hooks/useComparisonMetrics";
 import { useKPICards, useReportKPICards } from "@/hooks/useKPICards";
 import { useOverviewChartData, useAllChannelChartData } from "@/hooks/useChartData";
-import { useChannelChartDataFromTable } from "@/hooks/useChannelChartDataFromTable";
+import { useChannelChartDataFromRawRows } from "@/hooks/useChannelChartDataFromRawRows";
 import { buildOverviewChartDataFromMonthlyData, buildOverviewChartDataFromChannelChartData, buildChannelChartDataFromMonthlyData, generateMonthsInTimeRange } from "@/lib/chartDataCalculations";
 import { useBudgetData, useBudgetMonthlyData } from "@/hooks/useBudgetData";
 import { calculateReportBreakdown, calculateReportTotal } from "@/lib/metricsCalculations";
@@ -71,800 +70,7 @@ import {
   getMetricKeys,
   ensureMinimumChartData,
 } from "@/lib/slideViewHelpers";
-import {
-  prepareMonthlyRecords,
-  insertMonthlyRecordsBatched,
-  extractFilterDimensionValues,
-  calculateConfigCounts,
-  normalizeErrorMessage,
-} from "@/lib/slideRefreshHelpers";
 import type { RawDataRow, MetricData } from "@/types/slideView";
-
-const GROSS_PROFIT_RATE = 0.15;
-/** Gross profit for Metasearch + Link Type = Google Organic: Revenue * 3% */
-const GROSS_PROFIT_RATE_GOOGLE_ORGANIC = 0.03;
-
-// Unified breakdown table component with Group by / Breakdown by dropdowns
-// Uses data from pivot_data.channels[channel].monthlyBreakdowns for month-specific data
-const UnifiedBreakdownTable = ({
-  groupBy,
-  breakdownBy,
-  expandedRow,
-  onRowClick,
-  onGroupByChange,
-  onBreakdownByChange,
-  availableDimensions,
-  pivotData,
-  selectedChannel,
-  selectedYear,
-  selectedMonth,
-  customDateRange,
-  filterValues,
-  filterDimensionValues,
-  onTotalsChange,
-  displayDataFromApi,
-  apiBreakdowns,
-  suppressExpandedBreakdown,
-  displayCurrency,
-  comparisonChannelTotals,
-  comparisonType: compType,
-}: {
-  groupBy: string;
-  breakdownBy: string;
-  expandedRow: string | null;
-  onRowClick: (rowValue: string | null) => void;
-  onGroupByChange: (value: string) => void;
-  onBreakdownByChange: (value: string) => void;
-  availableDimensions: { id: string; name: string; type: string }[];
-  pivotData?: any;
-  selectedChannel?: 'metasearch' | 'sem' | 'social' | 'overview';
-  selectedYear?: string;
-  selectedMonth?: string;
-  /** Exact date range override — when set, filtering uses precise from/to dates instead of month boundaries. */
-  customDateRange?: import("react-day-picker").DateRange | undefined;
-  filterValues?: Record<string, Record<string, string[]>>;
-  filterDimensionValues?: Record<string, Record<string, string[]>>;
-  onTotalsChange?: (totals: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => void;
-  /** When set, use pre-computed breakdowns from display-data API instead of computing from raw rows. */
-  displayDataFromApi?: boolean;
-  apiBreakdowns?: { groupBy: string; rows: Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number; cpc?: number; roas?: number; costOfSale?: number }>; expanded?: Record<string, Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>> };
-  /** When true, do not show expanded sub-rows (e.g. to avoid wrong API expanded data for Metasearch Jan 2026). */
-  suppressExpandedBreakdown?: boolean;
-  /** Display currency for formatting (AUD/USD). */
-  displayCurrency?: 'AUD' | 'USD';
-  /** Comparison totals per channel for showing % change on total row */
-  comparisonChannelTotals?: Record<string, any> | null;
-  comparisonType?: string;
-}) => {
-  // Auto-select defaults when dimensions are available
-  useEffect(() => {
-    if (availableDimensions.length > 0) {
-      // If current groupBy is not in available dimensions, select the first
-      if (!availableDimensions.find(d => d.id === groupBy)) {
-        onGroupByChange(availableDimensions[0].id);
-      }
-      // If current breakdownBy is not in available dimensions or same as groupBy, select a different one
-      if (!availableDimensions.find(d => d.id === breakdownBy) || breakdownBy === groupBy) {
-        const differentDim = availableDimensions.find(d => d.id !== groupBy);
-        if (differentDim) {
-          onBreakdownByChange(differentDim.id);
-        }
-      }
-    }
-  }, [availableDimensions, groupBy, breakdownBy, onGroupByChange, onBreakdownByChange]);
-
-  // Build monthKey for filtering by selected year/month (supports multi-month)
-  const monthKey = useMemo(() => {
-    if (!selectedYear || selectedYear === 'all' || !selectedMonth || selectedMonth === 'all') {
-      return null; // Use aggregated data
-    }
-    // Only return a single monthKey if exactly one month is selected
-    const months = selectedMonth.split(',').map(m => m.trim());
-    if (months.length !== 1) return null;
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const monthNum = monthNames.indexOf(months[0]) + 1;
-    return `${selectedYear}-${monthNum.toString().padStart(2, '0')}`;
-  }, [selectedYear, selectedMonth]);
-
-  // Build date range for breakdown table filtering.
-  // When customDateRange is set, use exact from/to dates (supports sub-month ranges like 1-5 days).
-  // Otherwise fall back to month-boundary range from selectedYear/selectedMonth.
-  const breakdownDateRange = useMemo(() => {
-    if (customDateRange?.from) {
-      const from = customDateRange.from;
-      const to = customDateRange.to ?? customDateRange.from;
-      return {
-        start: from,
-        end: new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999),
-      };
-    }
-    return buildMultiMonthDateRange(selectedYear || 'all', selectedMonth || 'all');
-  }, [customDateRange, selectedYear, selectedMonth]);
-
-  // Get breakdown data from pivotData based on selected dimension and month
-  // Applies filterValues if they are set. When displayDataFromApi and apiBreakdowns are set, use API data (no heavy calc).
-  // When group-by is e.g. Link Type and breakdown-by is Hotel, row totals must respect the Hotel filter: recompute from filtered expanded rows.
-  const groupedData = useMemo(() => {
-    if (displayDataFromApi && apiBreakdowns?.rows?.length) {
-      const groupByDimId = availableDimensions.find(d => d.id === groupBy)?.id;
-      const groupByFilterValues = groupByDimId && selectedChannel && selectedChannel !== 'overview'
-        ? filterValues?.[selectedChannel]?.[groupByDimId]
-        : undefined;
-      const allowedSet = groupByFilterValues?.length
-        ? new Set(groupByFilterValues.map((v: string) => String(v).trim()))
-        : null;
-      const rows = apiBreakdowns.rows.filter((row) => {
-        if (row.name == null || String(row.name).trim() === '' || String(row.name).trim().toLowerCase() === 'unknown') return false;
-        if (allowedSet && !allowedSet.has(String(row.name).trim())) return false;
-        return true;
-      });
-
-      // When a breakdown-by filter is active (e.g. Hotel), recompute each group row from filtered expanded data
-      // so that row totals and table total match the selected hotels (e.g. Metasearch Jan 2026, group by Link Type, 4 hotels).
-      const breakdownByDimId = availableDimensions.find(d => d.id === breakdownBy)?.id;
-      const breakdownFilterValues = breakdownByDimId && selectedChannel && selectedChannel !== 'overview'
-        ? filterValues?.[selectedChannel]?.[breakdownByDimId]
-        : undefined;
-      const breakdownAllowedSet = breakdownFilterValues?.length
-        ? new Set(breakdownFilterValues.map((v: string) => String(v).trim()))
-        : null;
-      const useFilteredExpandedForTotals = Boolean(
-        breakdownAllowedSet && apiBreakdowns.expanded && Object.keys(apiBreakdowns.expanded).length > 0
-      );
-
-      return rows.map((row) => {
-        let cleanData: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number };
-        if (useFilteredExpandedForTotals && apiBreakdowns.expanded?.[row.name]) {
-          const expandedRows = apiBreakdowns.expanded[row.name].filter(
-            (r: { name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) =>
-              r.name != null && breakdownAllowedSet!.has(String(r.name).trim())
-          );
-          cleanData = expandedRows.reduce(
-            (acc, r) => ({
-              impressions: acc.impressions + (Number(r.impressions) || 0),
-              clicks: acc.clicks + (Number(r.clicks) || 0),
-              cost: acc.cost + (Number(r.cost) || 0),
-              revenue: acc.revenue + (Number(r.revenue) || 0),
-              bookings: acc.bookings + (Number(r.bookings) || 0),
-            }),
-            { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
-          );
-        } else {
-          cleanData = {
-            impressions: Number(row.impressions) || 0,
-            clicks: Number(row.clicks) || 0,
-            cost: Number(row.cost) || 0,
-            revenue: Number(row.revenue) || 0,
-            bookings: Number(row.bookings) || 0,
-          };
-        }
-        const metrics = calculateDerivedMetrics(cleanData);
-        return { groupValue: row.name, metrics, rawData: cleanData };
-      });
-    }
-    if (!pivotData?.channels) return [];
-
-    const groupByDim = availableDimensions.find(d => d.id === groupBy);
-    const groupByName = groupByDim?.name || groupBy;
-    const groupByDimId = groupByDim?.id || groupBy;
-
-    // Check if filters are actually applied for the selected channel using centralized function
-    const hasFilters = selectedChannel && selectedChannel !== 'overview' && filterValues?.[selectedChannel]
-      ? hasActiveFiltersForChannel(
-        filterValues[selectedChannel],
-        filterDimensionValues?.[selectedChannel]
-      )
-      : false;
-
-    // Collect breakdown data from all channels (or specific channel if selected)
-    const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
-
-    const channelsToCheck = selectedChannel && selectedChannel !== 'overview'
-      ? [selectedChannel]
-      : Object.keys(pivotData.channels);
-
-    for (const channel of channelsToCheck) {
-      const channelData = pivotData.channels[channel];
-      if (!channelData) continue;
-
-      const rawDataRows = (channelData as any).rawDataRows || [];
-
-      // Always use rawDataRows when available for consistency and completeness
-      // This ensures we use the dynamic dimension resolution and get all data
-      if (rawDataRows.length > 0) {
-        const channelFilterValues = hasFilters && channel === selectedChannel
-          ? (filterValues?.[channel] || {})
-          : {};
-
-        // Use precise multi-month date range (e.g. Jul-Dec) instead of full year
-        let dateRange = breakdownDateRange;
-        if (!dateRange && monthKey) {
-          const [year, monthNum] = monthKey.split('-').map(Number);
-          dateRange = {
-            start: new Date(year, monthNum - 1, 1),
-            end: new Date(year, monthNum, 0, 23, 59, 59),
-          };
-        }
-
-        // Filter rows (applies date range and any filters)
-        const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange);
-
-        // Group by breakdown dimension and aggregate metrics
-        const groupedRows: Record<string, any[]> = {};
-        filteredRows.forEach((row) => {
-          const rowData = row.dimension_values || row;
-          const groupValue = rowData[groupByDimId] || rowData[groupByName] || 'Unknown';
-          const normalizedGroupValue = String(groupValue).trim();
-
-          if (normalizedGroupValue && normalizedGroupValue !== 'Unknown') {
-            if (!groupedRows[normalizedGroupValue]) {
-              groupedRows[normalizedGroupValue] = [];
-            }
-            groupedRows[normalizedGroupValue].push(row);
-          }
-        });
-
-        // Build metricNameToIdMap from dimensionMap (reverse mapping: name -> id)
-        // This matches the exact structure used in slideReportPivotComputation.ts
-        const dimensionMap = (channelData as any).dimensionMap || {};
-        const metricNameToIdMap: Record<string, string> = {};
-        Object.entries(dimensionMap as Record<string, string>).forEach(([dimensionId, dimensionName]) => {
-          if (dimensionName && typeof dimensionName === 'string') {
-            metricNameToIdMap[dimensionName] = dimensionId;
-          }
-        });
-
-        // Aggregate metrics for each group
-        Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
-          if (!allBreakdowns[groupValue]) {
-            allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-          }
-
-          groupRows.forEach((row) => {
-            const rowData = row.dimension_values || row;
-
-            // Use EXACT same extraction logic as computeBreakdownAllTime/computeBreakdownForMonth
-            // This ensures we get the same values as the pre-computed breakdowns
-            const impressionsValue = parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
-            const clicksValue = parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
-            const costValue = parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
-            const revenueValue = parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
-            const bookingsValue = parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
-
-            allBreakdowns[groupValue].impressions += impressionsValue;
-            allBreakdowns[groupValue].clicks += clicksValue;
-            allBreakdowns[groupValue].cost += costValue;
-            allBreakdowns[groupValue].revenue += revenueValue;
-            allBreakdowns[groupValue].bookings += bookingsValue;
-          });
-        });
-      } else {
-        // Fallback: No rawDataRows available - use pre-computed breakdown data
-        // Use monthlyBreakdowns if a specific month is selected, otherwise use aggregated breakdowns
-        let breakdownData: any[] = [];
-
-        if (monthKey && channelData.monthlyBreakdowns?.[monthKey]) {
-          // Use month-specific breakdown data
-          breakdownData = channelData.monthlyBreakdowns[monthKey][groupByName] || [];
-        } else if (!monthKey && selectedMonth && selectedMonth !== 'all' && selectedYear && selectedYear !== 'all' && channelData.monthlyBreakdowns) {
-          // Multi-month: aggregate monthly breakdowns for each selected month
-          const months = parseSelectedMonths(selectedMonth);
-          if (months && months.length > 0) {
-            const aggregated: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
-            for (const m of months) {
-              const mk = `${selectedYear}-${String(m).padStart(2, '0')}`;
-              const monthRows = channelData.monthlyBreakdowns[mk]?.[groupByName] || [];
-              monthRows.forEach((row: any) => {
-                const name = row.name || 'Unknown';
-                if (!aggregated[name]) aggregated[name] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-                aggregated[name].impressions += row.impressions || 0;
-                aggregated[name].clicks += row.clicks || 0;
-                aggregated[name].cost += row.cost || 0;
-                aggregated[name].revenue += row.revenue || 0;
-                aggregated[name].bookings += row.bookings || 0;
-              });
-            }
-            breakdownData = Object.entries(aggregated).map(([name, metrics]) => ({ name, ...metrics }));
-          }
-          if (breakdownData.length === 0 && channelData.breakdowns) {
-            breakdownData = channelData.breakdowns[groupByName] || [];
-          }
-        } else if (channelData.breakdowns) {
-          // Fall back to aggregated breakdowns
-          breakdownData = channelData.breakdowns[groupByName] || [];
-        }
-
-        // When filters are active, filter breakdown rows by groupBy dimension so view/dimension filter applies
-        const groupByFilterValues = hasFilters && channel === selectedChannel && (filterValues?.[channel] || {})[groupByDimId];
-        if (groupByFilterValues && Array.isArray(groupByFilterValues) && groupByFilterValues.length > 0) {
-          const allowedSet = new Set(groupByFilterValues.map((v: string) => String(v).trim()));
-          breakdownData = breakdownData.filter((row: any) => {
-            const groupValue = row.name ?? row[groupByName] ?? row[groupByName.toLowerCase().replace(/\s+/g, '_')];
-            return groupValue != null && allowedSet.has(String(groupValue).trim());
-          });
-        }
-
-        breakdownData.forEach((row: any) => {
-          const groupValue = row.name || row[groupByName.toLowerCase().replace(/\s+/g, '_')] || 'Unknown';
-          if (!allBreakdowns[groupValue]) {
-            allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-          }
-          allBreakdowns[groupValue].impressions += row.impressions || 0;
-          allBreakdowns[groupValue].clicks += row.clicks || 0;
-          allBreakdowns[groupValue].cost += row.cost || 0;
-          allBreakdowns[groupValue].revenue += row.revenue || 0;
-          allBreakdowns[groupValue].bookings += row.bookings || 0;
-        });
-      }
-    }
-
-    // Convert to array and calculate derived metrics
-    const result = Object.entries(allBreakdowns)
-      .filter(([groupValue]) => groupValue && groupValue !== 'Unknown')
-      .sort(([, a], [, b]) => b.revenue - a.revenue)
-      .map(([groupValue, data]) => {
-        // Ensure data has all required fields with proper types
-        const cleanData = {
-          impressions: Number(data.impressions) || 0,
-          clicks: Number(data.clicks) || 0,
-          cost: Number(data.cost) || 0,
-          revenue: Number(data.revenue) || 0,
-          bookings: Number(data.bookings) || 0,
-        };
-
-        const metrics = calculateDerivedMetrics(cleanData);
-
-        return {
-          groupValue,
-          metrics,
-          rawData: cleanData,
-        };
-      });
-
-    return result;
-  }, [displayDataFromApi, apiBreakdowns, pivotData, groupBy, breakdownBy, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear, selectedMonth, breakdownDateRange]);
-
-  // Get breakdown data for expanded row (also uses month-specific data)
-  // This should show breakdown data ONLY for the expanded parent row value
-  const getExpandedBreakdownData = useMemo(() => {
-    if (!expandedRow || !breakdownBy) return [];
-    if (suppressExpandedBreakdown) return [];
-
-    if (displayDataFromApi && apiBreakdowns?.expanded) {
-      let expandedRows = apiBreakdowns.expanded[expandedRow];
-      const breakdownByDimId = availableDimensions.find(d => d.id === breakdownBy)?.id;
-      const breakdownFilterValues = breakdownByDimId && selectedChannel && selectedChannel !== 'overview'
-        ? filterValues?.[selectedChannel]?.[breakdownByDimId]
-        : undefined;
-      const breakdownAllowedSet = breakdownFilterValues?.length
-        ? new Set(breakdownFilterValues.map((v: string) => String(v).trim()))
-        : null;
-      if (expandedRows?.length && breakdownAllowedSet) {
-        expandedRows = expandedRows.filter((row) => row.name != null && breakdownAllowedSet.has(String(row.name).trim()));
-      }
-      if (expandedRows?.length) {
-        return expandedRows.map((row) => {
-          const cleanData = {
-            impressions: Number(row.impressions) || 0,
-            clicks: Number(row.clicks) || 0,
-            cost: Number(row.cost) || 0,
-            revenue: Number(row.revenue) || 0,
-            bookings: Number(row.bookings) || 0,
-          };
-          return { value: row.name, metrics: calculateDerivedMetrics(cleanData) };
-        });
-      }
-      return [];
-    }
-
-    if (!pivotData?.channels) return [];
-    const groupByDim = availableDimensions.find(d => d.id === groupBy);
-    const groupByDimId = groupByDim?.id || groupBy;
-    const groupByName = groupByDim?.name || groupBy;
-
-    const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
-    const breakdownByName = breakdownByDim?.name || breakdownBy;
-    const breakdownByDimId = breakdownByDim?.id || breakdownBy;
-
-    const channelsToCheck = selectedChannel && selectedChannel !== 'overview'
-      ? [selectedChannel]
-      : Object.keys(pivotData.channels);
-
-    // Check if filters are actually applied using centralized function
-    const hasFilters = selectedChannel && selectedChannel !== 'overview' && filterValues?.[selectedChannel]
-      ? hasActiveFiltersForChannel(
-        filterValues[selectedChannel],
-        filterDimensionValues?.[selectedChannel]
-      )
-      : false;
-
-    const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
-    let hadRawDataRows = false;
-
-    for (const channel of channelsToCheck) {
-      const channelData = pivotData.channels[channel];
-      if (!channelData) continue;
-
-      // Build date range if month is selected
-      let dateRange: { start: Date; end: Date } | undefined;
-      if (monthKey) {
-        const [year, monthNum] = monthKey.split('-').map(Number);
-        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-        dateRange = {
-          start: new Date(year, monthNum - 1, 1),
-          end: new Date(year, monthNum, 0, 23, 59, 59),
-        };
-      } else if (selectedYear && selectedYear !== 'all') {
-        const yearNum = parseInt(selectedYear);
-        dateRange = {
-          start: new Date(yearNum, 0, 1),
-          end: new Date(yearNum, 11, 31, 23, 59, 59),
-        };
-      }
-
-      // Get raw data rows
-      const rawDataRows = (channelData as any).rawDataRows || [];
-      if (rawDataRows.length > 0) hadRawDataRows = true;
-      const expandedDimensionMap = (channelData as any).dimensionMap || {};
-
-      // Apply filters if they exist (pass dimensionMap so name-keyed data e.g. "Link Type" is matched)
-      let filteredRows = rawDataRows;
-      if (hasFilters && channel === selectedChannel) {
-        const channelFilterValues = filterValues?.[channel] || {};
-        filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange, expandedDimensionMap);
-      } else if (dateRange) {
-        filteredRows = filterRawDataRows(rawDataRows, {}, dateRange, expandedDimensionMap);
-      }
-
-      // Filter to only rows where groupBy dimension matches expandedRow
-      const rowsForExpandedRow = filteredRows.filter((row) => {
-        const rowData = row.dimension_values || row;
-        const rowGroupValue = rowData[groupByDimId] || rowData[groupByName];
-        const normalizedRowGroupValue = String(rowGroupValue || '').trim();
-        const normalizedExpandedRow = String(expandedRow).trim();
-        return normalizedRowGroupValue === normalizedExpandedRow;
-      });
-
-      // Group by breakdownBy dimension
-      const groupedRows: Record<string, any[]> = {};
-      rowsForExpandedRow.forEach((row) => {
-        const rowData = row.dimension_values || row;
-        const breakdownValue = rowData[breakdownByDimId] || rowData[breakdownByName] || 'Unknown';
-        const normalizedBreakdownValue = String(breakdownValue).trim();
-
-        if (normalizedBreakdownValue && normalizedBreakdownValue !== 'Unknown') {
-          if (!groupedRows[normalizedBreakdownValue]) {
-            groupedRows[normalizedBreakdownValue] = [];
-          }
-          groupedRows[normalizedBreakdownValue].push(row);
-        }
-      });
-
-      // Aggregate metrics for each breakdown value
-      Object.entries(groupedRows).forEach(([breakdownValue, groupRows]) => {
-        if (!allBreakdowns[breakdownValue]) {
-          allBreakdowns[breakdownValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-        }
-
-        // Build metricNameToIdMap from dimensionMap (reverse mapping: name -> id)
-        // This matches the exact structure used in slideReportPivotComputation.ts
-        const dimensionMap = (channelData as any).dimensionMap || {};
-        const metricNameToIdMap: Record<string, string> = {};
-        Object.entries(dimensionMap as Record<string, string>).forEach(([dimensionId, dimensionName]) => {
-          if (dimensionName && typeof dimensionName === 'string') {
-            metricNameToIdMap[dimensionName] = dimensionId;
-          }
-        });
-
-        groupRows.forEach((row) => {
-          const rowData = row.dimension_values || row;
-
-          // Use EXACT same extraction logic as computeBreakdownAllTime/computeBreakdownForMonth
-          // This ensures we get the same values as the pre-computed breakdowns
-          allBreakdowns[breakdownValue].impressions += parseFloat(rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0) || 0;
-          allBreakdowns[breakdownValue].clicks += parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
-          allBreakdowns[breakdownValue].cost += parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
-          allBreakdowns[breakdownValue].revenue += parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
-          allBreakdowns[breakdownValue].bookings += parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
-        });
-      });
-    }
-
-    // Only use pre-computed breakdown when there were NO rawDataRows (e.g. data from channel month table only).
-    // If we had rawDataRows but they don't have the breakdown dimension for this expanded group (e.g. Jan 2026
-    // override has hotel-only rows), do NOT show report-level breakdown under each hotel — that would show
-    // wrong totals (same Paid/Google Organic for every hotel).
-    if (Object.keys(allBreakdowns).length === 0 && pivotData?.channels && !hadRawDataRows) {
-      for (const channel of channelsToCheck) {
-        const channelData = pivotData.channels[channel];
-        if (!channelData) continue;
-        let breakdownData: any[] = [];
-        if (monthKey && (channelData as any).monthlyBreakdowns?.[monthKey]) {
-          breakdownData = (channelData as any).monthlyBreakdowns[monthKey][breakdownByName] || [];
-        } else if ((channelData as any).breakdowns) {
-          breakdownData = (channelData as any).breakdowns[breakdownByName] || [];
-        }
-        // Apply filter when the breakdownBy dimension has selected values (so expanded list respects view/dimension filter)
-        const breakdownFilterValues = selectedChannel && channel === selectedChannel ? (filterValues?.[channel]?.[breakdownByDimId] || null) : null;
-        if (breakdownFilterValues && Array.isArray(breakdownFilterValues) && breakdownFilterValues.length > 0) {
-          const allowedSet = new Set(breakdownFilterValues.map((v: string) => String(v).trim()));
-          breakdownData = breakdownData.filter((row: any) => {
-            const name = row.name ?? row[breakdownByName] ?? row[breakdownByName.toLowerCase().replace(/\s+/g, '_')];
-            return name != null && allowedSet.has(String(name).trim());
-          });
-        }
-        breakdownData.forEach((row: any) => {
-          const name = row.name ?? row[breakdownByName] ?? row[breakdownByName.toLowerCase().replace(/\s+/g, '_')] ?? 'Unknown';
-          if (!name || name === 'Unknown') return;
-          if (!allBreakdowns[name]) allBreakdowns[name] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-          allBreakdowns[name].impressions += row.impressions ?? 0;
-          allBreakdowns[name].clicks += row.clicks ?? 0;
-          allBreakdowns[name].cost += row.cost ?? 0;
-          allBreakdowns[name].revenue += row.revenue ?? 0;
-          allBreakdowns[name].bookings += row.bookings ?? 0;
-        });
-      }
-    }
-
-    return Object.entries(allBreakdowns)
-      .filter(([value]) => value && value !== 'Unknown')
-      .sort(([, a], [, b]) => b.revenue - a.revenue)
-      .map(([value, data]) => ({
-        value,
-        metrics: calculateDerivedMetrics(data),
-      }));
-  }, [expandedRow, breakdownBy, suppressExpandedBreakdown, displayDataFromApi, apiBreakdowns, pivotData, availableDimensions, selectedChannel, monthKey, filterValues, filterDimensionValues, selectedYear, groupBy]);
-
-  // Calculate totals - use rawData to ensure we're summing base metrics only
-  // Then recalculate derived metrics (CPC, ROAS, Cost of Sale) from the aggregated totals
-  const totals = groupedData.reduce((acc, group) => ({
-    impressions: acc.impressions + (group.rawData?.impressions || group.metrics.impressions || 0),
-    clicks: acc.clicks + (group.rawData?.clicks || group.metrics.clicks || 0),
-    cost: acc.cost + (group.rawData?.cost || group.metrics.cost || 0),
-    revenue: acc.revenue + (group.rawData?.revenue || group.metrics.revenue || 0),
-    bookings: acc.bookings + (group.rawData?.bookings || group.metrics.bookings || 0),
-  }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
-  const totalMetrics = calculateDerivedMetrics(totals);
-
-  // Expose totals to parent component for KPI cards synchronization
-  useEffect(() => {
-    if (onTotalsChange && selectedChannel) {
-      onTotalsChange(totals);
-    }
-  }, [totals, onTotalsChange, selectedChannel]);
-
-  const groupByDim = availableDimensions.find(d => d.id === groupBy);
-  const breakdownByDim = availableDimensions.find(d => d.id === breakdownBy);
-
-  // Filter available dimensions to exclude currently selected for each dropdown
-  const groupByOptions = availableDimensions;
-  const breakdownByOptions = availableDimensions.filter(d => d.id !== groupBy);
-
-  // Show message if no data
-  if (groupedData.length === 0) {
-    return (
-      <div className="space-y-4">
-        {/* Dropdowns */}
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground">Group by:</Label>
-            <Select value={groupBy} onValueChange={(value) => { onGroupByChange(value); onRowClick(null); }}>
-              <SelectTrigger className="w-40 bg-background border border-input">
-                <SelectValue placeholder="Select dimension" />
-              </SelectTrigger>
-              <SelectContent>
-                {groupByOptions.map(dim => (
-                  <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-sm text-muted-foreground">Breakdown by:</Label>
-            <Select value={breakdownBy} onValueChange={onBreakdownByChange}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Select dimension" />
-              </SelectTrigger>
-              <SelectContent>
-                {breakdownByOptions.map(dim => (
-                  <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="text-center py-8 text-muted-foreground">
-          <p>No breakdown data available.</p>
-          <p className="text-sm mt-2">Configure breakdown dimensions in the Data Source modal and click "Refresh Data" to compute breakdown tables.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Dropdowns */}
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">Group by:</Label>
-          <Select value={groupBy} onValueChange={(value) => { onGroupByChange(value); onRowClick(null); }}>
-            <SelectTrigger className="w-40 bg-background border border-input">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {groupByOptions.map(dim => (
-                <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">Breakdown by:</Label>
-          <Select value={breakdownBy} onValueChange={onBreakdownByChange}>
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {breakdownByOptions.map(dim => (
-                <SelectItem key={dim.id} value={dim.id}>{dim.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Table */}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-8"></TableHead>
-            <TableHead>{groupByDim?.name || 'Group'}</TableHead>
-            <TableHead className="text-right">Impressions</TableHead>
-            <TableHead className="text-right">Clicks</TableHead>
-            <TableHead className="text-right">CTR</TableHead>
-            <TableHead className="text-right">Bookings</TableHead>
-            <TableHead className="text-right">Conv. Rate</TableHead>
-            <TableHead className="text-right">CPC</TableHead>
-            <TableHead className="text-right">Cost</TableHead>
-            <TableHead className="text-right">Revenue</TableHead>
-            <TableHead className="text-right">ROAS</TableHead>
-             <TableHead className="text-right">Cost of Sale</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {groupedData.map((group) => (
-            <React.Fragment key={group.groupValue}>
-              <TableRow
-                className="hover:bg-muted/50 cursor-pointer"
-                onClick={() => onRowClick(expandedRow === group.groupValue ? null : group.groupValue)}
-              >
-                <TableCell className="w-8">
-                  <ChevronRight className={cn(
-                    "h-4 w-4 transition-transform",
-                    expandedRow === group.groupValue && "rotate-90"
-                  )} />
-                </TableCell>
-                <TableCell className="font-medium">{group.groupValue}</TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.impressions)}</TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.clicks)}</TableCell>
-                <TableCell className="text-right">{group.metrics.ctr.toFixed(2)}%</TableCell>
-                <TableCell className="text-right">{group.metrics.bookings.toFixed(2)}</TableCell>
-                <TableCell className="text-right">{group.metrics.conversionRate.toFixed(2)}%</TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.cpc, 'currency', displayCurrency, 2)}</TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.cost, 'currency', displayCurrency)}</TableCell>
-                <TableCell className="text-right">{formatNumber(group.metrics.revenue, 'currency', displayCurrency)}</TableCell>
-                <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
-                <TableCell className="text-right">{group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%</TableCell>
-              </TableRow>
-              {/* Expanded breakdown rows */}
-              {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
-                <>
-                  {getExpandedBreakdownData.map((item) => (
-                    <TableRow key={`${group.groupValue}-${item.value}`} className="bg-muted/30">
-                      <TableCell></TableCell>
-                      <TableCell className="pl-8 text-muted-foreground">
-                        <span className="text-xs uppercase mr-2">{breakdownByDim?.name}:</span>
-                        {item.value}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {item.metrics.impressions < group.metrics.impressions || item.metrics.impressions === 0 ?
-                          formatNumber(item.metrics.impressions) :
-                          formatNumber(group.metrics.impressions)}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.clicks)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{item.metrics.ctr.toFixed(2)}%</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{item.metrics.bookings.toFixed(2)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{item.metrics.conversionRate.toFixed(2)}%</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.cpc, 'currency', displayCurrency, 2)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.cost, 'currency', displayCurrency)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency', displayCurrency)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{item.metrics.costOfSale < 0.01 ? item.metrics.costOfSale.toFixed(4) : item.metrics.costOfSale.toFixed(2)}%</TableCell>
-                    </TableRow>
-                  ))}
-                </>
-              )}
-            </React.Fragment>
-          ))}
-          {/* Totals Row */}
-          {(() => {
-            // Compute comparison metrics for total row
-            const showComp = compType && compType !== 'none';
-            const compDerived = showComp && comparisonChannelTotals && selectedChannel && selectedChannel !== 'overview'
-              ? (() => {
-                  const ch = comparisonChannelTotals[selectedChannel];
-                  if (!ch) return null;
-                  const hasData = (ch.impressions || 0) > 0 || (ch.clicks || 0) > 0 || (ch.cost || 0) > 0 || (ch.revenue || 0) > 0 || (ch.bookings || 0) > 0;
-                  return hasData ? calculateDerivedMetrics(ch) : null;
-                })()
-              : null;
-
-            const renderCompBadge = (current: number, previous: number | undefined, isCostMetric = false) => {
-              if (previous === undefined || previous === null) return null;
-              const pct = calculatePercentChange(current, previous);
-              if (pct === null) return null;
-              const isPositive = pct >= 0;
-              const isGood = isCostMetric ? !isPositive : isPositive;
-              return (
-                <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${isGood ? 'text-green-600' : 'text-red-600'}`}>
-                  {isPositive ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}
-                  {Math.abs(pct).toFixed(1)}%
-                </span>
-              );
-            };
-
-            return (
-              <TableRow className="bg-muted/50 font-semibold border-t-2">
-                <TableCell></TableCell>
-                <TableCell className="font-bold">Total</TableCell>
-                <TableCell className="text-right">
-                  <div>{formatNumber(totalMetrics.impressions)}</div>
-                  {renderCompBadge(totalMetrics.impressions, compDerived?.impressions)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div>{formatNumber(totalMetrics.clicks)}</div>
-                  {renderCompBadge(totalMetrics.clicks, compDerived?.clicks)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div>{totalMetrics.ctr.toFixed(2)}%</div>
-                  {renderCompBadge(totalMetrics.ctr, compDerived?.ctr)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div>{totalMetrics.bookings.toFixed(2)}</div>
-                  {renderCompBadge(totalMetrics.bookings, compDerived?.bookings)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div>{totalMetrics.conversionRate.toFixed(2)}%</div>
-                  {renderCompBadge(totalMetrics.conversionRate, compDerived?.conversionRate)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div>{formatNumber(totalMetrics.cpc, 'currency', displayCurrency, 2)}</div>
-                  {renderCompBadge(totalMetrics.cpc, compDerived?.cpc, true)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div>{formatNumber(totalMetrics.cost, 'currency', displayCurrency)}</div>
-                  {renderCompBadge(totalMetrics.cost, compDerived?.cost, true)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div>{formatNumber(totalMetrics.revenue, 'currency', displayCurrency)}</div>
-                  {renderCompBadge(totalMetrics.revenue, compDerived?.revenue)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div>{totalMetrics.roas.toFixed(1)}x</div>
-                  {renderCompBadge(totalMetrics.roas, compDerived?.roas)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div>{totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%</div>
-                  {renderCompBadge(totalMetrics.costOfSale, compDerived?.costOfSale, true)}
-                </TableCell>
-              </TableRow>
-            );
-          })()}
-        </TableBody>
-      </Table>
-    </div>
-  );
-};
 
 export default function SlideViewPage() {
   const { accountId: urlAccountId, slideId } = useParams<{ accountId?: string; slideId?: string }>();
@@ -1026,10 +232,8 @@ export default function SlideViewPage() {
     isLoadingViews,
     isLoadingViewBudgets,
     isLoadingMonthlyData,
-    needEditSourceForMasterReport,
     createSlideReport,
     updateSlideReport,
-    refreshSlideReportData,
     createView,
     updateView,
     deleteView,
@@ -1046,14 +250,7 @@ export default function SlideViewPage() {
   // The "Refresh Data" button triggers the full resync + pivot recompute.
   
 
-  // Open Edit Source when no Data Studio report exists (once)
-  const hasOpenedEditSourceForMasterRef = useRef(false);
-  useEffect(() => {
-    if (needEditSourceForMasterReport && !hasOpenedEditSourceForMasterRef.current) {
-      setIsEditSourceOpen(true);
-      hasOpenedEditSourceForMasterRef.current = true;
-    }
-  }, [needEditSourceForMasterReport]);
+  // Auto-open removed: report is auto-configured from data sources on first load
 
   // Sync selectedDimensions from accountReportIds when no saved config yet
   useEffect(() => {
@@ -1069,6 +266,99 @@ export default function SlideViewPage() {
       social: !!accountReportIds.social,
     });
   }, [accountId, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social, slideReport?.configuration?.selectedChannels]);
+
+  // Auto-configure the slide report when it has no saved configuration and accountReportIds has loaded.
+  // This runs once per report load and saves a default configuration so the user doesn't need to
+  // manually open the configure modal. All available channels are selected; dimensions and filters
+  // are populated from the global dimensions table.
+  const autoConfiguredRef = useRef<string | null>(null);
+  useEffect(() => {
+    const autoConfigureReport = async () => {
+      if (!accountId || !user || !slideReportId) return;
+      if (!accountReportIds.metasearch && !accountReportIds.sem && !accountReportIds.social) return;
+
+      // Only auto-configure if there's no saved configuration
+      const hasSavedConfig = slideReport?.configuration?.selectedChannels?.length;
+      if (hasSavedConfig) return;
+
+      // Prevent running twice for the same report
+      if (autoConfiguredRef.current === slideReportId) return;
+      autoConfiguredRef.current = slideReportId;
+
+      try {
+        // Load global dimensions (all types) to build default configs
+        const { data: allDims } = await supabase
+          .from('dimensions')
+          .select('id, name, type')
+          .eq('scope', 'global')
+          .order('name');
+
+        const dims = allDims || [];
+        const valueDimIds = dims
+          .filter(d => ['number', 'currency', 'percentage'].includes(d.type))
+          .map(d => d.id);
+        const breakdownDimIds = dims
+          .filter(d => d.type === 'string' || d.type === 'text')
+          .map(d => d.id);
+        const filterDimIds = dims
+          .filter(d => d.type === 'string' || d.type === 'text')
+          .map(d => d.id);
+
+        const validChannels: ('metasearch' | 'sem' | 'social')[] = [];
+        const reportIds: Record<string, string> = {};
+        if (accountReportIds.metasearch) { validChannels.push('metasearch'); reportIds.metasearch = accountReportIds.metasearch; }
+        if (accountReportIds.sem) { validChannels.push('sem'); reportIds.sem = accountReportIds.sem; }
+        if (accountReportIds.social) { validChannels.push('social'); reportIds.social = accountReportIds.social; }
+
+        if (validChannels.length === 0) return;
+
+        const channelConfigs: Record<string, { dimensionId: string | null; selectedValues: string[] }> = {};
+        const breakdownConfigsAuto: Record<string, { breakdownDimensionIds: string[] }> = {};
+        const filterConfigsAuto: Record<string, { filterDimensionIds: string[] }> = {};
+
+        for (const ch of validChannels) {
+          channelConfigs[ch] = { dimensionId: null, selectedValues: [] };
+          breakdownConfigsAuto[ch] = { breakdownDimensionIds: breakdownDimIds };
+          filterConfigsAuto[ch] = { filterDimensionIds: filterDimIds };
+        }
+
+        const configuration: SlideReportConfiguration = {
+          selectedChannels: validChannels,
+          selectedValueDimensionIds: valueDimIds,
+          channelConfigs,
+          breakdownConfigs: breakdownConfigsAuto,
+          filterConfigs: filterConfigsAuto,
+        };
+
+        const dateRange: SlideReportDateRange = {
+          year: 2023,
+          month: 'January',
+          from: '2023-01-01',
+          to: new Date().toISOString().split('T')[0],
+        };
+
+        await updateSlideReport.mutateAsync({
+          id: slideReportId,
+          configuration,
+          report_ids: reportIds,
+          date_range: dateRange,
+        });
+
+        // Update local state to reflect auto-configured channels
+        setSelectedDimensions({
+          metasearch: !!accountReportIds.metasearch,
+          sem: !!accountReportIds.sem,
+          social: !!accountReportIds.social,
+        });
+        if (valueDimIds.length > 0) setSelectedValueDimensionIds(valueDimIds);
+      } catch (err) {
+        console.error('[AutoConfigure] Failed to auto-configure report:', err);
+        // Non-fatal — user can still configure manually
+      }
+    };
+
+    autoConfigureReport();
+  }, [accountId, user, slideReportId, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social, slideReport?.configuration?.selectedChannels]);
 
   // Check for share authentication when user is not authenticated (moved after slideReportId declaration)
   useEffect(() => {
@@ -1202,7 +492,7 @@ export default function SlideViewPage() {
   // filteredData comes from reportPage (useSlideReportPage)
 
   // Combined loading: show skeleton when slide data is loading OR display-data API is in flight (avoids glitch when data arrives late)
-  const isLoadingSlideContent = isLoadingData || (filteredData.isLoadingDisplayData ?? false);
+  const isLoadingSlideContent = isLoadingData;
 
   // Filter monthly data - now uses unified filteredData hook
   // Fallback to dynamicMonthlyData if no pivot data
@@ -1242,9 +532,34 @@ export default function SlideViewPage() {
     chartAnchorDate
   );
 
-  // Channel Revenue chart: prefer data from slide_report_channel_month_data (no edge function); applies filterValues via monthlyBreakdowns.
+  // Extract rawRows and dimensionMaps from effectivePivotData for chart computation
+  const chartRawRows = useMemo(() => {
+    if (!effectivePivotData?.channels) return {};
+    const result: Record<string, any[]> = {};
+    for (const [ch, chData] of Object.entries(effectivePivotData.channels)) {
+      result[ch] = (chData as any).rawDataRows || [];
+    }
+    return result;
+  }, [effectivePivotData]);
+
+  const chartDimensionMaps = useMemo(() => {
+    if (!effectivePivotData?.channels) return {};
+    const result: Record<string, Record<string, string>> = {};
+    for (const [ch, chData] of Object.entries(effectivePivotData.channels)) {
+      result[ch] = (chData as any).dimensionMap || {};
+    }
+    return result;
+  }, [effectivePivotData]);
+
+  // Channel Revenue chart: computed from rawDataRows (fresh from dimension_data, no DB query).
   const chartTimeRangeTyped = chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
-  const { data: channelChartDataFromTable } = useChannelChartDataFromTable(slideReportId, chartTimeRangeTyped, filterValues, chartAnchorDate);
+  const { data: channelChartDataFromTable } = useChannelChartDataFromRawRows(
+    chartRawRows,
+    chartDimensionMaps,
+    chartTimeRangeTyped,
+    filterValues,
+    chartAnchorDate
+  );
 
   // Comparison chart data: use shifted anchor for the comparison period
   const comparisonChartAnchorDate = useMemo(() => {
@@ -1258,8 +573,9 @@ export default function SlideViewPage() {
     return d;
   }, [comparisonType, chartAnchorDate]);
 
-  const { data: comparisonChannelChartDataFromTable } = useChannelChartDataFromTable(
-    comparisonType !== 'none' ? slideReportId : null,
+  const { data: comparisonChannelChartDataFromTable } = useChannelChartDataFromRawRows(
+    comparisonType !== 'none' ? chartRawRows : undefined,
+    chartDimensionMaps,
     chartTimeRangeTyped,
     filterValues,
     comparisonChartAnchorDate
@@ -1575,13 +891,7 @@ export default function SlideViewPage() {
       const currentMonth = MONTH_NAMES[new Date().getMonth()];
       setSelectedYear(currentYear.toString());
       setSelectedMonth(currentMonth);
-      if (slideReport.date_range) {
-        setSinceMonth(slideReport.date_range.month || 'January');
-        setSinceYear(slideReport.date_range.year);
-      } else {
-        setSinceMonth('January');
-        setSinceYear(currentYear);
-      }
+      // Date range is now always all-data (Jan 2023 → present), no user-configured start date
     }
   }, [slideReport, slideReportId, availableChannels]);
 
@@ -1811,18 +1121,14 @@ export default function SlideViewPage() {
     }
   }, [searchParams, setSearchParams]);
 
-  // Step-by-step modal state (6 steps now: Date, Channels, Value Dimensions, Data Source, Breakdown, Filters)
-  type ModalStep = 1 | 2 | 3 | 4 | 5 | 6;
+  // Step-by-step modal state (5 steps: Channels, Value Dimensions, Data Source, Breakdown, Filters)
+  type ModalStep = 1 | 2 | 3 | 4 | 5;
   const [modalStep, setModalStep] = useState<ModalStep>(1);
   const [activeChannelTab, setActiveChannelTab] = useState<'metasearch' | 'sem' | 'social' | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Date configuration for "Since" (Step 1)
-  const [sinceMonth, setSinceMonth] = useState<string>("January");
-  const [sinceYear, setSinceYear] = useState<number>(2024);
-
   // Account-specific report IDs are loaded via getAccountReportIds and stored in accountReportIds state
-  // Value dimension IDs state (for step 2 - applies to all channels)
+  // Value dimension IDs state (for step 1 - applies to all channels)
 
   // Available dimensions per channel (fetched from database) - VALUE types only
   const [availableDimensions, setAvailableDimensions] = useState<Record<string, { id: string; name: string; type: string }[]>>({
@@ -1974,7 +1280,8 @@ export default function SlideViewPage() {
     social: false,
   });
 
-  // Load breakdown dimensions from data source for a channel
+  // Load breakdown dimensions for a channel — queries account-scoped text dimensions directly.
+  // Falls back to column_mappings-based lookup if no account dimensions found.
   const loadBreakdownDimensionsForChannel = async (channel: 'metasearch' | 'sem' | 'social') => {
     setLoadingBreakdownDimensions(prev => ({ ...prev, [channel]: true }));
     try {
@@ -1985,22 +1292,40 @@ export default function SlideViewPage() {
         return;
       }
 
-      // Fetch data source for the report
-      const { data: dsData, error: dsError } = await supabase
+      // Resolve account ID for this report
+      const { data: reportData } = await supabase
+        .from('reports')
+        .select('account_id')
+        .eq('id', reportId)
+        .maybeSingle();
+
+      const resolvedAccountId = reportData?.account_id || accountId;
+
+      // Primary path: query account-scoped text dimensions directly (matches dimension_data keys)
+      if (resolvedAccountId) {
+        const { data: accountDims, error: accountDimError } = await supabase
+          .from('dimensions')
+          .select('id, name, type')
+          .eq('scope', 'account')
+          .eq('account_id', resolvedAccountId)
+          .eq('type', 'text')
+          .order('name');
+
+        if (!accountDimError && accountDims && accountDims.length > 0) {
+          setBreakdownDimensions(prev => ({ ...prev, [channel]: accountDims }));
+          return;
+        }
+      }
+
+      // Fallback: extract dimension IDs from column_mappings and fetch their details
+      const { data: dsData } = await supabase
         .from('data_sources')
         .select('column_mappings')
         .eq('report_id', reportId)
         .limit(1)
         .maybeSingle();
 
-      if (dsError || !dsData) {
-        console.error(`Error fetching data source for ${channel}:`, dsError);
-        setBreakdownDimensions(prev => ({ ...prev, [channel]: [] }));
-        return;
-      }
-
-      // Extract dimension IDs from column mappings
-      const columnMappings = Array.isArray(dsData.column_mappings) ? dsData.column_mappings : [];
+      const columnMappings = Array.isArray(dsData?.column_mappings) ? dsData.column_mappings : [];
       const dimensionIds = columnMappings
         .filter((m: any) => m.dimensionId && m.dimensionId !== 'none' && m.dimensionId !== null)
         .map((m: any) => m.dimensionId);
@@ -2010,7 +1335,6 @@ export default function SlideViewPage() {
         return;
       }
 
-      // Fetch dimension details - only TEXT type for breakdown
       const { data: dims, error: dimError } = await supabase
         .from('dimensions')
         .select('id, name, type')
@@ -2049,9 +1373,12 @@ export default function SlideViewPage() {
   // Get selected channels - only include channels that are both selected AND have report IDs
   const selectedChannels = useMemo(() => {
     const channels: ('metasearch' | 'sem' | 'social')[] = [];
-    if (selectedDimensions.metasearch && accountReportIds.metasearch) channels.push('metasearch');
-    if (selectedDimensions.sem && accountReportIds.sem) channels.push('sem');
-    if (selectedDimensions.social && accountReportIds.social) channels.push('social');
+    // Allow channel selection even when accountReportIds hasn't loaded yet.
+    // Report ID availability is validated at save time (handleSave).
+    const allChannelsUnresolved = !accountReportIds.metasearch && !accountReportIds.sem && !accountReportIds.social;
+    if (selectedDimensions.metasearch && (accountReportIds.metasearch || allChannelsUnresolved)) channels.push('metasearch');
+    if (selectedDimensions.sem && (accountReportIds.sem || allChannelsUnresolved)) channels.push('sem');
+    if (selectedDimensions.social && (accountReportIds.social || allChannelsUnresolved)) channels.push('social');
     return channels;
   }, [selectedDimensions, accountReportIds]);
 
@@ -2080,9 +1407,9 @@ export default function SlideViewPage() {
     }
   }, [isEditSourceOpen]);
 
-  // Initialize active channel tab when entering step 4, 5, or 6 (Data Source, Breakdown, Filters)
+  // Initialize active channel tab when entering step 3, 4, or 5 (Data Source, Breakdown, Filters)
   useEffect(() => {
-    if ((modalStep === 4 || modalStep === 5 || modalStep === 6) && selectedChannels.length > 0 && !activeChannelTab) {
+    if ((modalStep === 3 || modalStep === 4 || modalStep === 5) && selectedChannels.length > 0 && !activeChannelTab) {
       setActiveChannelTab(selectedChannels[0]);
     }
   }, [modalStep, selectedChannels, activeChannelTab]);
@@ -2090,7 +1417,7 @@ export default function SlideViewPage() {
   // Load dimension values when activeChannelTab changes on step 4 (Data Source)
   // Now only needed if user changes the dimension dropdown (not on initial load, since we preload)
   useEffect(() => {
-    if (modalStep === 4 && activeChannelTab && isEditSourceOpen) {
+    if (modalStep === 3 && activeChannelTab && isEditSourceOpen) {
       const config = channelConfigs[activeChannelTab];
       const dimensionId = config?.dimensionId;
 
@@ -2524,19 +1851,19 @@ export default function SlideViewPage() {
     loadValuesForDimensionRef.current = loadValuesForDimension;
   }, [loadValuesForDimension]);
 
-  // Load dimensions when entering step 3, 4, 5, or 6 (after Date and Channels steps)
-  // Most loading is now done via preloadAllChannelData on step 2->3 transition
+  // Load dimensions when entering step 2, 3, 4, or 5 (after Channels step)
+  // Most loading is now done via preloadAllChannelData on step 1->2 transition
   // This effect is only needed as a fallback for edge cases
   useEffect(() => {
-    if ((modalStep === 3 || modalStep === 4 || modalStep === 5 || modalStep === 6) && isEditSourceOpen) {
+    if ((modalStep === 2 || modalStep === 3 || modalStep === 4 || modalStep === 5) && isEditSourceOpen) {
       selectedChannels.forEach(channel => {
         // Only load dimensions if not already loaded (preload should have already done this)
         if (dimensions[channel].length === 0 && !loadingDimensions[channel]) {
           loadDimensionsForChannel(channel);
         }
 
-        // Only load values on step 4 if not already loaded and dimension is configured
-        if (modalStep === 4 && channelConfigs[channel]?.dimensionId) {
+        // Only load values on step 3 if not already loaded and dimension is configured
+        if (modalStep === 3 && channelConfigs[channel]?.dimensionId) {
           const existingValues = dimensionValues[channel] || [];
           if (existingValues.length === 0 && !loadingValues[channel]) {
             const dimensionId = channelConfigs[channel].dimensionId;
@@ -2548,9 +1875,9 @@ export default function SlideViewPage() {
     }
   }, [modalStep, isEditSourceOpen, selectedChannels, dimensions, loadingDimensions, channelConfigs, dimensionValues, loadingValues, loadDimensionsForChannel, loadValuesForDimension]);
 
-  // Load breakdown dimensions when entering step 5
+  // Load breakdown dimensions when entering step 4
   useEffect(() => {
-    if (modalStep === 5 && isEditSourceOpen) {
+    if (modalStep === 4 && isEditSourceOpen) {
       selectedChannels.forEach(channel => {
         if (breakdownDimensions[channel].length === 0 && !loadingBreakdownDimensions[channel]) {
           loadBreakdownDimensionsForChannel(channel);
@@ -2821,12 +2148,27 @@ export default function SlideViewPage() {
   ];
 
   // Load available dimensions from database for all selected channels
-  // Only load VALUE dimensions (number, currency, percentage) - not text or date
+  // Uses account > global precedence so account-scoped IDs (matching dimension_data) win.
   const loadAvailableDimensions = async () => {
     setLoadingAvailableDimensions(true);
     try {
-      // Fetch global VALUE dimensions (number, currency, percentage) - these are the metrics
-      const { data: dims, error } = await supabase
+      // Fetch account-scoped VALUE dimensions first (these match dimension_data keys)
+      const accountDimsQuery = accountId
+        ? supabase
+            .from('dimensions')
+            .select('id, name, type')
+            .eq('scope', 'account')
+            .eq('account_id', accountId)
+            .in('type', ['number', 'currency', 'percentage'])
+            .order('name')
+        : null;
+
+      const { data: accountDims } = accountDimsQuery
+        ? await accountDimsQuery
+        : { data: [] };
+
+      // Fetch global VALUE dimensions as fallback
+      const { data: globalDims, error } = await supabase
         .from('dimensions')
         .select('id, name, type')
         .eq('scope', 'global')
@@ -2838,9 +2180,18 @@ export default function SlideViewPage() {
         return;
       }
 
-      const dimensionList = dims || [];
+      // Merge with account-scoped taking precedence (deduplicate by name)
+      const seenNames = new Set<string>();
+      const dimensionList: { id: string; name: string; type: string }[] = [];
+      for (const d of [...(accountDims || []), ...(globalDims || [])]) {
+        if (!seenNames.has(d.name)) {
+          seenNames.add(d.name);
+          dimensionList.push(d);
+        }
+      }
+      dimensionList.sort((a, b) => a.name.localeCompare(b.name));
 
-      // Set same dimensions for all channels (global value dimensions)
+      // Set same dimensions for all channels (value dimensions are channel-agnostic)
       setAvailableDimensions({
         metasearch: dimensionList,
         sem: dimensionList,
@@ -2929,18 +2280,17 @@ export default function SlideViewPage() {
   // Navigation handlers
   const handleNext = async () => {
     if (modalStep === 1) {
-      // Date step -> Channels step
-      setModalStep(2);
+      if (selectedChannels.length > 0) {
+        // Keep Step 1 fast: only load the dimension *list* needed for Step 2.
+        // Values are loaded later (Step 3) when a dimension is selected.
+        await loadAvailableDimensions();
+        setModalStep(2);
+      }
       return;
     }
 
     if (modalStep === 2) {
-      if (selectedChannels.length > 0) {
-        // Keep Step 2 fast: only load the dimension *list* needed for Step 3.
-        // Values are loaded later (Step 4) when a dimension is selected.
-        await loadAvailableDimensions();
-        setModalStep(3);
-      }
+      setModalStep(3);
       return;
     }
 
@@ -2955,11 +2305,6 @@ export default function SlideViewPage() {
     }
 
     if (modalStep === 5) {
-      setModalStep(6);
-      return;
-    }
-
-    if (modalStep === 6) {
       // Save and close
       handleSave();
     }
@@ -2974,8 +2319,6 @@ export default function SlideViewPage() {
       setModalStep(3);
     } else if (modalStep === 5) {
       setModalStep(4);
-    } else if (modalStep === 6) {
-      setModalStep(5);
     }
   };
 
@@ -3056,13 +2399,12 @@ export default function SlideViewPage() {
         reportIds[channel] = reportId;
       }
 
-      // Calculate date range using sinceMonth and sinceYear
-      const monthNumber = new Date(`${sinceMonth} 1, ${sinceYear}`).getMonth();
+      // Use all-data date range: Jan 2023 → present (no user-configured start date)
       const dateRange: SlideReportDateRange = {
-        year: sinceYear,
-        month: sinceMonth,
-        from: new Date(sinceYear, monthNumber, 1).toISOString().split('T')[0],
-        to: new Date().toISOString().split('T')[0], // Current date
+        year: 2023,
+        month: 'January',
+        from: '2023-01-01',
+        to: new Date().toISOString().split('T')[0],
       };
 
       // Save or update slide report
@@ -3087,10 +2429,6 @@ export default function SlideViewPage() {
         });
         setSlideReportId(newReport.id);
       }
-
-      // Update the display state to match the saved configuration
-      setSelectedYear(sinceYear.toString());
-      setSelectedMonth(sinceMonth);
 
       toast({
         title: "Configuration saved",
@@ -3319,22 +2657,14 @@ export default function SlideViewPage() {
           setRefreshStep(2);
           setRefreshStepStatus((prev) => ({ ...prev, 2: 'loading', 3: 'loading', 4: 'loading', 5: 'loading' }));
 
+          // Update last_refreshed_at timestamp on the slide report
           try {
-            const { computeSlideReportPivotData } = await import("@/lib/slideReportPivotComputation");
-            const pivotData = await computeSlideReportPivotData(
-              slideReport.report_ids as unknown as Record<string, string>,
-              slideReport.configuration as unknown as SlideReportConfiguration,
-              slideReport.date_range as unknown as SlideReportDateRange
-            );
             await supabase
               .from("slide_reports")
-              .update({
-                pivot_data: pivotData as any,
-                last_refreshed_at: new Date().toISOString(),
-              })
+              .update({ last_refreshed_at: new Date().toISOString() })
               .eq("id", slideReportId);
-          } catch (pivotErr) {
-            console.warn('[RefreshData] Data Studio pivot recompute failed:', pivotErr);
+          } catch (updateErr) {
+            console.warn('[RefreshData] Failed to update last_refreshed_at:', updateErr);
           }
 
           setRefreshStep(5);
@@ -3509,10 +2839,6 @@ export default function SlideViewPage() {
   // ========== AI Summary ==========
   // AI Summary feature removed (full removal)
 
-  // ========== Unified Breakdown Table ==========
-  // Uses the top-level UnifiedBreakdownTable component (defined above the component)
-  // which supports displayDataFromApi, apiBreakdowns, displayCurrency, etc.
-
   // ========== JSX Return ==========
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -3653,7 +2979,6 @@ export default function SlideViewPage() {
                 getReportKPICards={getReportKPICards}
                 getChannelComparisonMetrics={getChannelComparisonMetrics}
                 setBreakdownTotals={setBreakdownTotals}
-                UnifiedBreakdownTable={UnifiedBreakdownTable}
                 comparisonTotals={comparisonTotals}
                 comparisonType={comparisonType}
                 displayCurrency={undefined}
@@ -3722,10 +3047,6 @@ export default function SlideViewPage() {
         modalStep={modalStep}
         handleNext={handleNext}
         handleBack={handleBack}
-        sinceMonth={sinceMonth}
-        setSinceMonth={setSinceMonth}
-        sinceYear={sinceYear}
-        setSinceYear={setSinceYear}
         selectedDimensions={selectedDimensions}
         handleDimensionToggle={handleDimensionToggle}
         selectedChannels={selectedChannels}

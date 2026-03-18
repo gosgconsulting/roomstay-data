@@ -57,7 +57,7 @@ function Calendar({
 
         // State modifiers
         day_selected:
-          "bg-foreground text-background hover:bg-foreground hover:text-background font-medium",
+          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground font-medium",
         day_today:
           "font-semibold text-primary after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:rounded-full after:bg-primary",
         day_outside: "text-muted-foreground/40 hover:bg-accent/50",
@@ -67,11 +67,11 @@ function Calendar({
 
         // Range modifiers
         day_range_start:
-          "rounded-full bg-foreground text-background hover:bg-foreground hover:text-background font-medium",
+          "rounded-full bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground font-medium",
         day_range_end:
-          "rounded-full bg-foreground text-background hover:bg-foreground hover:text-background font-medium",
+          "rounded-full bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground font-medium",
         day_range_middle:
-          "rounded-none bg-accent text-foreground hover:bg-accent",
+          "rounded-none bg-primary-lighter text-foreground hover:bg-primary-lighter",
 
         // Allow caller overrides
         ...classNames,

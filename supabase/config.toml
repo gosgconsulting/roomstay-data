@@ -6,22 +6,13 @@ verify_jwt = false
 [functions.create-admin-user]
 verify_jwt = false
 
-[functions.migrate-sheet-data]
-verify_jwt = false
-
 [functions.auto-sync-data-sources]
 verify_jwt = false
 
 [functions.get-performance-data]
 verify_jwt = true
 
-[functions.apply-vlookup-mappings]
-verify_jwt = true
-
 [functions.update-user-password]
-verify_jwt = false
-
-[functions.clear-and-resync]
 verify_jwt = false
 
 [functions.resync-data-source]
@@ -30,20 +21,14 @@ verify_jwt = false
 [functions.get-unique-dimension-values]
 verify_jwt = false
 
-[functions.get-consolidated-performance-data]
-verify_jwt = false
-
 [functions.fetch-csv-url]
 verify_jwt = false
 
-[functions.get-report-api-data]
+[functions.run-refresh-workflow]
 verify_jwt = false
 
-[functions.sync-report-api-data]
+[functions.composio-proxy]
 verify_jwt = false
 
-[functions.refresh-slide-report]
-verify_jwt = false
-
-[functions.refresh-slide-report-channel]
+[functions.get-fx-rate]
 verify_jwt = false

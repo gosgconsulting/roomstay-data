@@ -3,7 +3,7 @@
  * 
  * This hook centralizes all state management for the Edit Source modal, including:
  * - Modal open/close state
- * - Step navigation (6-step wizard)
+ * - Step navigation (5-step wizard)
  * - Active channel tab selection
  * - Search query for filtering dimension values
  * - URL query parameter handling (?edit=true)
@@ -15,9 +15,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 /**
- * Modal step type (1-6 step wizard)
+ * Modal step type (1-5 step wizard)
  */
-export type ModalStep = 1 | 2 | 3 | 4 | 5 | 6;
+export type ModalStep = 1 | 2 | 3 | 4 | 5;
 
 /**
  * Return type for useEditSourceModal hook
@@ -27,7 +27,7 @@ interface UseEditSourceModalReturn {
   isOpen: boolean;
   /** Function to set modal open state */
   setIsOpen: (open: boolean) => void;
-  /** Current step in the wizard (1-6) */
+  /** Current step in the wizard (1-5) */
   modalStep: ModalStep;
   /** Function to set the modal step */
   setModalStep: (step: ModalStep) => void;
@@ -104,7 +104,7 @@ export function useEditSourceModal(
   );
 
   const handleNext = useCallback(() => {
-    if (modalStep < 6) {
+    if (modalStep < 5) {
       setModalStep((modalStep + 1) as ModalStep);
     }
   }, [modalStep]);

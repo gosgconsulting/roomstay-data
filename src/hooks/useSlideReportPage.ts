@@ -1,21 +1,18 @@
 /**
- * Single hook for SlideViewPage: report identity, report data, display data,
- * views, summaries, account report IDs, view budgets, monthly data, and mutations.
- * Composes useSlideReports, useSlideReport, useSlideReportChannelData,
- * useSlideReportDisplayData, useSlideReportViews, useSlideReportSummaries,
- * and fetches for accountReportIds, viewBudgets, monthlyDataRecords.
+ * Single hook for SlideViewPage: report identity, raw rows, filtered data,
+ * views, account report IDs, view budgets, and mutations.
  */
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
-import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport, useRefreshSlideReportData } from "@/hooks/useSlideReports";
+import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideReport } from "@/hooks/useSlideReports";
 import { useDataStudioRawRows } from "@/hooks/useDataStudioRawRows";
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
-import { useSlideReportDisplayData } from "@/hooks/useSlideReportDisplayData";
+import { useFilteredSlideData } from "@/hooks/useFilteredSlideData";
 import { getAccountReportIds, clearAccountReportIdsCache, type AccountReportIds } from "@/lib/accountReportIds";
-import type { SlideReport, SlideReportPivotData, SlideReportDateRange, SlideReportView } from "@/types/slideReports";
+import type { SlideReport, SlideReportPivotData, SlideReportView } from "@/types/slideReports";
 import type { ChannelMetrics } from "@/types/slideReports";
 import type { BreakdownRow } from "@/types/slideReports";
 import type { ChannelBudgets } from "@/lib/budgetCalculations";
@@ -66,7 +63,7 @@ export interface UseSlideReportPageReturn {
   setSlideReportId: (id: string | null) => void;
   slideReport: SlideReport | null | undefined;
   effectivePivotData: SlideReportPivotData | null;
-  filteredData: ReturnType<typeof useSlideReportDisplayData>;
+  filteredData: ReturnType<typeof useFilteredSlideData>;
   views: SlideReportView[];
   monthlyDataRecords: MonthlyDataRecord[];
   viewBudgets: ViewBudgetItem[];
@@ -80,7 +77,6 @@ export interface UseSlideReportPageReturn {
   needEditSourceForMasterReport: boolean;
   createSlideReport: ReturnType<typeof useCreateSlideReport>;
   updateSlideReport: ReturnType<typeof useUpdateSlideReport>;
-  refreshSlideReportData: ReturnType<typeof useRefreshSlideReportData>;
   createView: ReturnType<typeof useCreateSlideReportView>;
   updateView: ReturnType<typeof useUpdateSlideReportView>;
   deleteView: ReturnType<typeof useDeleteSlideReportView>;
@@ -196,7 +192,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     return { ...base, channels };
   }, [slideReport?.pivot_data, dataStudioRawRows, dataStudioDimensionMaps]);
 
-  const filteredData = useSlideReportDisplayData({
+  const filteredData = useFilteredSlideData({
     pivotData: effectivePivotData,
     filterValues,
     filterDimensionValues,
@@ -207,19 +203,12 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     slideType,
     dynamicChannelTotals,
     groupByDimensionId,
-    breakdownByDimensionId,
-    slideReportId,
-    comparisonType,
-    chartTimeRange,
-    displayCurrency: params.displayCurrency,
-    audPerUsd: params.audPerUsd,
   });
 
   const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);
 
   const createSlideReport = useCreateSlideReport();
   const updateSlideReport = useUpdateSlideReport();
-  const refreshSlideReportData = useRefreshSlideReportData();
   const createView = useCreateSlideReportView();
   const updateView = useUpdateSlideReportView();
   const deleteView = useDeleteSlideReportView();
@@ -247,24 +236,9 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
 
   const viewBudgets = viewBudgetsData ?? [];
 
-  const { data: monthlyDataRecords = [], isLoading: isLoadingMonthlyData } = useQuery({
-    queryKey: ['slide_report_monthly_data', slideReportId],
-    queryFn: async (): Promise<MonthlyDataRecord[]> => {
-      if (!slideReportId) return [];
-      const { data, error } = await supabase
-        .from('slide_report_monthly_data')
-        .select('*')
-        .eq('slide_report_id', slideReportId)
-        .order('year', { ascending: false })
-        .order('month', { ascending: true });
-      if (error) {
-        console.error('Error fetching monthly data:', error);
-        return [];
-      }
-      return (data as unknown) as MonthlyDataRecord[] ?? [];
-    },
-    enabled: !!slideReportId,
-  });
+  // slide_report_monthly_data table dropped in Phase 1 migration — always empty now
+  const monthlyDataRecords: MonthlyDataRecord[] = [];
+  const isLoadingMonthlyData = false;
 
   const getReportIdForChannel = useCallback((channel: 'metasearch' | 'sem' | 'social'): string | null => {
     if (slideReport?.report_ids) {
@@ -306,7 +280,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     needEditSourceForMasterReport,
     createSlideReport,
     updateSlideReport,
-    refreshSlideReportData,
     createView,
     updateView,
     deleteView,
