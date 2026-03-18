@@ -235,7 +235,7 @@ export default function SlideViewPage() {
     effectivePivotData,
     filteredData,
     views,
-    summaries,
+    // summaries removed in Phase B
     monthlyDataRecords,
     viewBudgets,
     accountReportIds,
