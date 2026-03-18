@@ -47,7 +47,7 @@ export async function resyncReportViews(
     // Get all report_views for this report
     const { data: reportViews, error: viewsError } = await supabase
       .from("report_views")
-      .select("id, visible_dimensions, visible_columns, visible_kpis, filter_dimensions, name")
+      .select("id, visible_dimensions, visible_columns, visible_kpis, kpi_order, filter_dimensions, name")
       .eq("report_id", reportId);
 
     if (viewsError) throw viewsError;
@@ -71,11 +71,13 @@ export async function resyncReportViews(
       const oldDimensionIds = (view.visible_dimensions || []) as string[];
       const oldVisibleColumns = (view.visible_columns || []) as string[];
       const oldVisibleKPIs = (view.visible_kpis || []) as string[];
+      const oldKpiOrder = (view.kpi_order || []) as string[];
       const oldFilterDimensions = (view.filter_dimensions || []) as string[];
       const needsUpdate: { 
         visible_dimensions?: string[]; 
         visible_columns?: string[];
         visible_kpis?: string[];
+        kpi_order?: string[];
         filter_dimensions?: string[];
       } = {};
       
@@ -211,6 +213,36 @@ export async function resyncReportViews(
             `[RESYNC-VIEWS] Updating visible_kpis for view "${view.name}": removing ${invalidKPIs.length} invalid KPIs`
           );
           needsUpdate.visible_kpis = validKPIs;
+        }
+
+        // Keep kpi_order consistent with visible_kpis (and normalize casing).
+        // Rule: preserve existing order where possible, drop invalids, append any missing visibles.
+        if (oldKpiOrder.length > 0 || validKPIs.length > 0) {
+          const validSet = new Set(validKPIs);
+          const normalizedToCanonical = new Map<string, string>();
+          validKPIs.forEach((k) => normalizedToCanonical.set(k.toLowerCase(), k));
+
+          const ordered: string[] = [];
+          oldKpiOrder.forEach((k) => {
+            const canonical = normalizedToCanonical.get(k.toLowerCase());
+            if (canonical && validSet.has(canonical) && !ordered.includes(canonical)) {
+              ordered.push(canonical);
+            }
+          });
+          validKPIs.forEach((k) => {
+            if (!ordered.includes(k)) ordered.push(k);
+          });
+
+          const shouldUpdate =
+            JSON.stringify(ordered) !== JSON.stringify(oldKpiOrder) &&
+            JSON.stringify(ordered) !== JSON.stringify(needsUpdate.kpi_order || []);
+
+          if (shouldUpdate) {
+            console.log(
+              `[RESYNC-VIEWS] Updating kpi_order for view "${view.name}": ${oldKpiOrder.length} -> ${ordered.length}`
+            );
+            needsUpdate.kpi_order = ordered;
+          }
         }
       }
 

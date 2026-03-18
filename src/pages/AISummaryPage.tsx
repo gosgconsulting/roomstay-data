@@ -343,11 +343,7 @@ const AISummaryPage = () => {
   }, [summaryId]);
 
   const handleBack = () => {
-    if (accountId) {
-      navigate(`/?account=${accountId}`);
-    } else {
-      navigate("/");
-    }
+    navigate("/");
   };
 
   // Get currently selected card

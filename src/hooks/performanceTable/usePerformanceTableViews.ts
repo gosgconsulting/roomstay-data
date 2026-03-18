@@ -122,24 +122,18 @@ export function usePerformanceTableViews({
       if (views && views.length > 0) {
         // Update default views for Roomstay account if needed
         if (accountName?.toLowerCase() === 'roomstay' && !isSharedView && user) {
-          const roomstayKPIs = [
-            'Impressions',
-            'Clicks',
-            'CTR',
-            'Bookings',
-            'Conversion Rate',
-            'CPC',
-            'Cost',
-            'Revenue',
-            'ROAS',
-            'Cost of sale'
-          ];
+          const availableKPIs = dimensions
+            .filter(d => ['number', 'currency', 'percentage'].includes(d.type))
+            .map(d => d.name);
+          const roomstayKPIs = getAccountDefaultKPIs(accountName, availableKPIs);
           
           // Update default view if it doesn't have the right KPI order
           const defaultView = views.find(v => v.is_default);
           if (defaultView) {
             const currentKPIs = defaultView.visible_kpis || [];
-            const needsUpdate = JSON.stringify(currentKPIs) !== JSON.stringify(roomstayKPIs);
+            const needsUpdate =
+              JSON.stringify(currentKPIs) !== JSON.stringify(roomstayKPIs) ||
+              JSON.stringify(defaultView.kpi_order || []) !== JSON.stringify(roomstayKPIs);
             
             if (needsUpdate) {
               console.log('[VIEWS] Updating Roomstay default view KPI order for report:', reportId);

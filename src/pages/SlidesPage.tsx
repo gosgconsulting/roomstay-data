@@ -5,10 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
-import { ArrowLeft, Plus, Presentation, LogOut, ChevronDown, Trash2, RefreshCw, Database, Layers, ChevronRight } from "lucide-react";
+import { ArrowLeft, Presentation, LogOut, Trash2, RefreshCw, Database, Layers, ChevronRight } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { SlideListItem } from "@/components/slides/SlideListItem";
-import { CreateChildReportModal } from "@/components/slides/CreateChildReportModal";
 import { useSlides, useDeleteSlide, useRefreshSlideData } from "@/hooks/useSlides";
 import { useSlideReports, useDeleteSlideReport, useCreateSlideReport } from "@/hooks/useSlideReports";
 import { SlideReport } from "@/types/slideReports";
@@ -22,13 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { SlideWithDetails } from "@/types/slides";
-import { cn } from "@/lib/utils";
 
 interface Account {
   id: string;
@@ -42,11 +35,9 @@ export default function SlidesPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [slideToDelete, setSlideToDelete] = useState<SlideWithDetails | null>(null);
   const [refreshingSlideId, setRefreshingSlideId] = useState<string | null>(null);
-  const [isOtherReportsOpen, setIsOtherReportsOpen] = useState(false);
   const [reportToDelete, setReportToDelete] = useState<SlideReport | null>(null);
   const [deleteReportDialogOpen, setDeleteReportDialogOpen] = useState(false);
 
@@ -68,55 +59,12 @@ export default function SlidesPage() {
     }
   }, [session, accountId]);
 
-  // Cleanup duplicate Master Reports - keep only the oldest one (runs once)
-  const [cleanupDone, setCleanupDone] = useState(false);
-  useEffect(() => {
-    const cleanupDuplicateMasterReports = async () => {
-      if (!slideReports || slideReportsLoading || !session || !accountId || cleanupDone) return;
-      
-      const masterReports = slideReports
-        .filter(r => r.name === 'Master Report')
-        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      
-      if (masterReports.length > 1) {
-        setCleanupDone(true); // Prevent re-running
-        console.log(`[cleanup] Found ${masterReports.length} duplicate Master Reports, removing extras...`);
-        // Keep the oldest one, delete the rest
-        const reportsToDelete = masterReports.slice(1);
-        
-        // Use direct Supabase delete to avoid toast spam
-        for (const report of reportsToDelete) {
-          try {
-            await supabase.from("slide_reports").delete().eq("id", report.id);
-            console.log(`[cleanup] Deleted duplicate Master Report: ${report.id}`);
-          } catch (error) {
-            console.error(`[cleanup] Failed to delete duplicate: ${report.id}`, error);
-          }
-        }
-        
-        // Single toast at the end
-        toast({
-          title: "Cleaned up duplicates",
-          description: `Removed ${reportsToDelete.length} duplicate Master Report(s).`,
-        });
-        
-        // Refresh once after cleanup
-        queryClient.invalidateQueries({ queryKey: ["slide-reports", accountId] });
-      } else {
-        setCleanupDone(true); // No duplicates, mark as done
-      }
-    };
-    
-    cleanupDuplicateMasterReports();
-  }, [slideReports, slideReportsLoading, session, accountId, cleanupDone]);
-
-  // Ensure Data Studio report exists (duplicate of Master Report with same filters; loads from sources each time)
+  // Ensure one Data Studio report exists per account (create if none)
   const [dataStudioCreateAttempted, setDataStudioCreateAttempted] = useState(false);
   useEffect(() => {
     if (!accountId || !session || slideReportsLoading || dataStudioCreateAttempted) return;
-    const master = slideReports?.find(r => r.name === 'Master Report');
     const dataStudio = slideReports?.find(r => r.name === 'Data Studio');
-    if (!master || dataStudio) {
+    if (dataStudio) {
       setDataStudioCreateAttempted(true);
       return;
     }
@@ -125,10 +73,10 @@ export default function SlidesPage() {
       name: 'Data Studio',
       account_id: accountId,
       user_id: session.user.id,
-      configuration: master.configuration || undefined,
-      report_ids: master.report_ids || undefined,
-      date_range: master.date_range || undefined,
-      description: 'Same filters as Master Report; fetches data directly from all sources each time.',
+      configuration: undefined,
+      report_ids: undefined,
+      date_range: undefined,
+      description: 'Data Studio: data sources and dimensions. Fetches directly from sources each time.',
     });
   }, [accountId, session, slideReports, slideReportsLoading, dataStudioCreateAttempted, createSlideReport]);
 
@@ -236,33 +184,14 @@ export default function SlidesPage() {
     }
   };
 
-  const handleReportCreated = (report: any) => {
-    toast({
-      title: "Report created",
-      description: "Your child report has been created successfully.",
-    });
-  };
-
-  // Get master report for child report creation
-  const masterReport = slideReports?.find(r => r.name === 'Master Report') || null;
   const dataStudioReport = slideReports?.find(r => r.name === 'Data Studio') || null;
 
-  const handleViewSlideReport = (report: SlideReport) => {
-    if (report.name === 'Master Report') {
-      navigate(`/tools/reports/${accountId}/master-report`);
-      return;
+  const handleOpenDataStudio = () => {
+    if (dataStudioReport) {
+      navigate(`/tools/reports/${accountId}/data-studio?reportId=${dataStudioReport.id}`);
+    } else {
+      navigate(`/tools/reports/${accountId}/data-studio`);
     }
-    if (report.name === 'Data Studio') {
-      navigate(`/tools/reports/${accountId}/data-studio?reportId=${report.id}`);
-      return;
-    }
-    const slug = report.name
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .replace(/-+/g, "-")
-      .substring(0, 50);
-    navigate(`/tools/reports/${accountId}/${slug}?reportId=${report.id}`);
   };
 
   const handleDeleteSlideReport = (report: SlideReport) => {
@@ -279,12 +208,6 @@ export default function SlidesPage() {
     });
     setDeleteReportDialogOpen(false);
     setReportToDelete(null);
-  };
-
-  const formatDateRange = (report: SlideReport) => {
-    if (!report.date_range) return "No date range set";
-    const dr = report.date_range;
-    return `${dr.month} ${dr.year} to present`;
   };
 
   if (isLoading) {
@@ -307,8 +230,8 @@ export default function SlidesPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate(`/?account=${accountId}`)}
-              title="Back to account"
+              onClick={() => navigate("/")}
+              title="Back to dashboard"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -345,121 +268,32 @@ export default function SlidesPage() {
           {/* Section Header */}
           <div className="mb-6">
             <div>
-              <h2 className="text-xl font-semibold">Your Reports</h2>
-              <p className="text-sm text-muted-foreground">
-                {slideReports.length + 1} report{slideReports.length !== 0 ? "s" : ""}
-              </p>
+              <h2 className="text-xl font-semibold">Reports</h2>
+              <p className="text-sm text-muted-foreground">Data Studio — data sources and dimensions</p>
             </div>
           </div>
 
-          {/* Reports List */}
+          {/* Single Data Studio entry */}
           <div className="space-y-4">
-            {/* Master Report Card - Always shown */}
-            <Card 
-              className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" 
-              onClick={() => navigate(`/tools/reports/${accountId}/master-report`)}
+            <Card
+              className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5"
+              onClick={handleOpenDataStudio}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Presentation className="h-6 w-6 text-primary" />
+                    <Database className="h-6 w-6 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-semibold">Master Report</h3>
-                    <p className="text-sm text-muted-foreground">All accounts/hotels • January 2024 to present</p>
+                    <h3 className="font-semibold">Data Studio</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Data sources and dimensions • Fetches directly from sources each time
+                    </p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm">View Report</Button>
+                <Button variant="outline" size="sm">Open</Button>
               </div>
             </Card>
-
-            {/* Data Studio Card - Same filters as Master; fetches from sources each time */}
-            {dataStudioReport && (
-              <Card 
-                className="p-4 hover:shadow-md transition-shadow cursor-pointer border-primary/20 bg-primary/5" 
-                onClick={() => handleViewSlideReport(dataStudioReport)}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Database className="h-6 w-6 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">Data Studio</h3>
-                      <p className="text-sm text-muted-foreground">Same filters as Master • Fetches directly from all sources each time</p>
-                    </div>
-                  </div>
-                  <Button variant="outline" size="sm">View Report</Button>
-                </div>
-              </Card>
-            )}
-
-            {/* Other Reports Dropdown - Filter out Master Report and Data Studio */}
-            {(() => {
-              const otherReports = slideReports.filter(r => r.name !== 'Master Report' && r.name !== 'Data Studio');
-              if (slideReportsLoading) {
-                return (
-                  <div className="text-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary mx-auto"></div>
-                    <p className="text-sm text-muted-foreground mt-2">Loading reports...</p>
-                  </div>
-                );
-              }
-              if (otherReports.length > 0) {
-                return (
-                  <Collapsible open={isOtherReportsOpen} onOpenChange={setIsOtherReportsOpen}>
-                    <CollapsibleTrigger asChild>
-                      <Button variant="ghost" className="w-full justify-between px-4 py-3 h-auto border rounded-lg hover:bg-muted/50">
-                        <span className="text-sm font-medium">
-                          Other Reports ({otherReports.length})
-                        </span>
-                        <ChevronDown className={cn(
-                          "h-4 w-4 transition-transform",
-                          isOtherReportsOpen && "rotate-180"
-                        )} />
-                      </Button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="mt-2 space-y-2">
-                      {otherReports.map((report) => (
-                        <Card 
-                          key={report.id}
-                          className="p-3 hover:shadow-sm transition-shadow cursor-pointer border-muted"
-                          onClick={() => handleViewSlideReport(report)}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-                                <Presentation className="h-5 w-5 text-muted-foreground" />
-                              </div>
-                              <div>
-                                <h4 className="font-medium text-sm">{report.name}</h4>
-                                <p className="text-xs text-muted-foreground">{formatDateRange(report)}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteSlideReport(report);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                              </Button>
-                              <Button variant="outline" size="sm">View</Button>
-                            </div>
-                          </div>
-                        </Card>
-                      ))}
-                    </CollapsibleContent>
-                  </Collapsible>
-                );
-              }
-              return null;
-            })()}
-
           </div>
 
           {/* Data Sources and Dimensions Cards */}
@@ -517,18 +351,6 @@ export default function SlidesPage() {
           </div>
         </div>
       </main>
-
-      {/* Create Child Report Modal */}
-      {session && accountId && masterReport && (
-        <CreateChildReportModal
-          open={createModalOpen}
-          onOpenChange={setCreateModalOpen}
-          accountId={accountId}
-          userId={session.user.id}
-          masterReport={masterReport}
-          onReportCreated={handleReportCreated}
-        />
-      )}
 
       {/* Delete Slide Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

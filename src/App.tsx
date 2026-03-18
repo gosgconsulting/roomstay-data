@@ -43,8 +43,6 @@ const App = () => (
           <Route path="/tools/data/:accountId" element={<ReportDashboard />} />
           <Route path="/tools/reports/:accountId" element={<SlidesPage />} />
           <Route path="/tools/reports/:accountId/view/:slideId" element={<SlideViewPage />} />
-          <Route path="/tools/reports/:accountId/brady" element={<SlideViewPage />} />
-          <Route path="/tools/reports/:accountId/master-report" element={<SlideViewPage />} />
           <Route path="/tools/reports/:accountId/data-studio" element={<SlideViewPage />} />
           <Route path="/tools/forecasting" element={<ForecastingTool />} />
           <Route path="/tools/forecasting/scenario/:scenarioId" element={<ForecastScenarioPage />} />

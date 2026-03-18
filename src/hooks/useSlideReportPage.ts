@@ -25,7 +25,8 @@ import type { ChannelBudgets } from "@/lib/budgetCalculations";
 export interface UseSlideReportPageParams {
   accountId: string | null;
   user: User | null;
-  slideType: 'master-report' | 'brady' | 'default';
+  /** Always 'default' (Data Studio mode) after Phase B; master-report and brady removed. */
+  slideType: 'default';
   searchParams: URLSearchParams;
   filterValues: Record<string, Record<string, string[]>>;
   filterDimensionValues: Record<string, Record<string, string[]>>;
@@ -38,9 +39,7 @@ export interface UseSlideReportPageParams {
   breakdownByDimensionId: string;
   selectedViewId: string | null;
   dynamicChannelTotals?: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
-  /** Master Report display currency (AUD/USD). */
   displayCurrency?: 'AUD' | 'USD';
-  /** AUD per 1 USD. */
   audPerUsd?: number;
 }
 
@@ -146,44 +145,26 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
 
       try {
         const urlReportId = searchParams.get('reportId');
-        // For Data Studio (default), skip URL reportId to always prefer the Master Report
-        // so views are shared between Master Report and Data Studio
-        if (urlReportId && slideType !== 'default') {
-          const targetReport = slideReports?.find(r => r.id === urlReportId && r.is_active);
+        const allReports = slideReports || [];
+
+        if (urlReportId) {
+          const targetReport = allReports.find(r => r.id === urlReportId && r.is_active);
           if (targetReport) {
             setSlideReportId(targetReport.id);
             return;
           }
         }
 
-        if (slideType === 'master-report') {
-          const masterReports = (slideReports || [])
-            .filter(r => r.name === 'Master Report' && r.is_active)
-            .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-          const masterReport = masterReports[0];
-          if (masterReport) {
-            setSlideReportId(masterReport.id);
-            if (masterReports.length > 1) {
-              console.warn(`[loadOrCreateSlideReport] Found ${masterReports.length} Master Reports. Using oldest: ${masterReport.id}`);
-            }
-          }
-          return;
-        }
-
-        // For default/data-studio, prefer the Master Report so views (Brady etc.) are shared
-        const allReports = slideReports || [];
-        console.log('[loadOrCreateSlideReport] Data Studio: looking for Master Report among', allReports.length, 'reports:', allReports.map(r => ({ id: r.id, name: r.name })));
-        const masterReport = allReports
-          .filter(r => r.name === 'Master Report' && r.is_active)
+        // Data Studio: prefer report named "Data Studio", else any active report
+        const dataStudioReport = allReports
+          .filter(r => r.name === 'Data Studio' && r.is_active)
           .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
-        if (masterReport) {
-          console.log('[loadOrCreateSlideReport] Data Studio: using Master Report', masterReport.id);
-          setSlideReportId(masterReport.id);
+        if (dataStudioReport) {
+          setSlideReportId(dataStudioReport.id);
           return;
         }
         const existingReport = allReports.find(r => r.is_active);
         if (existingReport) {
-          console.log('[loadOrCreateSlideReport] Data Studio: no Master Report found, using existing:', existingReport.id, existingReport.name);
           setSlideReportId(existingReport.id);
         }
       } catch (error) {
@@ -192,7 +173,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     };
 
     loadOrCreateSlideReport();
-  }, [accountId, user?.id, slideReports, slideType, isSlideReportsLoading, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social, searchParams, availableChannels]);
+  }, [accountId, user?.id, slideReports, isSlideReportsLoading, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social, searchParams, availableChannels]);
 
   const { data: slideReport } = useSlideReport(slideReportId);
   const { data: channelDataFromTables } = useSlideReportChannelData(
@@ -200,8 +181,8 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     slideReport?.date_range ?? null
   );
 
-  // Data Studio: fetch ALL raw rows directly from Google Sheets/CSV sources
-  const isDataStudio = slideType === 'default';
+  // Data Studio: fetch raw rows from sources (only mode after Phase B)
+  const isDataStudio = true;
   const { data: dataStudioResult } = useDataStudioRawRows(
     slideReport,
     isDataStudio && !!slideReportId,
@@ -348,9 +329,8 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   }, [slideReport?.report_ids, accountReportIds]);
 
   const needEditSourceForMasterReport = Boolean(
-    slideType === 'master-report' &&
     !isSlideReportsLoading &&
-    (slideReports || []).filter(r => r.name === 'Master Report' && r.is_active).length === 0 &&
+    (slideReports || []).filter(r => r.name === 'Data Studio' && r.is_active).length === 0 &&
     !slideReportId
   );
 

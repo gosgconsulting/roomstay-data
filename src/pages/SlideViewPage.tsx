@@ -936,43 +936,12 @@ export default function SlideViewPage() {
     social: false,
   });
 
-  // Determine slide type from URL
-  const slideType = location.pathname.includes('/master-report') ? 'master-report' :
-    location.pathname.includes('/brady') ? 'brady' :
-    location.pathname.includes('/data-studio') ? 'default' : 'default';
-  const isDataStudioRoute = location.pathname.includes('/data-studio');
+  // Single report view: Data Studio only (master-report and brady routes removed in Phase B)
+  const slideType = 'default' as const;
+  const isDataStudioRoute = true;
 
-  // Master Report currency settings
   const [displayCurrency, setDisplayCurrency] = useState<'AUD' | 'USD'>('AUD');
-
-  useEffect(() => {
-    if (slideType !== 'master-report') return;
-    const stored = localStorage.getItem('master_report_currency');
-    if (stored === 'AUD' || stored === 'USD') {
-      setDisplayCurrency(stored);
-    } else {
-      localStorage.setItem('master_report_currency', 'AUD');
-      setDisplayCurrency('AUD');
-    }
-  }, [slideType]);
-
-  const handleDisplayCurrencyChange = useCallback((currency: 'AUD' | 'USD') => {
-    localStorage.setItem('master_report_currency', currency);
-    setDisplayCurrency(currency);
-  }, []);
-
-  const { data: fxRateData, isFetching: isFxLoading, refetch: refetchFxRate } = useQuery({
-    queryKey: ['fx-rate-usd-aud'],
-    queryFn: async (): Promise<{ audPerUsd: number; usdPerAud: number; fetchedAt: string }> => {
-      const { data, error } = await supabase.functions.invoke('get-fx-rate');
-      if (error) throw error;
-      return data as { audPerUsd: number; usdPerAud: number; fetchedAt: string };
-    },
-    enabled: slideType === 'master-report',
-    staleTime: 60 * 60 * 1000,
-  });
-
-  const audPerUsd = fxRateData?.audPerUsd ?? 1;
+  const audPerUsd = 1;
 
   // Dynamic data state (fetched from database)
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -980,42 +949,6 @@ export default function SlideViewPage() {
   const [dynamicChannelTotals, setDynamicChannelTotals] = useState<Record<string, any>>({});
   const [dynamicYearlyTotals, setDynamicYearlyTotals] = useState<Record<number, Record<string, any>>>({});
 
-  // Fetch real data from edge function for master-report - memoized with useCallback
-  const fetchSlideReportData = useCallback(async () => {
-    // TODO: Uncomment this when we have the edge function working
-    // if (slideType !== 'master-report') return;
-
-    // setIsLoadingData(true);
-    // try {
-    //   const { data, error } = await supabase.functions.invoke('get-slide-report-data', {
-    //     body: {
-    //       accountId,
-    //       years: [2024, 2025, 2026],
-    //       hotelFilter: true, // Only Brady hotels for metasearch
-    //     },
-    //   });
-
-    //   if (error) {
-    //     console.error('Error fetching slide report data:', error);
-    //     return;
-    //   }
-
-    //   setDynamicMonthlyData(data.monthlyRevenue || []);
-    //   setDynamicChannelTotals(data.channelTotals || {});
-    //   setDynamicYearlyTotals(data.yearlyTotals || {});
-    // } catch (err) {
-    //   console.error('Error calling edge function:', err);
-    // } finally {
-    //   setIsLoadingData(false);
-    // }
-  }, [accountId, slideType]);
-
-  // Fetch data on mount for master-report
-  useEffect(() => {
-    if (slideType === 'master-report' && accountId) {
-      fetchSlideReportData();
-    }
-  }, [slideType, accountId, fetchSlideReportData]);
 
   // Check for share authentication when user is not authenticated
   const [isSharedAccess, setIsSharedAccess] = useState(false);
@@ -1037,8 +970,8 @@ export default function SlideViewPage() {
     breakdownByDimensionId: breakdownByDimension,
     selectedViewId,
     dynamicChannelTotals,
-    displayCurrency: slideType === 'master-report' ? displayCurrency : undefined,
-    audPerUsd: slideType === 'master-report' ? audPerUsd : undefined,
+    displayCurrency: undefined,
+    audPerUsd,
   });
   const {
     slideReportId,
@@ -1077,7 +1010,7 @@ export default function SlideViewPage() {
   // The "Refresh Data" button triggers the full resync + pivot recompute.
   
 
-  // Open Edit Source when master-report and no Master Report exists (once)
+  // Open Edit Source when no Data Studio report exists (once)
   const hasOpenedEditSourceForMasterRef = useRef(false);
   useEffect(() => {
     if (needEditSourceForMasterReport && !hasOpenedEditSourceForMasterRef.current) {
@@ -1252,23 +1185,20 @@ export default function SlideViewPage() {
   }, [effectivePivotData, selectedTab, selectedYear, selectedMonth]);
 
   // Filter monthly data - now uses unified filteredData hook
-  // Fallback to dynamicMonthlyData for master-report if no pivot data
+  // Fallback to dynamicMonthlyData if no pivot data
   const filteredMonthlyData = useMemo(() => {
     // Use filtered data from hook (single source of truth)
     if (filteredData.monthlyData.length > 0) {
       return filteredData.monthlyData;
     }
 
-    // Fallback to dynamicMonthlyData for master-report
-    const sourceData = slideType === 'master-report' && dynamicMonthlyData.length > 0
-      ? dynamicMonthlyData
-      : [];
+    const sourceData = dynamicMonthlyData.length > 0 ? dynamicMonthlyData : [];
 
     if (selectedYear === 'all') {
       return sourceData;
     }
     return sourceData.filter(m => m.year === parseInt(selectedYear));
-  }, [filteredData.monthlyData, slideType, dynamicMonthlyData, selectedYear]);
+  }, [filteredData.monthlyData, dynamicMonthlyData, selectedYear]);
 
 
   // Compute anchor date from selected year/month for chart time range
@@ -1489,7 +1419,7 @@ export default function SlideViewPage() {
 
   // Load data from stored pivot_data when slideReport changes (uses channel data from tables when available)
   useEffect(() => {
-    if (effectivePivotData && slideType === 'master-report') {
+    if (effectivePivotData) {
       const pivotData = effectivePivotData;
 
       // Build monthly data with per-channel breakdown
@@ -1581,7 +1511,7 @@ export default function SlideViewPage() {
         }
       }
     }
-  }, [effectivePivotData, slideType]);
+  }, [effectivePivotData]);
 
   // Keep local state in sync with slideReport.configuration (and date range when report first loads)
   const lastSyncedSlideReportIdRef = useRef<string | null>(null);
@@ -2543,26 +2473,10 @@ export default function SlideViewPage() {
 
       let values = Array.from(valueSet).sort();
 
-      // For Metasearch Hotel dimension, filter to only Brady hotels (only for brady slide, not master-report)
-      if (slideType === 'brady' && channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
-        values = values.filter(v => v.startsWith('Brady'));
-      }
-
       // Cache the results
       dimensionValuesCache.set(cacheKey, values);
 
       setDimensionValues(prev => ({ ...prev, [channel]: values }));
-
-      // Auto-select all Brady values for metasearch Hotel (only for brady slide, not master-report)
-      if (slideType === 'brady' && channel === 'metasearch' && dimensionId === '093ac487-dd90-4466-9972-ac51d110e91e') {
-        setChannelConfigs(prev => ({
-          ...prev,
-          [channel]: {
-            ...prev[channel],
-            selectedValues: values,
-          },
-        }));
-      }
     } catch (err: any) {
       if (abortController.signal.aborted) {
         console.log(`[loadValuesForDimension] Request cancelled for ${channel}/${dimensionId}`);
@@ -2583,7 +2497,7 @@ export default function SlideViewPage() {
         dimensionValueAbortControllerRef.current = null;
       }
     }
-  }, [effectivePivotData, channelConfigs, slideType, dimensions, dimensionValuesCache, getReportIdForChannel]);
+  }, [effectivePivotData, channelConfigs, dimensions, dimensionValuesCache, getReportIdForChannel]);
 
   // Update ref when loadValuesForDimension changes
   useEffect(() => {
@@ -3142,9 +3056,7 @@ export default function SlideViewPage() {
         });
       } else {
         // Create new slide report
-        const reportName = slideType === 'master-report'
-          ? 'Master Report'
-          : `Brady Hotels - Since ${sinceMonth} ${sinceYear}`;
+        const reportName = 'Data Studio';
         const newReport = await createSlideReport.mutateAsync({
           name: reportName,
           account_id: accountId,
@@ -3640,8 +3552,8 @@ export default function SlideViewPage() {
           handleRefreshDataWithModal={handleRefreshDataWithModal}
           isRefreshModalOpen={isRefreshModalOpen}
           slideReport={slideReport}
-          displayCurrency={slideType === 'master-report' ? displayCurrency : undefined}
-          onDisplayCurrencyChange={slideType === 'master-report' ? handleDisplayCurrencyChange : undefined}
+          displayCurrency={undefined}
+          onDisplayCurrencyChange={undefined}
         />
 
         {/* Filters Row */}
@@ -3718,9 +3630,9 @@ export default function SlideViewPage() {
               KPI_CARDS={KPI_CARDS}
               comparisonTotals={comparisonTotals}
               comparisonType={comparisonType}
-              onAISummaryClick={slideType !== 'master-report' && !isDataStudio ? () => setIsAISummaryModalOpen(true) : undefined}
+              onAISummaryClick={undefined}
               isAISummaryDisabled={!slideReportId}
-              summaryText={slideType !== 'master-report' && !isDataStudio ? (overviewSummary?.summary_text || null) : null}
+              summaryText={null}
             />
           </TabsContent>
 
@@ -3760,10 +3672,10 @@ export default function SlideViewPage() {
                 UnifiedBreakdownTable={UnifiedBreakdownTable}
                 comparisonTotals={comparisonTotals}
                 comparisonType={comparisonType}
-                onAISummaryClick={slideType !== 'master-report' && !isDataStudio ? () => setIsAISummaryModalOpen(true) : undefined}
+                onAISummaryClick={undefined}
                 isAISummaryDisabled={!slideReportId}
-                summaryText={slideType !== 'master-report' && !isDataStudio ? (channel === 'metasearch' ? metasearchSummary?.summary_text : channel === 'sem' ? semSummary?.summary_text : socialSummary?.summary_text) : null}
-                displayCurrency={slideType === 'master-report' ? displayCurrency : undefined}
+                summaryText={null}
+                displayCurrency={undefined}
               />
             </TabsContent>
           ))}

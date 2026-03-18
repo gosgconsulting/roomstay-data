@@ -73,10 +73,21 @@ export function getAccountDefaultKPIs(accountName: string | undefined, available
       'Cost of sale'
     ];
     
-    // Return only KPIs that exist in availableKPIs, in the specified order
-    return roomstayOrder.filter(kpi => 
-      availableKPIs.some(available => available.toLowerCase() === kpi.toLowerCase())
-    );
+    // Return KPIs in specified order, but using the exact casing/spelling from availableKPIs.
+    // This avoids writing "almost matching" KPI names into persisted view settings.
+    const availableByLower = new Map<string, string>();
+    availableKPIs.forEach((name) => {
+      const key = name.toLowerCase();
+      if (!availableByLower.has(key)) availableByLower.set(key, name);
+    });
+
+    const ordered: string[] = [];
+    roomstayOrder.forEach((desired) => {
+      const actual = availableByLower.get(desired.toLowerCase());
+      if (actual && !ordered.includes(actual)) ordered.push(actual);
+    });
+
+    return ordered;
   }
   
   // Default ordering for other accounts

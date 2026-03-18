@@ -368,8 +368,8 @@ export default function PriceWidgetPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate(`/?account=${accountId}`)}
-              title="Back to accounts"
+              onClick={() => navigate("/")}
+              title="Back to dashboard"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>

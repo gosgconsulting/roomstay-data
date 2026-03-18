@@ -518,8 +518,8 @@ export default function ReportDashboard() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => navigate(`/?account=${accountId}`)}
-                  title="Back to accounts"
+                  onClick={() => navigate("/")}
+                  title="Back to dashboard"
                   className="h-8 w-8"
                 >
                   <ArrowLeft className="h-4 w-4" />
