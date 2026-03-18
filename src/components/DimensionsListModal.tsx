@@ -128,15 +128,10 @@ export const DimensionsListModal = ({
         setVisibleDimensions(new Set<string>());
         setInitialVisibleDimensions(new Set<string>());
       } else {
-        // No visible_dimensions column in views table — default to all visible
+        // No saved visibility settings — default to all visible
         console.log("[testing] No saved visibility settings, will default to all visible");
         setVisibleDimensions(new Set<string>());
         setInitialVisibleDimensions(new Set<string>());
-      } else {
-        // No saved settings - will default to all visible
-        console.log("[testing] No saved visibility settings, will default to all visible");
-        setVisibleDimensions(new Set());
-        setInitialVisibleDimensions(new Set());
       }
     } catch (error) {
       console.error("[testing] Error loading visible dimensions:", error);

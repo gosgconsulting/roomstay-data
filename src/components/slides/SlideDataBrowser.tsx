@@ -199,10 +199,6 @@ export function SlideDataBrowser({
         try {
           // slide_report_monthly_data table removed — skip loading
           setMonthlyDataRecords([]);
-            console.error('Error fetching monthly data:', error);
-          } else {
-            setMonthlyDataRecords((data as unknown as MonthlyDataRecord[]) || []);
-          }
         } catch (err) {
           console.error('Error:', err);
         } finally {
