@@ -2164,16 +2164,60 @@ export default function SlideViewPage() {
       if (rawDataRows && rawDataRows.length > 0) {
         const uniqueValues = new Set<string>();
 
+        // Resolve the actual key to look up in raw rows.
+        // Filter configs may reference global dimension IDs (e.g. "755f27d1" for Channel)
+        // while raw rows are keyed by report-specific dimension IDs (e.g. "970c0d99").
+        // Fall back to matching by dimension name via the dimensionMap.
+        let lookupKey = filterDimId;
+        const dimensionMap = (channelData as any)?.dimensionMap as Record<string, string> | undefined;
+
+        // Check if the filterDimId directly exists in any row
+        const sampleRow = rawDataRows[0];
+        const sampleData = sampleRow?.dimension_values || sampleRow;
+        if (sampleData && !(filterDimId in sampleData) && dimensionMap) {
+          // filterDimId not found — resolve by name
+          // First get the name of the requested dimension
+          const requestedDimName = dimensionMap[filterDimId];
+          if (requestedDimName) {
+            // Find the report-specific dimension ID that has the same name
+            for (const [dimId, dimName] of Object.entries(dimensionMap)) {
+              if (dimName === requestedDimName && dimId in sampleData) {
+                lookupKey = dimId;
+                break;
+              }
+            }
+          } else {
+            // filterDimId is not in dimensionMap (it's a global dim) — look up its name from DB
+            // and match against dimensionMap values
+            const { data: dimRecord } = await supabase
+              .from('dimensions')
+              .select('name')
+              .eq('id', filterDimId)
+              .maybeSingle();
+            if (dimRecord?.name) {
+              for (const [dimId, dimName] of Object.entries(dimensionMap)) {
+                if (dimName === dimRecord.name && dimId in sampleData) {
+                  lookupKey = dimId;
+                  break;
+                }
+              }
+            }
+          }
+        }
+
         for (const row of rawDataRows) {
           const rowData = row.dimension_values || row;
-          const value = rowData[filterDimId];
+          const value = rowData[lookupKey];
           if (value !== undefined && value !== null && String(value).trim() !== '') {
             uniqueValues.add(String(value).trim());
           }
         }
 
         const sortedValues = Array.from(uniqueValues).sort();
-        return sortedValues;
+        if (sortedValues.length > 0) {
+          filterValuesCache.set(cacheKey, sortedValues);
+          return sortedValues;
+        }
       }
 
       // FAST PATH: Use pre-computed filterUniqueValues from pivot_data
