@@ -246,6 +246,8 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
       const baseChannel = base.channels?.[ch];
       const freshDimMap = dataStudioDimensionMaps?.[ch] || {};
       channels[ch] = {
+        current: (baseChannel?.current || emptyMetrics),
+        monthly: (baseChannel?.monthly || {}),
         ...(baseChannel || {}),
         rawDataRows: rows,
         dimensionMap: Object.keys(freshDimMap).length > 0

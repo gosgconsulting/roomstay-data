@@ -3206,7 +3206,7 @@ export default function SlideViewPage() {
               views={views.map(v => ({ id: v.id, name: v.name }))}
               handleApplyView={handleApplyView}
               isLoadingViewBudgets={isLoadingViewBudgets}
-              isLoadingDisplayData={filteredData.isLoadingDisplayData}
+              isLoadingDisplayData={false}
               budgetMonthlyData={budgetMonthlyData}
               slideReport={slideReport}
               pivotData={effectivePivotData}
