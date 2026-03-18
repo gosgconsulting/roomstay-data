@@ -197,14 +197,8 @@ export function SlideDataBrowser({
       const fetchMonthlyData = async () => {
         setIsLoadingMonthlyData(true);
         try {
-          const { data, error } = await supabase
-            .from('slide_report_monthly_data')
-            .select('*')
-            .eq('slide_report_id', slideReportId)
-            .order('year', { ascending: false })
-            .order('month', { ascending: true });
-
-          if (error) {
+          // slide_report_monthly_data table removed — skip loading
+          setMonthlyDataRecords([]);
             console.error('Error fetching monthly data:', error);
           } else {
             setMonthlyDataRecords((data as unknown as MonthlyDataRecord[]) || []);

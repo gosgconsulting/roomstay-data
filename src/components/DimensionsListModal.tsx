@@ -115,7 +115,7 @@ export const DimensionsListModal = ({
       // Try to get saved visibility settings
       const { data: viewSettings, error } = await supabase
         .from("views")
-        .select("visible_dimensions")
+        .select("visible_columns, visible_kpis, kpi_order, filter_values")
         .eq("mode", "performance_table")
         .eq("report_id", reportId)
         .eq("user_id", user.id)
@@ -125,14 +125,13 @@ export const DimensionsListModal = ({
       if (error) {
         console.warn("[testing] Could not load visible dimensions, will default to all visible:", error);
         // If we can't load settings, mark as empty (will be populated with all dimensions)
-        setVisibleDimensions(new Set());
-        setInitialVisibleDimensions(new Set());
-      } else if (viewSettings?.visible_dimensions && Array.isArray(viewSettings.visible_dimensions) && viewSettings.visible_dimensions.length > 0) {
-        // Use saved visibility settings
-        console.log("[testing] Loaded saved visibility settings:", viewSettings.visible_dimensions.length);
-        const visibleSet = new Set(viewSettings.visible_dimensions);
-        setVisibleDimensions(visibleSet);
-        setInitialVisibleDimensions(new Set(visibleSet));
+        setVisibleDimensions(new Set<string>());
+        setInitialVisibleDimensions(new Set<string>());
+      } else {
+        // No visible_dimensions column in views table — default to all visible
+        console.log("[testing] No saved visibility settings, will default to all visible");
+        setVisibleDimensions(new Set<string>());
+        setInitialVisibleDimensions(new Set<string>());
       } else {
         // No saved settings - will default to all visible
         console.log("[testing] No saved visibility settings, will default to all visible");

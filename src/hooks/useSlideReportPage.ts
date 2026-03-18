@@ -246,15 +246,16 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
       const baseChannel = base.channels?.[ch];
       const freshDimMap = dataStudioDimensionMaps?.[ch] || {};
       channels[ch] = {
-        current: (baseChannel?.current || emptyMetrics),
-        monthly: (baseChannel?.monthly || {}),
+        current: emptyMetrics,
+        monthly: {},
+        breakdowns: {},
         ...(baseChannel || {}),
         rawDataRows: rows,
         dimensionMap: Object.keys(freshDimMap).length > 0
           ? freshDimMap
           : (baseChannel?.dimensionMap || {}),
         filterUniqueValues: baseChannel?.filterUniqueValues || {},
-      };
+      } as SlideReportPivotData['channels'][string];
     }
     return { ...base, channels };
   }, [slideReport?.pivot_data, dataStudioRawRows, dataStudioDimensionMaps]);
