@@ -10,6 +10,7 @@
  * - When selectedYear is 'all', fetches all rows in parallel batches.
  */
 
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getUser } from '@/lib/auth';
@@ -209,19 +210,30 @@ async function fetchChannelRows(
  * Returns rows grouped by channel name (metasearch, sem, social) with dimension_values as top-level keys.
  *
  * Uses server-side date filtering (RPC) when a year is selected to avoid fetching all rows.
+ * When reportIdsOverride is provided, it is used instead of slide_report.report_ids so that
+ * all account channels (e.g. metasearch) are fetched even if the slide report's report_ids
+ * omit them — same logic as getReportIdForChannel (prefer stored, fallback to account).
  */
 export function useDataStudioRawRows(
   slideReport: SlideReport | null | undefined,
   enabled: boolean = false,
   selectedYear: string = 'all',
+  reportIdsOverride?: Record<string, string> | null,
 ) {
-  const reportIds = (slideReport?.report_ids || {}) as Record<string, string>;
+  const reportIds = useMemo((): Record<string, string> => {
+    const base = (reportIdsOverride != null && Object.keys(reportIdsOverride).length > 0)
+      ? reportIdsOverride
+      : (slideReport?.report_ids || {}) as Record<string, string>;
+    return Object.fromEntries(
+      Object.entries(base).filter(([, id]) => id != null && String(id).trim() !== '')
+    ) as Record<string, string>;
+  }, [slideReport?.report_ids, reportIdsOverride]);
 
   return useQuery({
     // Key includes selectedYear so switching years refetches the correct data.
     // Month is NOT in the key — we always fetch the full year and let the
     // client-side useFilteredSlideData narrow to the selected month for KPI totals.
-    queryKey: ['data-studio-raw-rows', slideReport?.id, selectedYear],
+    queryKey: ['data-studio-raw-rows', slideReport?.id, selectedYear, Object.keys(reportIds).sort().join(',')],
     queryFn: async (): Promise<DataStudioSourceResult> => {
       const { user } = await getUser();
       if (!user) throw new Error('User must be authenticated');

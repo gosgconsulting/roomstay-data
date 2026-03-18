@@ -203,13 +203,27 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
 
   const { data: slideReport } = useSlideReport(slideReportId);
 
+  // Effective report IDs: same logic as getReportIdForChannel — use slide report's report_ids
+  // but fill in any missing channel from accountReportIds so metasearch (and sem/social) are
+  // always fetched when the account has that report. Replicates SEM/Social behavior for Metasearch.
+  const effectiveReportIdsForFetch = useMemo((): Record<string, string> => {
+    const stored = (slideReport?.report_ids || {}) as Record<string, string>;
+    const channelKeys = ['metasearch', 'sem', 'social'] as const;
+    const merged: Record<string, string> = {};
+    for (const ch of channelKeys) {
+      const id = stored[ch] || accountReportIds[ch] || null;
+      if (id) merged[ch] = id;
+    }
+    return merged;
+  }, [slideReport?.report_ids, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social]);
+
   // Data Studio: fetch raw rows from dimension_data (canonical DB cache).
-  // Passes selectedYear/selectedMonth so the hook uses server-side date filtering
-  // (RPC) instead of fetching all rows and filtering client-side.
+  // Uses effectiveReportIdsForFetch so all account channels (including metasearch) get data.
   const { data: dataStudioResult, isLoading: isLoadingRawRows } = useDataStudioRawRows(
     slideReport,
     !!slideReportId,
     selectedYear,
+    effectiveReportIdsForFetch,
   );
   const dataStudioRawRows = dataStudioResult?.rawRows;
   const dataStudioDimensionMaps = dataStudioResult?.dimensionMaps;
