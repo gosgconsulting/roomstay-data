@@ -8,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { startOfMonth, endOfMonth, startOfWeek, subDays, subMonths, startOfYear, endOfYear, differenceInDays, subYears } from "date-fns";
+import { startOfMonth, endOfMonth, startOfWeek, subDays, subMonths, startOfYear, endOfYear, differenceInDays, subYears, startOfQuarter, endOfQuarter } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff, filterDimensionsByFilterSettings } from "@/lib/debug";
@@ -333,8 +333,9 @@ export const FiltersBar = ({
       const defaultAccountDimId = await getAccountDimensionId();
 
       const { data, error } = await supabase
-        .from("report_views")
+        .from("views")
         .select("*")
+        .eq("mode", "performance_table")
         .eq("report_id", reportId)
         .eq("user_id", userId)
         .eq("is_default", true)
@@ -355,11 +356,12 @@ export const FiltersBar = ({
           setActiveDimensions([defaultAccountDimId]);
 
           await supabase
-            .from("report_views")
+            .from("views")
             .update({
               filter_dimensions: [defaultAccountDimId],
               filter_values: {},
             })
+            .eq("mode", "performance_table")
             .eq("id", data.id);
         } else if (validDims.length) {
           setActiveDimensions(validDims);
@@ -377,10 +379,11 @@ export const FiltersBar = ({
           if (validDims.length < existingDims.length) {
             console.log('[FiltersBar] Updating saved view with valid dimensions only');
             await supabase
-              .from("report_views")
+              .from("views")
               .update({
                 filter_dimensions: validDims,
               })
+              .eq("mode", "performance_table")
               .eq("id", data.id);
           }
         } else if (defaultAccountDimId) {
@@ -434,8 +437,9 @@ export const FiltersBar = ({
       if (!user) return;
 
       const { data: existingView } = await supabase
-        .from("report_views")
+        .from("views")
         .select("id")
+        .eq("mode", "performance_table")
         .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true)
@@ -455,14 +459,16 @@ export const FiltersBar = ({
 
       if (existingView && (existingView as any).id) {
         const { error } = await supabase
-          .from("report_views")
+          .from("views")
           .update(viewData)
+          .eq("mode", "performance_table")
           .eq("id", (existingView as any).id as string);
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from("report_views")
+          .from("views")
           .insert({
+            mode: "performance_table",
             ...viewData,
             report_id: reportId,
             user_id: user.id,
@@ -523,6 +529,9 @@ export const FiltersBar = ({
       case "last_7_days":
         from = subDays(now, 7);
         break;
+      case "last_14_days":
+        from = subDays(now, 14);
+        break;
       case "this_month": {
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth();
@@ -533,8 +542,15 @@ export const FiltersBar = ({
         to = new Date(toDateString);
         break;
       }
+      case "month_to_date":
+        from = startOfMonth(now);
+        to = now;
+        break;
       case "last_30_days":
         from = subDays(now, 30);
+        break;
+      case "last_90_days":
+        from = subDays(now, 90);
         break;
       case "last_month": {
         const currentYear = now.getFullYear();
@@ -549,10 +565,30 @@ export const FiltersBar = ({
         to = new Date(toDateString);
         break;
       }
+      case "quarter_to_date":
+        from = startOfQuarter(now);
+        to = now;
+        break;
+      case "last_quarter": {
+        const prevQuarterDate = subDays(startOfQuarter(now), 1);
+        from = startOfQuarter(prevQuarterDate);
+        to = endOfQuarter(prevQuarterDate);
+        break;
+      }
       case "this_year":
         from = startOfYear(now);
         to = endOfYear(now);
         break;
+      case "year_to_date":
+        from = startOfYear(now);
+        to = now;
+        break;
+      case "last_year": {
+        const prevYear = subYears(now, 1);
+        from = startOfYear(prevYear);
+        to = endOfYear(prevYear);
+        break;
+      }
       case "all_time":
         setDateRange(undefined);
         setDatePreset(preset);
@@ -774,9 +810,10 @@ export const FiltersBar = ({
       if (!user) return;
 
       const { data: existingView } = await supabase
-        .from("report_views")
+        .from("views")
         // FIX: Select correct date fields
         .select("id, date_range_start, date_range_end, date_range_preset")
+        .eq("mode", "performance_table")
         .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true)
@@ -799,14 +836,16 @@ export const FiltersBar = ({
 
       if (existingView && (existingView as any).id) {
         const { error } = await supabase
-          .from("report_views")
+          .from("views")
           .update(viewData)
+          .eq("mode", "performance_table")
           .eq("id", (existingView as any).id as string);
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from("report_views")
+          .from("views")
           .insert({
+            mode: "performance_table",
             ...viewData,
             report_id: reportId,
             user_id: user.id,

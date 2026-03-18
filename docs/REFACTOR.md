@@ -21,6 +21,31 @@ Non-goals:
 - Large UX redesign.
 - Irreversible DB deletes without explicit “safe to delete” verification in this doc.
 
+---
+
+## UI / Design system housekeeping (one rulebook)
+
+**Goal:** Keep a single “design system rulebook” to avoid drift.
+
+### DS-RB1 — Consolidate design-system rulebooks (2026-03-18)
+
+- **Canonical rulebook:** `docs/DESIGN_SYSTEM.md`
+- **Duplicate removed:** `.cursor/rules/design-system.md`
+
+**Verify → Migrate → Delete evidence:**
+
+- **Verify (duplicates):**
+  - Found two rulebook-like sources: `docs/DESIGN_SYSTEM.md` and `.cursor/rules/design-system.md`.
+  - Confirmed `README.md` already points to `docs/DESIGN_SYSTEM.md` for design rules.
+  - Confirmed `TODO.md` contained the only remaining references to `.cursor/rules/design-system.md`.
+- **Migrate (references):**
+  - Updated `TODO.md` to reference only `docs/DESIGN_SYSTEM.md` as the single rulebook.
+- **Delete (duplicate):**
+  - Deleted `.cursor/rules/design-system.md`.
+  - Verified: no remaining matches for `.cursor/rules/design-system.md` in repo markdown.
+
+**Checks:** `npm run build` ✓ (exit 0)
+
 ## Core routes (must remain)
 
 Routes are defined in `src/App.tsx` and are treated as a contract.
@@ -87,10 +112,21 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 - [x] **6-F4** — `usePerformanceData` already deleted in prior phase; confirmed zero imports
 - [x] **6-F5** — Deleted `CSVImportChoiceModal.tsx`, `DataSourcesListModal.tsx`, `MappingModal.tsx`; `ReportDashboard` "Data sources" button now navigates to `/tools/data-sources`; CSV flow in `DashboardHeader` bypasses choice modal and goes directly to `UnifiedDataSourceModal`; `EditMappingModal` remains as the single mapping step
 - [x] **6-F6** — Removed `handleCreateBookingReport`, `handleCreatePriceCheckReport`, state vars, and UI buttons from `DataSourcesPage`
-- [ ] **6-DB1** — Document `dimension_data` as the single read path for Data Studio; update DB section
-- [ ] **6-DB2** — Verify `resync-data-source` edge function is the sole writer to `dimension_data`; document in DB section
+- [x] **6-DB1** — Document `dimension_data` as the single read path for Data Studio; update DB section
+- [x] **6-DB2** — Verify `resync-data-source` edge function is the sole writer to `dimension_data`; document in DB section
 
-> **What changed (Phase 6):** Deleted `useFiltersSourceData.ts`, `useSlideReportChannelData.ts`, `slideReportChannelDataMerge.ts`, `useMetasearchJan2026RawRows.ts` (hook), `CSVImportChoiceModal.tsx`, `DataSourcesListModal.tsx`, `MappingModal.tsx`. Created `src/lib/metasearchJan2026Utils.ts`. Migrated `FiltersBar` → `useCachedSourceData`, `useSlideReportPage` → single `dataStudioRawRows` path, `ReportDashboard` → navigate to `DataSourcesPage`. Build: `npm run build` ✓ exit 0. Lint: `npm run lint` ✓ 0 errors.
+> **What changed (Phase 6):** Deleted `useFiltersSourceData.ts`, `useSlideReportChannelData.ts`, `slideReportChannelDataMerge.ts`, `useMetasearchJan2026RawRows.ts` (hook), `CSVImportChoiceModal.tsx`, `DataSourcesListModal.tsx`, `MappingModal.tsx`. Created `src/lib/metasearchJan2026Utils.ts`. Migrated `FiltersBar` → `useCachedSourceData`, `useSlideReportPage` → single `dataStudioRawRows` path, `ReportDashboard` → navigate to `DataSourcesPage`.
+>
+> **6-DB evidence (single read path + sole writer intent):**
+> - **Frontend writes to `dimension_data`**: none found (no `.from('dimension_data').insert/upsert/update/delete` in `src/`).
+> - **Canonical writer**: `supabase/functions/resync-data-source/**` (deletes old rows for a data source + inserts transformed rows).
+> - **Other legacy functions that touch `dimension_data` are deprecated/gated** and are not part of the canonical pipeline:
+>   - `migrate-sheet-data` (retired / 410 gate; one-time migration)
+>   - `apply-vlookup-mappings` (retired / 410 gate)
+>   - `clear-and-resync` (still present; deletes `dimension_data` as part of a legacy “clearFirst” workflow — Phase 7-EF9)
+> - **Primary readers** (canonical): frontend `useCachedSourceData` / `useDataStudioRawRows`; edge `get-performance-data` fallback path reads `dimension_data`.
+>
+> Build: `npm run build` ✓ exit 0. Lint: `npm run lint` ✓ 0 errors.
 
 ### Phase 7 — Legacy pivot cache deprecation + edge function cleanup (HIGH)
 
@@ -104,7 +140,10 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 - [x] **7-EF6** — `run-refresh-workflow` already has `SLIDE_REPORT_CACHE_ENABLED` gate on `refresh-slide-report` call (line 253); legacy branch is gated.
 - [ ] **7-EF7** — `sync-report-api-data` + `get-report-api-data`: `get-performance-data` still reads `report_api_data` as a cache before falling back to `dimension_data`. **DEFERRED** — retire after `report_api_data` cache is confirmed unused (Phase 9).
 - [x] **7-EF8** — `migrate-sheet-data`: one-time migration complete. Added 410 deprecation gate.
-- [ ] **7-EF9** — `clear-and-resync`: still called from `run-refresh-workflow` when `clearFirst=true`; `ReportDashboard` passes `clearFirst: true`. **DEFERRED** — retire after `clearFirst` path is removed from frontend.
+- [x] **7-EF9** — `clear-and-resync`: removed from the canonical refresh workflow
+  - **Verify**: no frontend callers pass `clearFirst: true` (search in `src/`).
+  - **Migrate**: `run-refresh-workflow` now implements canonical `clearFirst` by deleting only `dimension_data` for the target report(s) (no `sheet_data`, no `slide_report_*` cache clears).
+  - **Next**: retire `clear-and-resync` itself (410) and delete once no external callers remain (Phase 9).
 - [x] **7-EF10** — `apply-vlookup-mappings`: zero frontend callers; logic absorbed into `resync-data-source`. Added 410 deprecation gate.
 - [x] **7-F1** — `slideReportChannelDataMerge.ts` already deleted in Phase 6.
 - [ ] **7-F2** — `refreshPivotDataHelpers.ts` still used by `AISummaryPage.tsx`. **DEFERRED**.
@@ -114,7 +153,79 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 - [ ] **7-DB1** — Add `deprecated_at` timestamps to legacy pivot tables (additive migration). **DEFERRED** — DB migration needed.
 - [ ] **7-DB2** — `report_api_data` still written by `sync-report-api-data` and read by `get-performance-data`. **DEFERRED** — document after EF7 is confirmed.
 
-> **What changed (Phase 7):** Added 410 deprecation gates to `apply-vlookup-mappings`, `migrate-sheet-data`, `get-consolidated-performance-data`. Confirmed `run-refresh-workflow` already gates `refresh-slide-report` via `SLIDE_REPORT_CACHE_ENABLED`. Confirmed `get-slide-report-data` already gated. Deferred: `get-slide-report-display-data` (active), `sync-report-api-data`/`get-report-api-data` (active cache), `clear-and-resync` (active via `clearFirst`), frontend lib files (all still used). Build: `npm run build` ✓ exit 0.
+> **What changed (Phase 7):** Added 410 deprecation gates to `apply-vlookup-mappings`, `migrate-sheet-data`, `get-consolidated-performance-data`. Confirmed `run-refresh-workflow` already gates `refresh-slide-report` via `SLIDE_REPORT_CACHE_ENABLED`. Confirmed `get-slide-report-data` already gated. Updated `run-refresh-workflow` to implement canonical `clearFirst` (clears `dimension_data` only) and removed the legacy dependency on `clear-and-resync`. Deferred: `get-slide-report-display-data` (active), `sync-report-api-data`/`get-report-api-data` (active cache), frontend lib files (all still used). Build: `npm run build` ✓ exit 0.
+
+#### Edge-function duplication plan (EF4 / EF7 / EF9)
+
+Some legacy Edge Functions remain because the frontend still depends on them. The goal is to end with **one canonical refresh path** and **one canonical data-read path** (dimension_data).
+
+##### EF4: `get-slide-report-display-data` (still called)
+
+- **Current**: `useSlideReportDisplayData.ts` calls `get-slide-report-display-data` to produce “display-ready” slide report outputs.
+- **Target**: SlideView should compute display data **from `dimension_data`** (and existing pivot computation utilities) without a separate legacy edge function.
+- **Migration steps**:
+  1. Audit what `get-slide-report-display-data` returns and which fields SlideView consumes.
+  2. Recreate the same shape in frontend lib code (or a new canonical edge function that reads `dimension_data` only).
+  3. Switch `useSlideReportDisplayData` to the new canonical path.
+  4. Verify no callers remain; retire `get-slide-report-display-data` (410) then delete in Phase 9.
+
+##### EF7: `sync-report-api-data` + `get-report-api-data` + `report_api_data` cache (still active)
+
+- **Current**: `get-performance-data` still uses `report_api_data` as a fast-path cache.
+- **Target**: Either:
+  - (A) remove the cache and read `dimension_data` directly everywhere (preferred, simplest), or
+  - (B) keep cache but make it a *derived, optional* accelerator with a clear deprecation policy.
+- **Migration steps**:
+  1. Add instrumentation/logging: confirm whether `report_api_data` is hit in production flows.
+  2. If low/no usage: remove read path from `get-performance-data`, retire `get-report-api-data` and `sync-report-api-data`.
+  3. If needed: document cache contract + rebuild triggers; ensure it is derived solely from `dimension_data`.
+
+##### EF9: `clear-and-resync` (still called from frontend)
+
+- **Current**: `run-refresh-workflow` can call `clear-and-resync` when `clearFirst=true`; frontend (ReportDashboard) sets `clearFirst: true`.
+- **Target**: The canonical workflow should be:
+  - Clear only the canonical table (`dimension_data`) for the relevant report(s), then resync each data source via `resync-data-source`.
+- **Migration steps**:
+  1. Replace frontend calls to `clearFirst: true` with a safer canonical “clear dimension_data for report” flag (or always clear within `resync-data-source`).
+  2. Implement clearing behavior in `run-refresh-workflow` (service role) against `dimension_data` (not legacy tables).
+  3. Remove `clear-and-resync` usage; retire edge function.
+
+#### 7-F5 audit notes (slide_report_summaries vs ai_summary_cards)
+
+There are currently **two summary storage concepts**:
+
+- **`slide_report_summaries`** (SlideView per-tab/month summary storage)
+  - Frontend: `src/hooks/useSlideReportSummaries.ts`
+  - Purpose: stores `summary_text` for a SlideView tab (`overview|metasearch|sem|social`) plus `selected_year`, `selected_month`, optional `view_id`, and `comparison_type`.
+  - Coupled to: `slide_report_views` via `view_id` FK.
+
+- **`ai_summary_cards`** (AI Summary “cards” system)
+  - Frontend: `src/hooks/useAISummaryData.ts`, `src/pages/AISummaryPage.tsx`
+  - Purpose: stores multi-report AI summary card configuration (report_ids, metrics, cached budget data, etc.).
+
+**Conclusion:** These are not a direct duplicate feature today; they represent **two products** (SlideView tab summary vs AI Summary cards). However, they duplicate the *capability* “store AI-generated summaries keyed by context”, so a unification path is desirable.
+
+##### Unification plan (future Phase 7-F5 / Phase 8)
+
+1. **Choose a single canonical table for “AI summary outputs”**:
+   - Option A (preferred): create `ai_summaries` (or `ai_summary_entries`) as the canonical output table with a discriminator:
+     - `scope`: `slide_view` | `ai_summary_card` | `shared`
+     - `slide_report_id`, `tab`, `selected_year`, `selected_month`, `view_id` (nullable)
+     - `ai_summary_card_id` (nullable)
+     - `comparison_type`, `prompt_version`, `model`, `request_id`, `summary_text`, `created_at/updated_at`
+   - Option B: extend `ai_summary_cards` to also support SlideView summaries (likely messy; cards are config objects, not outputs).
+
+2. **Migrate frontend writers/readers**:
+   - Move SlideView summary save/load to the canonical output table.
+   - Keep `ai_summary_cards` as *configuration*; store generated output rows in the canonical output table.
+
+3. **Backfill and deprecate**:
+   - Backfill existing `slide_report_summaries` into canonical output table.
+   - Keep `slide_report_summaries` read-only briefly for safety.
+
+4. **Verify → Delete**:
+   - Verify no callers remain.
+   - Drop `slide_report_summaries` table in Phase 9 (after proof).
 
 ### Phase 8 — Duplicate frontend hooks + view settings unification (MED)
 
@@ -123,15 +234,97 @@ Routes are defined in `src/App.tsx` and are treated as a contract.
 - [ ] **8-F1** — Unify view settings: `report_views` is canonical; audit all `slide_report_views` reads in frontend
   - `useSlideReportViews` reads `slide_report_views` — migrate to `report_views` or document why both are needed
   - `budgets.view_id` FK references `slide_report_views` — document migration path
-- [ ] **8-F2** — Consolidate resync utilities:
-  - `src/lib/resync-dimensions.ts` (flat file) — verify if superseded by `src/lib/resync-all-dimensions/` folder
-  - `src/lib/resync-all-dimensions.ts` (flat orchestrator) — verify if superseded by folder-based implementation
-  - Keep: `src/lib/resync-all-dimensions/` (folder, modular) as canonical
-- [ ] **8-F3** — Audit `data-loading-fix.ts` — verify if logic absorbed into canonical data loading; delete if unused
-- [ ] **8-F4** — Audit `large-dataset-optimizer.ts` — verify if superseded by `useCachedSourceData` batched fetch; delete if unused
-- [ ] **8-F5** — Audit `monthly_dimension_data` table — determine which edge function writes it and whether it is still needed; document or deprecate
-- [ ] **8-F6** — Audit `aggregated_breakdown_data` table — determine writer + consumers; document or deprecate
+- [ ] **8-F2** — Consolidate resync utilities: **DEFERRED** — `resync-dimensions.ts` still imported by `resync-all-dimensions.ts` and `EditMappingModal.tsx`; `resync-all-dimensions.ts` still imported by `ReportDashboard.tsx` and `resync-all-dimensions/hooks.ts`. Both flat files are active orchestrators.
+- [x] **8-F3** — `data-loading-fix.ts` still imported by `KPIChart.tsx` (`getCurrentMonthDateRange`, `Dimension`). **DEFERRED** — cannot delete until KPIChart is migrated.
+- [x] **8-F4** — Deleted `large-dataset-optimizer.ts` — zero external imports confirmed; no tests, no edge function dependencies.
+- [x] **8-F5** — Audit `monthly_dimension_data` table — determine which edge function writes it and whether it is still needed; document or deprecate
+  - **Frontend**: no reads/writes found (only appears in generated `src/integrations/supabase/types.ts`).
+  - **Edge Functions**: no writers/readers found; only cleared in `clear-and-resync` as part of a legacy “clearFirst” path.
+  - **Conclusion**: treat as legacy cache; safe to target for Phase 9 drop after confirming no external consumers.
+- [x] **8-F6** — Audit `aggregated_breakdown_data` table — determine writer + consumers; document or deprecate
+  - **Frontend**: no reads/writes found.
+  - **Edge Functions**: no reads/writes found.
+  - **DB**: table exists via `supabase/migrations/20260113000000_create_aggregated_breakdown_data.sql` only.
+  - **Conclusion**: unused; safe Phase 9 drop candidate after standard verification checklist.
 - [ ] **8-DB1** — Document `slide_report_views` deprecation path; confirm `report_views` is the only view-settings table going forward
+
+#### Unified views system (new canonical table)
+
+To enforce **one filters/views system**, we are moving both:
+- `public.report_views` (PerformanceTable)
+- `public.slide_report_views` (SlideView)
+
+into a single canonical table:
+- `public.views` (mode = `performance_table` | `slide_view`)
+
+Migration: `supabase/migrations/20260318170000_create_unified_views.sql`.\n
+- [x] **8-DC1** — Dead code removal: deleted unused routed pages after verification
+  - Deleted: `src/pages/SlidesPage.tsx`, `src/pages/ReportDashboard.tsx` (not in `App.tsx`; no imports found in `src/`).
+  - Kept: `src/pages/ForecastingPage.tsx` (used by `ForecastingDashboard`).
+- [x] **8-DC2** — AI summary consolidation: `FormattedAISummary.tsx` had no imports in `src/`; removed (canonical display is `AISummaryDisplay.tsx`).
+
+> **What changed (Phase 8 partial — 2026-03-18 layout redesign):**
+> - Deleted `src/lib/large-dataset-optimizer.ts` (zero consumers).
+> - Deleted `src/pages/Index.tsx` (not in router; zero imports; dead code).
+> - Removed unused `TabsList`/`TabsTrigger` imports from `SlideViewPage` (tab switching now handled by `ReportSidebar`).
+> - Created `src/components/slides/ReportSidebar.tsx` — left nav with Reports tabs (Overview, Metasearch, SEM, Social, Budget, Booking, Price Check) + Actions (Refresh, Share) + Manage (Data Sources, Dimensions) + Tools (Forecast, Price Widget).
+> - Rewrote `src/components/slides/SlideViewHeader.tsx` — topbar with back button, report name + last refreshed, Data Sources, Dimensions, Share, Refresh Data.
+> - Created `src/components/slides/FiltersRow.tsx` — extracted date range + channel filter dropdowns from `SlideViewPage`.
+> - Created `src/components/slides/AISummaryDisplay.tsx` — canonical markdown AI summary card with design system styling (replaces `FormattedAISummary.tsx`).
+> - Created `src/components/filters/DateRangeFilter.tsx` — date range picker with preset sidebar + calendar + compare toggle. Canonical implementation: left preset list + right two-month calendar; no "Custom Range" preset in SlideView usage. `calendar-with-presets.tsx` is the sole calendar primitive (old `calendar.tsx` deleted). `twMerge` ensures className overrides work correctly when embedded in popovers.
+> - Created `src/lib/monthUtils.ts` — multi-month selection utilities (moved from inline in `SlideViewPage`).
+> - Refactored `src/index.css` — full design system token rewrite: HSL vars, DM Sans font, light-only theme, luxury minimalist palette (primary `#FF0068`, accent `#7C39FF`).
+> - Route simplification: `/` now renders `SlideViewPage` directly (Data Studio is the homepage). All `/tools/reports/*` and `/tools/data/*` routes redirect to `/`. `ReportDashboard`, `SlidesPage`, `Landing` removed from router.
+> - `src/App.tsx` rewritten to reflect new route structure.
+> - Cleanup + tooling:
+>   - Deleted unused pages: `src/pages/SlidesPage.tsx`, `src/pages/ReportDashboard.tsx` (post-verification).
+>   - Restored missing Edge Function entrypoint: `supabase/functions/generate-ai-summary/index.ts` (410 retired stub) to keep tooling/lint stable.
+>   - ESLint: ignore `server.js` (non-module Node script; caused parse error during `eslint .`).
+> - Security fixes:
+>   - Removed hardcoded Anthropic API key fallback from `supabase/functions/generate-ai-summary/index.ts` (now env-only: `ANTHROPIC_API_KEY`).
+>   - Scrubbed documentation examples that included a real JWT (`AUTO_SYNC_SETUP.md`) and replaced with placeholders.
+>   - Sanitized committed `.env` values to placeholders (project ref/anon key/url) to prevent leaking environment specifics in repo history.
+> - Build: `npm run build` ✓ exit 0 (bundle -45KB). Lint: `npm run lint` ✓ 0 errors, 114 warnings.
+
+#### 8-F1 audit notes (duplicate view systems)
+
+There are currently **two view systems** that look similar but are not yet unified:
+
+- **Canonical PerformanceTable view settings**: `report_views`
+  - Used by: `src/hooks/performanceTable/usePerformanceTableViews.ts`
+  - Stores: table column/KPI visibility, grouping/breakdowns, ordering, and filter settings for the PerformanceTable/Data dashboard.
+
+- **Legacy SlideView “saved filter views”**: `slide_report_views`
+  - Used by: `src/hooks/useSlideReportViews.ts` and consumed by `src/hooks/useSlideReportPage.ts`
+  - Stores: year/month, comparison type, tab, and `filter_values` keyed by channel/dimension for the SlideView report experience.
+  - **DB coupling (cannot delete yet):**
+    - `budgets.view_id` references `public.slide_report_views(id)` (migration `20260116000000_add_view_id_to_budgets.sql`)
+    - `share_links.view_id` references `public.slide_report_views(id)` (migration `20260115000000_add_view_id_to_share_links.sql`)
+    - `slide_report_summaries.view_id` references `public.slide_report_views(id)` (migration `20260120000000_create_slide_report_summaries.sql`)
+
+**Conclusion:** `slide_report_views` is currently a **used system** with DB foreign keys and distinct semantics. It is a duplicate “views” concept, but not a drop-in duplicate of `report_views`. We must **unify via migration**, not delete in place.
+
+##### Unification plan (future Phase 8-F1)
+
+1. **Define the canonical “view” contract** (single table) and decide where SlideView-specific fields live:
+   - Option A (preferred): extend `report_views` with a nullable `mode` enum (e.g. `performance_table` | `slide_view`) and add SlideView fields (`tab`, `selected_year`, `selected_month`, `comparison_type`, `chart_time_range`, `price_check_chart_time_range`, `filter_values`).
+   - Option B: introduce `views` table as the canonical abstraction and migrate both `report_views` and `slide_report_views` into it (larger change; more migrations).
+
+2. **Add additive migrations**:
+   - Add new columns to the canonical table for SlideView fields (or create new canonical table).
+   - Add new FK columns:
+     - `budgets.view_id` → canonical table (new column, backfill, then swap)
+     - `share_links.view_id` → canonical table
+     - `slide_report_summaries.view_id` → canonical table
+
+3. **Backfill + dual-read period**:
+   - Copy existing `slide_report_views` rows into canonical table, preserving IDs via mapping table (or store legacy_id).
+   - Update frontend to read/write the canonical table while still supporting legacy IDs for shared links during transition.
+
+4. **Verify → Delete**:
+   - Verify no frontend reads/writes to `slide_report_views`.
+   - Verify no edge functions or RLS policies depend on it.
+   - Only then: drop legacy FKs, drop `slide_report_views` table in Phase 9.
 
 ### Phase 9 — DB table drops + final edge function removal (LOW — after proof)
 
@@ -268,6 +461,14 @@ Only after all above are checked, proceed to deletion.
   - **B3:** useSlideReportPage: slideType only 'default'; report resolution prefers "Data Studio". SlideViewPage: slideType always 'default'; removed master-report/brady logic, currency/fx, Brady dimension filters.
   - **B4/B5:** One "Data Studio" report per account when missing; Edit Source uses name "Data Studio". Canonical report type is Data Studio.
   - **Verification:** npm run build and lint pass (warnings only).
+
+- **Route simplification (Index = Report) — 2026-03-18:**
+  - `/` now renders `SlideViewPage` directly (report is the homepage).
+  - Legacy report entry routes now **redirect to `/`**:
+    - `/landing`
+    - `/tools/reports`, `/tools/reports/:accountId`, `/tools/reports/:accountId/data-studio`
+    - `/tools/data`, `/tools/data/:accountId`
+  - Report sidebar now includes quick access items for **Forecast** and **Price Widget**.
 
 - **Phase 3 / C4–C5 (Remove duplicate table/hooks) — 2026-03-18:** Deleted unused PerformanceTable and data hook duplicates.
   - **Used in current stack?** Verified: no imports of PerformanceTable.old, PerformanceTable.refactored, or usePerformanceTableDataFixed in src/ (grep). Canonical: PerformanceTable.tsx and usePerformanceTableData.ts.

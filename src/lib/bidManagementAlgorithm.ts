@@ -5,7 +5,7 @@
  */
 
 import type { MinimalAIData } from './extractMinimalAIData';
-import type { ComparisonOption } from '@/components/GenerateAISummaryModal';
+type ComparisonOption = 'previous_period' | 'previous_year' | 'both';
 
 export interface BidManagementRecommendations {
   summary: string; // Narrative summary

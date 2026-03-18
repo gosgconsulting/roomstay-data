@@ -7,6 +7,7 @@ import { Session } from "@supabase/supabase-js";
 import { toast } from "@/hooks/use-toast";
 import { ArrowLeft, LogOut, Hotel, Calendar, Users, DollarSign } from "lucide-react";
 import { useUserAccount } from "@/hooks/useUserAccount";
+import { cn } from "@/lib/utils";
 
 interface Account {
   id: string;
@@ -339,14 +340,15 @@ export default function PriceWidgetDetailPage() {
                   return (
                     <div
                       key={provider.name}
-                      className={`p-4 border rounded-lg flex items-center justify-between ${
-                        isLowest ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800' : ''
-                      }`}
+                      className={cn(
+                        "p-4 border rounded-lg flex items-center justify-between",
+                        isLowest && "bg-success/10",
+                      )}
                     >
                       <div className="flex items-center gap-3">
                         <div className="font-medium">{provider.name}</div>
                         {isLowest && (
-                          <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded">
+                          <span className="text-xs bg-success/15 text-foreground px-2 py-1 rounded">
                             Best Price
                           </span>
                         )}

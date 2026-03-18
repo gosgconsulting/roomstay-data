@@ -106,8 +106,9 @@ export function usePerformanceTableViews({
 
       // Load views ONLY for this specific report (report-scoped, not account-scoped)
       const { data: views, error } = await supabase
-        .from("report_views")
+        .from("views")
         .select("*")
+        .eq("mode", "performance_table")
         .eq("report_id", reportId) // CRITICAL: Only load views for THIS report
         .eq("user_id", userId)
         .order("created_at", { ascending: true });
@@ -138,7 +139,7 @@ export function usePerformanceTableViews({
             if (needsUpdate) {
               console.log('[VIEWS] Updating Roomstay default view KPI order for report:', reportId);
               await supabase
-                .from('report_views')
+                .from('views')
                 .update({
                   visible_kpis: roomstayKPIs,
                   kpi_order: roomstayKPIs,
@@ -373,8 +374,9 @@ export function usePerformanceTableViews({
       
       for (const dateConfig of dateGranularities) {
         const { data: newView, error } = await supabase
-          .from("report_views")
+          .from("views")
           .insert({
+            mode: "performance_table",
             report_id: reportId,
             user_id: user.id,
             name: dateConfig.name,
@@ -475,7 +477,7 @@ export function usePerformanceTableViews({
       console.log('[VIEWS] Saving view settings for report:', reportId, 'view:', activeViewId, viewData);
 
       const { error } = await supabase
-        .from("report_views")
+        .from("views")
         .update({
           ...viewData,
           name: tableViews.find(v => v.id === activeViewId)?.name || "Default View",
@@ -517,7 +519,7 @@ export function usePerformanceTableViews({
     console.log('[VIEWS] Saving selector dimensions for report:', reportId, 'view:', activeViewId, payload);
 
     const { error } = await supabase
-      .from("report_views")
+      .from("views")
       .update({
         ...payload,
         name: tableViews.find(v => v.id === activeViewId)?.name || "Default View",
@@ -546,7 +548,7 @@ export function usePerformanceTableViews({
     
     try {
       const { error } = await supabase
-        .from("report_views")
+        .from("views")
         .delete()
         .eq("id", viewId)
         .eq("report_id", reportId); // CRITICAL: Only delete views for THIS report
@@ -581,7 +583,7 @@ export function usePerformanceTableViews({
 
     try {
       const { error } = await supabase
-        .from("report_views")
+        .from("views")
         .update({ name: editingTabName.trim() })
         .eq("id", editingTabId)
         .eq("report_id", reportId); // CRITICAL: Only update views for THIS report

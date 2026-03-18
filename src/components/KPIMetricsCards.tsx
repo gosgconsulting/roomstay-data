@@ -1,21 +1,18 @@
 import { useState, useEffect, useMemo } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, Eye, MousePointer, ShoppingCart, DollarSign, Percent, Target } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
 import { useUser } from "@/lib/auth";
 import { useCachedSourceData, useSourceData } from "@/hooks/dataSources";
 import { usePerformanceTableDimensions } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { DataSource } from "@/lib/data-sources/types";
+import { KPICardItem, KPICardsSkeleton } from "@/components/slides/KPICardsSection";
 
 interface KPIMetric {
   label: string;
   value: string | number;
   change?: number;
   compareValue?: string | number;
-  icon: React.ComponentType<any>;
-  color: string;
+  isCostMetric?: boolean;
 }
 
 interface KPIMetricsCardsProps {
@@ -101,8 +98,9 @@ export function KPIMetricsCards({
       if (!user?.id || !reportId) return;
 
       const { data: viewSettings } = await supabase
-        .from("report_views")
+        .from("views")
         .select("visible_kpis, kpi_order")
+        .eq("mode", "performance_table")
         .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true)
@@ -353,40 +351,7 @@ export function KPIMetricsCards({
         "CPC", "Cost", "Revenue", "ROAS", "Cost of sale"
       ];
 
-      const iconMap: Record<string, React.ComponentType<any>> = {
-        "Impressions": Eye,
-        "Clicks": MousePointer,
-        "Conversions": ShoppingCart,
-        "Bookings": ShoppingCart,
-        "CTR": Percent,
-        "Conversion Rate": Percent,
-        "Cost of sale": Percent,
-        "Impression Share": Percent,
-        "Cost": DollarSign,
-        "CPC": DollarSign,
-        "CPM": DollarSign,
-        "Revenue": DollarSign,
-        "Budget": DollarSign,
-        "ROAS": TrendingUp,
-      };
-
-      const colorMap: Record<string, string> = {
-        "Impressions": "text-pink-600",
-        "Clicks": "text-purple-600",
-        "Conversions": "text-orange-600",
-        "Bookings": "text-orange-600",
-        "CTR": "text-purple-600",
-        "Conversion Rate": "text-purple-600",
-        "Cost of sale": "text-purple-600",
-        "Impression Share": "text-purple-600",
-        "Cost": "text-blue-600",
-        "CPC": "text-blue-600",
-        "CPM": "text-blue-600",
-        "Revenue": "text-cyan-600",
-        "Budget": "text-green-600",
-        "ROAS": "text-green-600",
-        "Default": "text-blue-600"
-      };
+      const costMetrics = new Set(["Cost", "CPC", "CPM", "Cost of sale"]);
 
       const kpisToShow = visibleKPIs || defaultKPIs;
       const orderedKPIs = kpiOrder || kpisToShow;
@@ -419,8 +384,7 @@ export function KPIMetricsCards({
           value: formatDisplay(kpiName, value),
           change,
           compareValue,
-          icon: iconMap[kpiName] || Target,
-          color: colorMap[kpiName] || colorMap["Default"]
+          isCostMetric: costMetrics.has(kpiName),
         });
       });
 
@@ -460,79 +424,29 @@ export function KPIMetricsCards({
   const hasAnyData = metrics.length > 0 || (useCachedData && !!cachedData);
   const showSkeleton = (isLoadingSource || isLoadingDimensions) && !hasAnyData;
 
-  if (showSkeleton) {
+  if (showSkeleton || metrics.length === 0) {
     return (
       <div>
-        <div className="flex items-center justify-end mb-4">
-          {headerAction}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <Card key={i} className="bg-card border border-border shadow-sm rounded-xl border-l-4 border-l-primary animate-pulse">
-              <CardContent className="p-5">
-                <div className="h-3 bg-muted rounded w-20 mb-3" />
-                <div className="h-8 bg-muted rounded w-24" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (metrics.length === 0) {
-    return (
-      <div>
-        <div className="flex items-center justify-end mb-4">
-          {headerAction}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <Card key={i} className="bg-card border border-border shadow-sm rounded-xl border-l-4 border-l-primary">
-              <CardContent className="p-5">
-                <div className="h-3 bg-muted/50 rounded w-20 mb-3" />
-                <div className="h-8 bg-muted/50 rounded w-24" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {headerAction && <div className="flex items-center justify-end mb-4">{headerAction}</div>}
+        <KPICardsSkeleton count={12} />
       </div>
     );
   }
 
   return (
     <div>
-      <div className="flex items-center justify-end mb-4">
-        {headerAction}
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-4">
-        {metrics.map((metric, index) => {
-          return (
-            <Card key={index} className="bg-card border border-border shadow-sm rounded-xl border-l-4 border-l-primary">
-              <CardContent className="p-5">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  {metric.label}
-                </p>
-                <p className="text-3xl font-bold text-foreground">
-                  {metric.value}
-                </p>
-                {metric.change !== undefined && metric.compareValue !== undefined && (
-                  <p className={cn(
-                    "text-xs flex items-center gap-1 font-medium mt-2",
-                    metric.change >= 0 ? 'text-green-600' : 'text-red-600'
-                  )}>
-                    {metric.change >= 0 ? (
-                      <TrendingUp className="h-3 w-3" />
-                    ) : (
-                      <TrendingDown className="h-3 w-3" />
-                    )}
-                    {metric.change >= 0 ? '+' : ''}{metric.change.toFixed(1)}%
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+      {headerAction && <div className="flex items-center justify-end mb-4">{headerAction}</div>}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        {metrics.map((metric, index) => (
+          <KPICardItem
+            key={index}
+            label={metric.label}
+            value={String(metric.value)}
+            percentChange={metric.change}
+            compareLabel={metric.change !== undefined ? "vs prev" : undefined}
+            isCostMetric={metric.isCostMetric}
+          />
+        ))}
       </div>
     </div>
   );

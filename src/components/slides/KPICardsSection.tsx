@@ -1,136 +1,133 @@
 /**
- * KPI Cards Section Component
- * Displays KPI cards with comparison metrics and loading states
+ * KPI Cards — canonical presentational component.
+ * Minimalist luxury style: no icons, no colored left bar.
+ * Used by SlideViewPage (via renderKPICards) and KPIMetricsCards.
  */
 
 import React from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
-import { calculatePercentChange, formatNumber } from '@/lib/slideViewHelpers';
-import type { DerivedMetrics } from '@/types/slideView';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface KPICard {
   label: string;
   key: string;
   value: number;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
+  /** Formatted display string (pre-formatted by caller) */
+  formattedValue?: string;
+  /** Percent change vs comparison period */
+  percentChange?: number | null;
+  /** Human label for the comparison period, e.g. "vs prev year" */
+  compareLabel?: string;
+  /** Whether a positive change is bad (e.g. cost metrics) */
+  isCostMetric?: boolean;
+  /** Legacy — ignored, kept for backward compat */
+  icon?: React.ComponentType<any>;
+  color?: string;
   format?: 'currency' | 'percent' | 'roas';
 }
 
-export interface ComparisonMetrics {
-  impressions?: number;
-  clicks?: number;
-  ctr?: number;
-  bookings?: number;
-  conversionRate?: number;
-  cpc?: number;
-  cost?: number;
-  revenue?: number;
-  roas?: number;
-  costOfSale?: number;
-  label?: string;
+// ─── Single card ──────────────────────────────────────────────────────────────
+
+interface KPICardItemProps {
+  label: string;
+  value: string;
+  percentChange?: number | null;
+  compareLabel?: string;
+  isCostMetric?: boolean;
 }
 
-interface KPICardsSectionProps {
-  cards: KPICard[];
-  comparisonMetrics?: ComparisonMetrics | null;
-  isLoading: boolean;
-}
+export const KPICardItem = React.memo<KPICardItemProps>(
+  ({ label, value, percentChange, compareLabel, isCostMetric }) => {
+    const hasComparison = percentChange !== null && percentChange !== undefined && compareLabel;
+    const isPositive = (percentChange ?? 0) >= 0;
+    const isGood = isCostMetric ? !isPositive : isPositive;
 
-/**
- * Skeleton loader for KPI Cards
- */
-export const KPICardsSkeleton = () => (
-  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-    {Array.from({ length: 10 }).map((_, index) => (
-      <Card key={index} className="shadow-sm border-l-4 border-l-primary/60 bg-card">
-        <CardContent className="p-4">
-          <Skeleton className="h-4 w-24 mb-2" />
-          <Skeleton className="h-8 w-32 mb-2" />
-          <Skeleton className="h-3 w-20" />
-        </CardContent>
-      </Card>
+    return (
+      <div className="bg-card border border-border rounded-lg p-4 flex flex-col gap-1.5">
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-widest leading-none">
+          {label}
+        </p>
+        <p className="text-2xl font-semibold text-foreground leading-tight tabular-nums">
+          {value}
+        </p>
+        {hasComparison && (
+          <p
+            className={cn(
+              'text-xs font-medium leading-none',
+              isGood ? 'text-success' : 'text-destructive'
+            )}
+          >
+            {isPositive ? '+' : ''}
+            {percentChange!.toFixed(1)}%{' '}
+            <span className="text-muted-foreground font-normal">{compareLabel}</span>
+          </p>
+        )}
+      </div>
+    );
+  }
+);
+KPICardItem.displayName = 'KPICardItem';
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+
+export const KPICardsSkeleton = ({ count = 10 }: { count?: number }) => (
+  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+    {Array.from({ length: count }).map((_, i) => (
+      <div key={i} className="bg-card border border-border rounded-lg p-4 flex flex-col gap-1.5 animate-pulse">
+        <Skeleton className="h-2.5 w-16" />
+        <Skeleton className="h-7 w-24" />
+      </div>
     ))}
   </div>
 );
 
-/**
- * KPI Cards Section Component
- */
+// ─── Grid ─────────────────────────────────────────────────────────────────────
+
+interface KPICardsSectionProps {
+  cards: KPICard[];
+  comparisonMetrics?: Record<string, number | string | undefined> | null;
+  isLoading?: boolean;
+}
+
 export const KPICardsSection = React.memo<KPICardsSectionProps>(
   ({ cards, comparisonMetrics, isLoading }) => {
-    if (isLoading) {
-      return <KPICardsSkeleton />;
-    }
-
-    const stored = typeof window !== 'undefined' ? localStorage.getItem('master_report_currency') : null;
-    const effectiveCurrency: 'USD' | 'AUD' = stored === 'AUD' || stored === 'USD' ? stored : 'USD';
+    if (isLoading) return <KPICardsSkeleton count={cards.length || 10} />;
 
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
         {cards.map((kpi) => {
-          const compValue = comparisonMetrics
-            ? comparisonMetrics[kpi.key as keyof ComparisonMetrics]
-            : null;
+          const compValue = comparisonMetrics?.[kpi.key];
           const percentChange =
-            compValue !== null
-              ? calculatePercentChange(kpi.value, compValue as number)
+            compValue != null && typeof compValue === 'number' && kpi.value !== undefined
+              ? compValue !== 0
+                ? ((kpi.value - compValue) / Math.abs(compValue)) * 100
+                : kpi.value !== 0
+                ? kpi.value > 0
+                  ? 100
+                  : -100
+                : 0
               : null;
-          const isPositive = percentChange !== null && percentChange >= 0;
-          // For cost metrics, lower is better
-          const isCostMetric = ['cpc', 'cost', 'costOfSale'].includes(kpi.key);
-          const isGood = isCostMetric ? !isPositive : isPositive;
-          const compLabel = comparisonMetrics?.label;
 
-          const formattedValue = (() => {
-            if (kpi.format === 'currency') {
-              if (kpi.key === 'cpc') {
-                return formatNumber(kpi.value, 'currency', effectiveCurrency, 2);
-              }
-              return formatNumber(kpi.value, 'currency', effectiveCurrency);
-            }
-            if (kpi.format === 'percent') {
-              if (kpi.key === 'costOfSale' && kpi.value < 0.01) return `${kpi.value.toFixed(4)}%`;
-              return `${kpi.value.toFixed(2)}%`;
-            }
-            if (kpi.format === 'roas') {
-              return `${kpi.value.toFixed(1)}x`;
-            }
-            return formatNumber(kpi.value);
-          })();
+          const compareLabel =
+            comparisonMetrics && 'label' in comparisonMetrics
+              ? (comparisonMetrics.label as string)
+              : undefined;
 
           return (
-            <Card
-              key={kpi.label}
-              className="shadow-sm border-l-4 border-l-primary/60 bg-card"
-            >
-              <CardContent className="p-4">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                  {kpi.label}
-                </p>
-                <div className="text-2xl font-bold text-foreground">{formattedValue}</div>
-                {percentChange !== null && compLabel && (
-                  <div
-                    className={`flex items-center gap-1 mt-1 text-xs ${isGood ? 'text-green-600' : 'text-red-600'}`}
-                  >
-                    {isPositive ? (
-                      <ArrowUpRight className="h-3 w-3" />
-                    ) : (
-                      <ArrowDownRight className="h-3 w-3" />
-                    )}
-                    <span>{Math.abs(percentChange).toFixed(1)}%</span>
-                    <span className="text-muted-foreground">{compLabel}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <KPICardItem
+              key={kpi.key ?? kpi.label}
+              label={kpi.label}
+              value={kpi.formattedValue ?? String(kpi.value)}
+              percentChange={percentChange}
+              compareLabel={compareLabel}
+              isCostMetric={kpi.isCostMetric}
+            />
           );
         })}
       </div>
     );
   }
 );
-
 KPICardsSection.displayName = 'KPICardsSection';

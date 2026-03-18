@@ -44,10 +44,11 @@ export async function resyncReportViews(
 
     console.log(`[RESYNC-VIEWS] Found ${dimensionNameToIdMap.size} account-scoped dimensions`);
 
-    // Get all report_views for this report
+    // Get all performance_table views for this report (canonical: views)
     const { data: reportViews, error: viewsError } = await supabase
-      .from("report_views")
+      .from("views")
       .select("id, visible_dimensions, visible_columns, visible_kpis, kpi_order, filter_dimensions, name")
+      .eq("mode", "performance_table")
       .eq("report_id", reportId);
 
     if (viewsError) throw viewsError;
@@ -335,11 +336,12 @@ export async function resyncReportViews(
       // Update the view if needed
       if (Object.keys(needsUpdate).length > 0) {
         const { error } = await supabase
-          .from("report_views")
+          .from("views")
           .update({
             ...needsUpdate,
             name: view.name || "Default View",
           })
+          .eq("mode", "performance_table")
           .eq("id", view.id);
 
         if (error) {

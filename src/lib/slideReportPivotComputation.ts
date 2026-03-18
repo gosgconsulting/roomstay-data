@@ -16,11 +16,72 @@ import {
   MonthlyBudgetRow,
   SlideReportConfiguration 
 } from "@/types/slideReports";
-import { aggregateMetrics, parseDate } from "@/components/AISummaryPivotTable";
 import { format, startOfMonth, endOfMonth, eachMonthOfInterval, startOfYear, isWithinInterval } from "date-fns";
 import { calculateDerivedMetrics as calculateDerivedMetricsBase } from './slideViewHelpers';
 
 const BASE_METRICS = ["Impressions", "Clicks", "Cost", "Revenue", "Bookings"];
+
+function parseDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value === "string" || typeof value === "number") {
+    const d = new Date(value);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
+function getMetricValueFromRow(
+  rowData: Record<string, any>,
+  metricName: string,
+  metricNameToIdMap?: Record<string, string>,
+): number {
+  const metricId = metricNameToIdMap?.[metricName];
+  const raw = (metricId && rowData[metricId] !== undefined) ? rowData[metricId] : rowData[metricName];
+  const n = typeof raw === "number" ? raw : Number(String(raw ?? "").replace(/[^0-9.+-]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function aggregateMetrics(
+  rows: any[],
+  metricNames: string[],
+  dateRange?: { start: Date; end: Date },
+  dimensionFilter?: { dimensionId: string; dimensionName?: string; values: string[] },
+  metricNameToIdMap?: Record<string, string>,
+): Record<string, number> {
+  const totals: Record<string, number> = {};
+  metricNames.forEach((m) => (totals[m] = 0));
+
+  const normalizedFilterValues =
+    dimensionFilter?.values?.map((v) => String(v).trim()) ?? [];
+
+  for (const row of rows) {
+    const rowData = (row?.dimension_values ?? row) as Record<string, any>;
+
+    // Date filter
+    if (dateRange) {
+      const d = parseDate(rowData["Date"] ?? rowData["date"] ?? rowData["DATE"]);
+      if (!d) continue;
+      if (d < dateRange.start || d > dateRange.end) continue;
+    }
+
+    // Dimension filter
+    if (dimensionFilter && normalizedFilterValues.length > 0) {
+      const dimValue =
+        rowData[dimensionFilter.dimensionId] ??
+        (dimensionFilter.dimensionName ? rowData[dimensionFilter.dimensionName] : undefined);
+      if (dimValue === undefined) continue;
+      const normalizedRowValue = String(dimValue).trim();
+      if (!normalizedFilterValues.includes(normalizedRowValue)) continue;
+    }
+
+    for (const metricName of metricNames) {
+      totals[metricName] += getMetricValueFromRow(rowData, metricName, metricNameToIdMap);
+    }
+  }
+
+  return totals;
+}
 
 // Progress callback type for UI updates
 export type ProgressCallback = (step: number, message: string) => void;

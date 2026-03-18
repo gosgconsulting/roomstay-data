@@ -233,7 +233,7 @@ npm run create-make-workflow
 
 ```bash
 # 1. Set credentials
-export MAKE_API_TOKEN="Token abc123..."
+export MAKE_API_TOKEN="your-make-token"
 export MAKE_TEAM_ID="123456"
 export API_BASE_URL="https://yourdomain.com"
 export SLACK_CHANNEL="#data-reports"

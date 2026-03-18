@@ -14,7 +14,6 @@ import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideRe
 import { useDataStudioRawRows } from "@/hooks/useDataStudioRawRows";
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useSlideReportDisplayData } from "@/hooks/useSlideReportDisplayData";
-import { useSlideReportSummaries, type SlideReportSummary } from "@/hooks/useSlideReportSummaries";
 import { getAccountReportIds, clearAccountReportIdsCache, type AccountReportIds } from "@/lib/accountReportIds";
 import type { SlideReport, SlideReportPivotData, SlideReportDateRange, SlideReportView } from "@/types/slideReports";
 import type { ChannelMetrics } from "@/types/slideReports";
@@ -26,11 +25,12 @@ export interface UseSlideReportPageParams {
   user: User | null;
   /** Always 'default' (Data Studio mode) after Phase B; master-report and brady removed. */
   slideType: 'default';
-  searchParams: URLSearchParams;
   filterValues: Record<string, Record<string, string[]>>;
   filterDimensionValues: Record<string, Record<string, string[]>>;
   selectedYear: string;
   selectedMonth: string;
+  /** Exact date range override — when set, filtering uses precise from/to dates instead of month boundaries. */
+  customDateRange?: import("react-day-picker").DateRange | undefined;
   selectedTab: string;
   comparisonType: string;
   chartTimeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months' | null;
@@ -68,7 +68,6 @@ export interface UseSlideReportPageReturn {
   effectivePivotData: SlideReportPivotData | null;
   filteredData: ReturnType<typeof useSlideReportDisplayData>;
   views: SlideReportView[];
-  summaries: SlideReportSummary[];
   monthlyDataRecords: MonthlyDataRecord[];
   viewBudgets: ViewBudgetItem[];
   accountReportIds: AccountReportIds;
@@ -92,11 +91,11 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     accountId,
     user,
     slideType,
-    searchParams,
     filterValues,
     filterDimensionValues,
     selectedYear,
     selectedMonth,
+    customDateRange,
     selectedTab,
     comparisonType,
     chartTimeRange,
@@ -143,16 +142,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
       if (isSlideReportsLoading) return;
 
       try {
-        const urlReportId = searchParams.get('reportId');
         const allReports = slideReports || [];
-
-        if (urlReportId) {
-          const targetReport = allReports.find(r => r.id === urlReportId && r.is_active);
-          if (targetReport) {
-            setSlideReportId(targetReport.id);
-            return;
-          }
-        }
 
         // Data Studio: prefer report named "Data Studio", else any active report
         const dataStudioReport = allReports
@@ -172,7 +162,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     };
 
     loadOrCreateSlideReport();
-  }, [accountId, user?.id, slideReports, isSlideReportsLoading, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social, searchParams, availableChannels]);
+  }, [accountId, user?.id, slideReports, isSlideReportsLoading, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social, availableChannels]);
 
   const { data: slideReport } = useSlideReport(slideReportId);
 
@@ -212,6 +202,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     filterDimensionValues,
     selectedYear,
     selectedMonth,
+    customDateRange,
     selectedTab,
     slideType,
     dynamicChannelTotals,
@@ -225,7 +216,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   });
 
   const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);
-  const { data: summaries = [] } = useSlideReportSummaries(slideReportId);
 
   const createSlideReport = useCreateSlideReport();
   const updateSlideReport = useUpdateSlideReport();
@@ -304,7 +294,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     effectivePivotData,
     filteredData,
     views,
-    summaries,
     monthlyDataRecords,
     viewBudgets,
     accountReportIds,

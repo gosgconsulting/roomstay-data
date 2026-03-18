@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Share2, RefreshCw, Loader2 } from "lucide-react";
+import { Share2, RefreshCw, Loader2, Database, Layers, ArrowLeft } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
 
 type CurrencyCode = 'AUD' | 'USD';
@@ -18,11 +17,12 @@ interface SlideViewHeaderProps {
   // Currency switcher (Master Report only)
   displayCurrency?: CurrencyCode;
   onDisplayCurrencyChange?: (currency: CurrencyCode) => void;
+  // Data source / dimensions actions
+  onDataSources?: () => void;
+  onDimensions?: () => void;
 }
 
 export function SlideViewHeader({
-  selectedTab,
-  setSelectedTab,
   navigate,
   accountId,
   setIsShareModalOpen,
@@ -31,74 +31,112 @@ export function SlideViewHeader({
   slideReport,
   displayCurrency,
   onDisplayCurrencyChange,
+  onDataSources,
+  onDimensions,
 }: SlideViewHeaderProps) {
   const showCurrencySwitcher = displayCurrency !== undefined && onDisplayCurrencyChange !== undefined;
 
-  return (
-    <div className="border-b bg-card px-6 py-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate(`/tools/reports`)}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          {/* Tabs in header */}
-          <TabsList>
-            <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Overview</TabsTrigger>
-            <TabsTrigger value="metasearch">Metasearch</TabsTrigger>
-            <TabsTrigger value="sem">SEM</TabsTrigger>
-            <TabsTrigger value="social">Social</TabsTrigger>
-            <TabsTrigger value="budget">Budget</TabsTrigger>
-            <TabsTrigger value="booking">Booking</TabsTrigger>
-            <TabsTrigger value="price-check">Price Check</TabsTrigger>
-          </TabsList>
-        </div>
-        <div className="flex items-center gap-2">
-          {showCurrencySwitcher && displayCurrency && onDisplayCurrencyChange && (
-            <div className="flex items-center mr-2">
-              <Select value={displayCurrency} onValueChange={(v) => onDisplayCurrencyChange(v as CurrencyCode)}>
-                <SelectTrigger className="h-8 w-[88px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="AUD">AUD</SelectItem>
-                  <SelectItem value="USD">USD</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+  const handleDataSources = () => {
+    if (onDataSources) {
+      onDataSources();
+    } else {
+      navigate(accountId ? `/tools/data-sources/${accountId}` : '/tools/data-sources');
+    }
+  };
 
+  const handleDimensions = () => {
+    if (onDimensions) {
+      onDimensions();
+    } else {
+      navigate(accountId ? `/tools/dimensions/${accountId}` : '/tools/dimensions');
+    }
+  };
+
+  return (
+    <header className="h-14 border-b bg-card px-4 flex items-center justify-between shrink-0">
+      {/* Left: back + report name */}
+      <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => navigate('/')}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex flex-col leading-tight">
+          <span className="text-sm font-semibold text-foreground">
+            {slideReport?.name || "Data Studio"}
+          </span>
           {slideReport?.last_refreshed_at && (
-            <span className="text-xs text-muted-foreground mr-2">
-              Last refreshed: {new Date(slideReport.last_refreshed_at).toLocaleString()}
+            <span className="text-[10px] text-muted-foreground">
+              Refreshed {new Date(slideReport.last_refreshed_at).toLocaleString()}
             </span>
-          )}
-          <Button variant="outline" size="sm" onClick={() => setIsShareModalOpen(true)}>
-            <Share2 className="h-4 w-4 mr-2" />
-            Share
-          </Button>
-          {/* Only show Refresh Data button for master reports (not child reports) */}
-          {!slideReport?.configuration?.isChildReport && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleRefreshDataWithModal}
-              disabled={isRefreshModalOpen}
-              className="bg-primary hover:bg-primary/90"
-            >
-              {isRefreshModalOpen ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Refresh Data
-            </Button>
           )}
         </div>
       </div>
-    </div>
+
+      {/* Right: actions */}
+      <div className="flex items-center gap-2">
+        {showCurrencySwitcher && displayCurrency && onDisplayCurrencyChange && (
+          <Select value={displayCurrency} onValueChange={(v) => onDisplayCurrencyChange(v as CurrencyCode)}>
+            <SelectTrigger className="h-8 w-[88px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="AUD">AUD</SelectItem>
+              <SelectItem value="USD">USD</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5"
+          onClick={handleDataSources}
+        >
+          <Database className="h-3.5 w-3.5" />
+          Data Sources
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5"
+          onClick={handleDimensions}
+        >
+          <Layers className="h-3.5 w-3.5" />
+          Dimensions
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5"
+          onClick={() => setIsShareModalOpen(true)}
+        >
+          <Share2 className="h-3.5 w-3.5" />
+          Share
+        </Button>
+
+        {!slideReport?.configuration?.isChildReport && (
+          <Button
+            variant="default"
+            size="sm"
+            className="h-8 gap-1.5 bg-primary hover:bg-primary/90"
+            onClick={handleRefreshDataWithModal}
+            disabled={isRefreshModalOpen}
+          >
+            {isRefreshModalOpen ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            Refresh Data
+          </Button>
+        )}
+      </div>
+    </header>
   );
 }

@@ -92,11 +92,12 @@ export function usePerformanceTableColumns({
       console.log('[COLUMNS] Updating report_views with data:', viewData);
 
       const { error } = await supabase
-        .from("report_views")
+        .from("views")
         .update({
           ...viewData,
           name: "Default View",
         })
+        .eq("mode", "performance_table")
         .eq("id", activeViewId);
 
       if (error) {

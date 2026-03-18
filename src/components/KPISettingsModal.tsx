@@ -153,8 +153,9 @@ export function KPISettingsModal({
 
       // Load KPI settings from the default report view for THIS specific report
       const { data: viewData, error } = await supabase
-        .from("report_views")
+        .from("views")
         .select("visible_kpis, kpi_order")
+        .eq("mode", "performance_table")
         .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true)
@@ -310,12 +311,13 @@ export function KPISettingsModal({
 
       // Update the default report view for THIS specific report
       const { error } = await supabase
-        .from("report_views")
+        .from("views")
         .update({
           visible_kpis: visibleKPIs,
           kpi_order: kpiOrder,
           updated_at: new Date().toISOString()
         })
+        .eq("mode", "performance_table")
         .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true);

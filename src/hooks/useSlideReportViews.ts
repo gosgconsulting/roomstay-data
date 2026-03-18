@@ -25,8 +25,9 @@ export function useSlideReportViews(slideReportId: string | null) {
       if (!slideReportId) return [];
 
       const { data, error } = await supabase
-        .from("slide_report_views")
+        .from("views")
         .select("*")
+        .eq("mode", "slide_view")
         .eq("slide_report_id", slideReportId)
         .order("created_at", { ascending: false });
 
@@ -65,8 +66,9 @@ export function useCreateSlideReportView() {
       };
     }) => {
       const { data, error } = await supabase
-        .from("slide_report_views")
+        .from("views")
         .insert({
+          mode: "slide_view",
           slide_report_id: view.slide_report_id,
           account_id: view.account_id,
           user_id: view.user_id,
@@ -138,7 +140,7 @@ export function useUpdateSlideReportView() {
       if (filter_values !== undefined) updateData.filter_values = filter_values as unknown as Json;
 
       const { data, error } = await supabase
-        .from("slide_report_views")
+        .from("views")
         .update(updateData)
         .eq("id", id)
         .select()
@@ -176,7 +178,7 @@ export function useDeleteSlideReportView() {
     mutationFn: async (viewId: string) => {
       // Get the view first to invalidate the correct queries
       const { data: view, error: fetchError } = await supabase
-        .from("slide_report_views")
+        .from("views")
         .select("slide_report_id, name")
         .eq("id", viewId)
         .single();
@@ -184,7 +186,7 @@ export function useDeleteSlideReportView() {
       if (fetchError) throw fetchError;
 
       const { error } = await supabase
-        .from("slide_report_views")
+        .from("views")
         .delete()
         .eq("id", viewId);
 

@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams, useLocation } from "react-rout
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database, Check, Share2, BookmarkPlus, Trash2 } from "lucide-react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useSlideReportPage } from "@/hooks/useSlideReportPage";
+import { useUserAccount } from "@/hooks/useUserAccount";
 import { isMetasearchJan2026, getJan2026BreakdownRowsForTable } from "@/lib/metasearchJan2026Utils";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
 import { useEditSourceModal } from "@/hooks/useEditSourceModal";
@@ -42,22 +43,18 @@ import { SlideDataBrowser } from "@/components/slides/SlideDataBrowser";
 import { RefreshStepIndicator, ChannelTabsList, DimensionValuesList } from "@/components/slides/EditSourceModal";
 import { EditSourceModal } from "@/components/slides/EditSourceModal/EditSourceModal";
 import { ShareModal } from "@/components/ShareModal";
-import { SlideViewHeader } from "@/components/slides/SlideViewHeader";
+import { ReportSidebar } from "@/components/slides/ReportSidebar";
 import { FiltersRow } from "@/components/slides/FiltersRow";
 import { ComparisonBanner } from "@/components/slides/ComparisonBanner";
 
 import { OverviewTab } from "@/components/slides/OverviewTab";
 import { ChannelTab } from "@/components/slides/ChannelTab";
+import { KPICardsSection, KPICardsSkeleton } from "@/components/slides/KPICardsSection";
 import { BudgetTab } from "@/components/slides/BudgetTab";
 import { BookingTab } from "@/components/slides/BookingTab";
 import { PriceCheckTab } from "@/components/slides/PriceCheckTab";
 import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
-import { AISummaryButton } from "@/components/slides/AISummaryButton";
-import { SlideViewAISummaryModal } from "@/components/slides/SlideViewAISummaryModal";
-import { useGetSummaryForTab, type SlideReportSummary } from "@/hooks/useSlideReportSummaries";
-import { extractMinimalAIData } from "@/lib/extractMinimalAIData";
 import { isWithinInterval } from "date-fns";
-import { aggregateMetrics } from "@/components/AISummaryPivotTable";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
 import { getChartAnchorDate, buildMultiMonthDateRange, parseSelectedMonths } from "@/lib/monthUtils";
 import type { AccountReportIds } from "@/lib/accountReportIds";
@@ -101,6 +98,7 @@ const UnifiedBreakdownTable = ({
   selectedChannel,
   selectedYear,
   selectedMonth,
+  customDateRange,
   filterValues,
   filterDimensionValues,
   onTotalsChange,
@@ -122,6 +120,8 @@ const UnifiedBreakdownTable = ({
   selectedChannel?: 'metasearch' | 'sem' | 'social' | 'overview';
   selectedYear?: string;
   selectedMonth?: string;
+  /** Exact date range override — when set, filtering uses precise from/to dates instead of month boundaries. */
+  customDateRange?: import("react-day-picker").DateRange | undefined;
   filterValues?: Record<string, Record<string, string[]>>;
   filterDimensionValues?: Record<string, Record<string, string[]>>;
   onTotalsChange?: (totals: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => void;
@@ -166,10 +166,20 @@ const UnifiedBreakdownTable = ({
     return `${selectedYear}-${monthNum.toString().padStart(2, '0')}`;
   }, [selectedYear, selectedMonth]);
 
-  // Build multi-month date range for breakdown table filtering
+  // Build date range for breakdown table filtering.
+  // When customDateRange is set, use exact from/to dates (supports sub-month ranges like 1-5 days).
+  // Otherwise fall back to month-boundary range from selectedYear/selectedMonth.
   const breakdownDateRange = useMemo(() => {
+    if (customDateRange?.from) {
+      const from = customDateRange.from;
+      const to = customDateRange.to ?? customDateRange.from;
+      return {
+        start: from,
+        end: new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999),
+      };
+    }
     return buildMultiMonthDateRange(selectedYear || 'all', selectedMonth || 'all');
-  }, [selectedYear, selectedMonth]);
+  }, [customDateRange, selectedYear, selectedMonth]);
 
   // Get breakdown data from pivotData based on selected dimension and month
   // Applies filterValues if they are set. When displayDataFromApi and apiBreakdowns are set, use API data (no heavy calc).
@@ -857,12 +867,27 @@ const UnifiedBreakdownTable = ({
 };
 
 export default function SlideViewPage() {
-  const { accountId, slideId } = useParams<{ accountId: string; slideId?: string }>();
+  const { accountId: urlAccountId, slideId } = useParams<{ accountId?: string; slideId?: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const { data: userData } = useUser();
   const user = userData?.user || null;
+
+  // Resolve account from URL param or from auth context (short-entry route support).
+  const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
+  const accountId = urlAccountId ?? resolvedAccount?.id;
+
+  // If this page is mounted on legacy /tools/reports routes, redirect to an account-scoped
+  // URL once resolved. When mounted on index (/), keep the clean URL.
+  useEffect(() => {
+    const isLegacyReportsEntry =
+      location.pathname === "/tools/reports" || location.pathname.startsWith("/tools/reports/");
+
+    if (isLegacyReportsEntry && !urlAccountId && accountId && !isResolvingAccount) {
+      navigate(`/tools/reports/${accountId}`, { replace: true });
+    }
+  }, [urlAccountId, accountId, isResolvingAccount, navigate, location.pathname]);
 
   // Single-view contract: Data Studio is the only report view now.
   // Any legacy /view/:slideId URL is redirected to /data-studio.
@@ -879,6 +904,8 @@ export default function SlideViewPage() {
 
   const [selectedYear, setSelectedYear] = useState(currentYearStr); // Default to current year
   const [selectedMonth, setSelectedMonth] = useState(currentMonthName); // Default to current month
+  // Exact date range override — when set, filtering uses precise from/to dates instead of month boundaries
+  const [customDateRange, setCustomDateRange] = useState<import("react-day-picker").DateRange | undefined>(undefined);
   const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
   const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
@@ -912,7 +939,7 @@ export default function SlideViewPage() {
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [isAISummaryModalOpen, setIsAISummaryModalOpen] = useState(false);
+  // AI Summary feature removed (full removal)
   const [forecastEnabled, setForecastEnabled] = useState(false); // Forecast mode for budget table
   const [pnlModeEnabled, setPnlModeEnabled] = useState(false); // PnL mode for budget table
   const [editingBudget, setEditingBudget] = useState<{ month: string; channel: string | null } | null>(null); // { month: "November 2025", channel: "metasearch" | "sem" | "social" | null for overview }
@@ -967,11 +994,11 @@ export default function SlideViewPage() {
     accountId,
     user,
     slideType,
-    searchParams,
     filterValues,
     filterDimensionValues,
     selectedYear,
     selectedMonth,
+    customDateRange,
     selectedTab,
     comparisonType,
     chartTimeRange,
@@ -1176,22 +1203,6 @@ export default function SlideViewPage() {
 
   // Combined loading: show skeleton when slide data is loading OR display-data API is in flight (avoids glitch when data arrives late)
   const isLoadingSlideContent = isLoadingData || (filteredData.isLoadingDisplayData ?? false);
-
-  // Extract minimal data for AI summary (only for report tabs)
-  const minimalAIData = useMemo(() => {
-    if (!effectivePivotData || selectedYear === 'all' || selectedMonth === 'all') {
-      return null;
-    }
-    if (selectedTab !== 'overview' && selectedTab !== 'metasearch' && selectedTab !== 'sem' && selectedTab !== 'social') {
-      return null;
-    }
-    return extractMinimalAIData(
-      effectivePivotData,
-      selectedTab as 'overview' | 'metasearch' | 'sem' | 'social',
-      selectedYear,
-      selectedMonth
-    );
-  }, [effectivePivotData, selectedTab, selectedYear, selectedMonth]);
 
   // Filter monthly data - now uses unified filteredData hook
   // Fallback to dynamicMonthlyData if no pivot data
@@ -3453,61 +3464,26 @@ export default function SlideViewPage() {
   }, [comparisonTotals, comparisonType]);
 
   const renderKPICards = useCallback((cards: any[], comparisonMetrics?: any) => {
-    return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-        {cards.map((kpi: any) => {
-          const compValue = comparisonMetrics ? comparisonMetrics[kpi.key] : null;
-          const percentChange = compValue != null ? calculatePercentChange(kpi.value, compValue as number) : null;
-          const isPositive = percentChange !== null && percentChange >= 0;
-          const isCostMetric = ['cpc', 'cost', 'costOfSale'].includes(kpi.key);
-          const isGood = isCostMetric ? !isPositive : isPositive;
-          const compLabel = comparisonMetrics?.label;
-          const formattedValue = (() => {
-            if (kpi.format === 'currency') {
-              if (kpi.key === 'cpc') return formatNumber(kpi.value, 'currency', undefined, 2);
-              return formatNumber(kpi.value, 'currency');
-            }
-            if (kpi.format === 'percent') return `${kpi.value.toFixed(2)}%`;
-            if (kpi.format === 'roas') return `${kpi.value.toFixed(1)}x`;
-            return formatNumber(kpi.value);
-          })();
-          const IconComponent = kpi.icon;
-          return (
-            <Card key={kpi.label} className="shadow-sm border-l-4 border-l-primary/60 bg-card">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <IconComponent className={`h-4 w-4 ${kpi.color}`} />
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{kpi.label}</p>
-                </div>
-                <div className="text-2xl font-bold text-foreground">{formattedValue}</div>
-                {percentChange !== null && compLabel && (
-                  <div className={`flex items-center gap-1 mt-1 text-xs ${isGood ? 'text-green-600' : 'text-red-600'}`}>
-                    {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                    <span>{Math.abs(percentChange).toFixed(1)}%</span>
-                    <span className="text-muted-foreground">{compLabel}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-    );
+    const enriched = cards.map((kpi: any) => {
+      const formattedValue = (() => {
+        if (kpi.format === 'currency') {
+          if (kpi.key === 'cpc') return formatNumber(kpi.value, 'currency', undefined, 2);
+          return formatNumber(kpi.value, 'currency');
+        }
+        if (kpi.format === 'percent') return `${kpi.value.toFixed(2)}%`;
+        if (kpi.format === 'roas') return `${kpi.value.toFixed(1)}x`;
+        return formatNumber(kpi.value);
+      })();
+      return {
+        ...kpi,
+        formattedValue,
+        isCostMetric: ['cpc', 'cost', 'costOfSale'].includes(kpi.key),
+      };
+    });
+    return <KPICardsSection cards={enriched} comparisonMetrics={comparisonMetrics} />;
   }, []);
 
-  const renderKPICardsSkeleton = useCallback(() => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-      {Array.from({ length: 10 }).map((_, i) => (
-        <Card key={i} className="shadow-sm border-l-4 border-l-primary/60 bg-card">
-          <CardContent className="p-4">
-            <Skeleton className="h-4 w-24 mb-2" />
-            <Skeleton className="h-8 w-32 mb-2" />
-            <Skeleton className="h-3 w-20" />
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  ), []);
+  const renderKPICardsSkeleton = useCallback(() => <KPICardsSkeleton />, []);
 
   const renderChartSkeleton = useCallback(() => (
     <Card><CardContent className="p-6"><Skeleton className="h-[300px] w-full" /></CardContent></Card>
@@ -3531,10 +3507,7 @@ export default function SlideViewPage() {
   );
 
   // ========== AI Summary ==========
-  const overviewSummary = useGetSummaryForTab(slideReportId, 'overview', selectedYear, selectedMonth, selectedViewId);
-  const metasearchSummary = useGetSummaryForTab(slideReportId, 'metasearch', selectedYear, selectedMonth, selectedViewId);
-  const semSummary = useGetSummaryForTab(slideReportId, 'sem', selectedYear, selectedMonth, selectedViewId);
-  const socialSummary = useGetSummaryForTab(slideReportId, 'social', selectedYear, selectedMonth, selectedViewId);
+  // AI Summary feature removed (full removal)
 
   // ========== Unified Breakdown Table ==========
   // Uses the top-level UnifiedBreakdownTable component (defined above the component)
@@ -3542,7 +3515,23 @@ export default function SlideViewPage() {
 
   // ========== JSX Return ==========
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex h-screen overflow-hidden bg-background">
+      {/* Left sidebar */}
+      <ReportSidebar
+        selectedTab={selectedTab}
+        onTabChange={setSelectedTab}
+        reportName={slideReport?.name}
+        onRefreshData={handleRefreshDataWithModal}
+        isRefreshInProgress={isRefreshModalOpen}
+        onShare={() => setIsShareModalOpen(true)}
+        onDataSources={() => navigate(accountId ? `/tools/data-sources/${accountId}` : '/tools/data-sources')}
+        onDimensions={() => navigate(accountId ? `/tools/dimensions/${accountId}` : '/tools/dimensions')}
+        onForecast={() => navigate('/tools/forecasting')}
+        onPriceWidget={() => navigate('/tools/price-widget')}
+      />
+
+      {/* Main column: topbar + content */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
       {/* Data Studio: subtle background refresh indicator (non-blocking) */}
       {isDataStudio && dataStudioRefreshStatus === 'refreshing' && (
         <div className="fixed top-2 right-2 z-50 flex items-center gap-2 bg-background/90 border rounded-lg px-3 py-2 shadow-sm">
@@ -3550,21 +3539,7 @@ export default function SlideViewPage() {
           <span className="text-sm text-muted-foreground">Refreshing from sources…</span>
         </div>
       )}
-      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-        {/* Header */}
-        <SlideViewHeader
-          selectedTab={selectedTab}
-          setSelectedTab={setSelectedTab}
-          navigate={navigate}
-          accountId={accountId || ''}
-          setIsShareModalOpen={setIsShareModalOpen}
-          handleRefreshDataWithModal={handleRefreshDataWithModal}
-          isRefreshModalOpen={isRefreshModalOpen}
-          slideReport={slideReport}
-          displayCurrency={undefined}
-          onDisplayCurrencyChange={undefined}
-        />
-
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Filters Row */}
         <div className="px-6 py-2 border-b">
           <FiltersRow
@@ -3590,6 +3565,8 @@ export default function SlideViewPage() {
             setSelectedYear={setSelectedYear}
             selectedMonth={selectedMonth}
             setSelectedMonth={setSelectedMonth}
+            customDateRange={customDateRange}
+            setCustomDateRange={setCustomDateRange}
             comparisonType={comparisonType}
             setComparisonType={setComparisonType}
             pendingFilterValues={pendingFilterValues}
@@ -3610,7 +3587,7 @@ export default function SlideViewPage() {
         )}
 
         {/* Tab Content */}
-        <div className="px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           {/* Overview Tab */}
           <TabsContent value="overview" className="mt-0">
             <OverviewTab
@@ -3639,9 +3616,6 @@ export default function SlideViewPage() {
               KPI_CARDS={KPI_CARDS}
               comparisonTotals={comparisonTotals}
               comparisonType={comparisonType}
-              onAISummaryClick={undefined}
-              isAISummaryDisabled={!slideReportId}
-              summaryText={null}
             />
           </TabsContent>
 
@@ -3669,6 +3643,7 @@ export default function SlideViewPage() {
                 setBreakdownByDimension={setBreakdownByDimension}
                 selectedYear={selectedYear}
                 selectedMonth={selectedMonth}
+                customDateRange={customDateRange}
                 filterValues={filterValues}
                 filterDimensionValues={filterDimensionValues}
                 breakdownDimensions={breakdownDimensions}
@@ -3681,9 +3656,6 @@ export default function SlideViewPage() {
                 UnifiedBreakdownTable={UnifiedBreakdownTable}
                 comparisonTotals={comparisonTotals}
                 comparisonType={comparisonType}
-                onAISummaryClick={undefined}
-                isAISummaryDisabled={!slideReportId}
-                summaryText={null}
                 displayCurrency={undefined}
               />
             </TabsContent>
@@ -3740,6 +3712,7 @@ export default function SlideViewPage() {
           </TabsContent>
         </div>
       </Tabs>
+      </div>{/* end main column */}
 
       {/* Modals */}
       <EditSourceModal
@@ -3818,24 +3791,6 @@ export default function SlideViewPage() {
           slideReportId={slideReportId}
           accountId={accountId}
           currentFilterValues={filterValues}
-        />
-      )}
-
-      {isAISummaryModalOpen && (
-        <SlideViewAISummaryModal
-          open={isAISummaryModalOpen}
-          onOpenChange={setIsAISummaryModalOpen}
-          minimalData={minimalAIData}
-          selectedTab={selectedTab as 'overview' | 'metasearch' | 'sem' | 'social'}
-          selectedYear={selectedYear}
-          selectedMonth={selectedMonth}
-          pivotData={effectivePivotData}
-          availableViews={availableViews}
-          views={views}
-          slideReportId={slideReportId}
-          activeViewId={selectedViewId}
-          onApplyView={handleApplyView}
-          onApplyComparisonType={(type) => setComparisonType(type)}
         />
       )}
 

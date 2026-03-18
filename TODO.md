@@ -32,12 +32,47 @@ After coding:
 
 ## Active tasks
 
+### Date filter UX improvements (2026-03-18)
+
+- [x] **DF-1** — Removed `reportId` URL param from `useSlideReportPage`: since there is one "Data Studio" report per account, the `reportId` search param is no longer read from the URL on load. The hook now always resolves the canonical "Data Studio" report directly.
+- [x] **DF-2** — Added `customDateRange` state to `SlideViewPage` (exact `DateRange` from/to). When set, all filtering (breakdown table, KPI totals, monthly data) uses precise dates instead of month boundaries.
+- [x] **DF-3** — Extended `monthUtils.ts` with `exactDateRangeFromDayPicker`, `derivePresetFromDateRange`, `dateRangeFromPreset` helpers.
+- [x] **DF-4** — Updated `FiltersRow` to accept `customDateRange` + `setCustomDateRange` props. Preset list expanded to include Today, Yesterday, Last 7/14/30 Days, This Month, Last Month, This Year, Last Year, All Time.
+- [x] **DF-5** — `useFilteredSlideData` and `useSlideReportPage` updated to accept and use `customDateRange` for exact date filtering.
+- [x] **DF-6** — `UnifiedBreakdownTable` and `ChannelTab` updated to accept and use `customDateRange`.
+- [x] **DF-7** — Calendar in `DateRangeFilter` now shows 2 months side-by-side for easier cross-month range selection.
+
+**Verification:** `npm run build` ✅ (exit 0), `npm run lint` ✅ (0 errors, 86 warnings — all pre-existing)
+
+---
+
+### Dead code removal — pages not in router
+
+**Goal:** Delete page files that are no longer referenced in `App.tsx`.
+
+- [x] **DC-1** — Deleted `SlidesPage.tsx` (not in router; zero imports).
+- [ ] **DC-2** — **Not a dead page:** `ForecastingPage.tsx` is used by `ForecastingDashboard` (keep).
+- [x] **DC-3** — Deleted `ReportDashboard.tsx` (not in router; zero imports; only referenced in comments/metadata).
+
+**Note:** References to ReportDashboard that remain are comments/metadata only (safe).
+
+---
+
+### AI summary consolidation
+
+**Goal:** One canonical AI summary display component.
+
+- [x] **AI-1** — Confirmed `FormattedAISummary` has no imports in `src/` (safe to remove).
+- [x] **AI-2** — Removed `FormattedAISummary.tsx` (canonical display is `AISummaryDisplay.tsx`).
+
+---
+
 ### Phase 6-DB — Document dimension_data as single read path
 
 **Goal:** Complete the documentation and verification steps for Phase 6.
 
-- [ ] **6-DB1** — Add a "Data sources" section to `README.md` (or update the Data Flow section) explicitly documenting `dimension_data` as the single read path for Data Studio and PerformanceTable.
-- [ ] **6-DB2** — Verify `resync-data-source` is the sole writer to `dimension_data`; search for any other edge functions or frontend code that upserts/inserts into `dimension_data`; document findings in `README.md` and `docs/REFACTOR.md`.
+- [x] **6-DB1** — Documented `dimension_data` as the single read path in `README.md` + `docs/REFACTOR.md`.
+- [x] **6-DB2** — Verified canonical writer is `resync-data-source`; confirmed no frontend writes; documented other legacy functions that touch `dimension_data` as deprecated/gated in `docs/REFACTOR.md`.
 
 **Verification:** `npm run build` ✅, `npm run lint` ✅
 
@@ -55,8 +90,9 @@ After coding:
 - [ ] **7-EF6** — Audit `run-refresh-workflow` — remove legacy `slideReportId` refresh branch; keep only `resync-data-source` orchestration.
 - [ ] **7-EF7** — Retire `sync-report-api-data` + `get-report-api-data` if `report_api_data` cache is no longer needed (verify `get-performance-data` reads `dimension_data` directly).
 - [ ] **7-EF8** — Retire `migrate-sheet-data` edge function (one-time migration; safe to remove after confirming no remaining `sheet_data` consumers).
-- [ ] **7-EF9** — Retire `clear-and-resync` edge function (clears `sheet_data`; only relevant while `sheet_data` exists).
+- [ ] **7-EF9** — Retire `clear-and-resync` edge function (no longer used by `run-refresh-workflow`; keep as 410 or delete after confirming no external callers).
 - [ ] **7-EF10** — Audit `apply-vlookup-mappings` — verify if absorbed into `resync-data-source`; remove if redundant.
+- [x] **7-SEC1** — Removed hardcoded `ANTHROPIC_API_KEY` fallback from `supabase/functions/generate-ai-summary` (must be configured via Edge Function env vars).
 - [ ] **7-F1** — Verify `slideReportChannelDataMerge.ts` has no remaining imports; delete.
 - [ ] **7-F2** — Verify `refreshPivotDataHelpers.ts` has no remaining imports; delete.
 - [ ] **7-F3** — Verify `slideReportPivotComputation.ts` has no remaining imports; delete.
@@ -73,15 +109,16 @@ After coding:
 
 **Goal:** One view-settings table (`report_views`); one resync utility path.
 
-- [ ] **8-F1** — Audit all `slide_report_views` reads in frontend; migrate `useSlideReportViews` to `report_views` or document why both are needed. Document `budgets.view_id` FK migration path.
-- [ ] **8-F2** — Verify `resync-dimensions.ts` (flat file) is superseded by `resync-all-dimensions/` folder; delete flat file. Verify `resync-all-dimensions.ts` (flat orchestrator) is superseded; delete if so.
-- [ ] **8-F3** — Audit `data-loading-fix.ts` — verify if logic absorbed into canonical data loading; delete if unused.
-- [ ] **8-F4** — Audit `large-dataset-optimizer.ts` — verify if superseded by `useCachedSourceData` batched fetch; delete if unused.
-- [ ] **8-F5** — Audit `monthly_dimension_data` table — determine which edge function writes it and whether it is still needed; document or deprecate.
-- [ ] **8-F6** — Audit `aggregated_breakdown_data` table — determine writer + consumers; document or deprecate.
+- [ ] **8-F1** — Unify view settings: `report_views` canonical; audit `slide_report_views` usage + plan migration
+  - Documented current coupling + unification plan in `docs/REFACTOR.md` (cannot delete `slide_report_views` yet: budgets/share_links/summaries FKs)
+- [ ] **8-F2** — DEFERRED: `resync-dimensions.ts` still imported by `resync-all-dimensions.ts` + `EditMappingModal.tsx`; `resync-all-dimensions.ts` still imported by `ReportDashboard.tsx` + `resync-all-dimensions/hooks.ts`. Both flat files are active.
+- [x] **8-F3** — DEFERRED: `data-loading-fix.ts` still imported by `KPIChart.tsx`; cannot delete until KPIChart migrated.
+- [x] **8-F4** — Deleted `large-dataset-optimizer.ts` (zero external imports confirmed).
+- [x] **8-F5** — Audit `monthly_dimension_data` table — no frontend reads; only cleared by legacy `clear-and-resync` path; treat as legacy cache (Phase 9 candidate after proof).
+- [x] **8-F6** — Audit `aggregated_breakdown_data` table — no frontend/edge reads or writes found; Phase 9 candidate after proof.
 - [ ] **8-DB1** — Document `slide_report_views` deprecation path; confirm `report_views` is the only view-settings table going forward.
-
-**Verification:** `npm run build` ✅, `npm run lint` ✅, single view-settings read path confirmed.
+- [ ] **8-DC1** — Dead code removal: `SlidesPage.tsx`, `ForecastingPage.tsx`, `ReportDashboard.tsx` (not in router). See "Dead code removal" active task above.
+- [ ] **8-DC2** — AI summary consolidation: `FormattedAISummary` → `AISummaryDisplay`. See "AI summary consolidation" active task above.
 
 ---
 
@@ -105,6 +142,67 @@ After coding:
 ---
 
 ## Completed
+
+### Layout redesign — Left sidebar + topbar for Data Studio (2026-03-18)
+
+- [x] **L-1** — Created `src/components/slides/ReportSidebar.tsx` — left nav with Reports tabs + Actions/Manage/Tools sections.
+- [x] **L-2** — Rewrote `src/components/slides/SlideViewHeader.tsx` — topbar with back, report name, Data Sources, Dimensions, Share, Refresh Data.
+- [x] **L-3** — `SlideViewPage` layout restructured: `flex h-screen overflow-hidden` root → sidebar + main column (topbar + scrollable content).
+- [x] Extracted `FiltersRow` component from `SlideViewPage`.
+- [x] Created `AISummaryDisplay.tsx` — canonical markdown AI summary card.
+- [x] Created `DateRangeFilter` component in `src/components/filters/`.
+- [x] Created `src/lib/monthUtils.ts` — multi-month selection utilities.
+- [x] Deleted `src/pages/Index.tsx` — not in router, zero imports, dead code.
+
+**Verification:** `npm run build` ✅ exit 0 (bundle -45KB), `npm run lint` ✅ 0 errors, 114 warnings
+
+---
+
+### Design system — Light-only luxury minimalist theme (2026-03-18)
+
+- [x] **DS-1** — Refactored `src/index.css` HSL tokens: primary `#FF0068`, accent `#7C39FF`, neutral borders, white background.
+- [x] **DS-2** — Added DM Sans font; set Tailwind `font-sans` default.
+- [x] **DS-3** — Removed `dark:` branches; Sonner toaster light-only.
+- [x] **DS-4** — Date picker UX: preset sidebar + range calendar (`CalendarWithPresets`).
+- [x] **DS-5** — Minimalist primitives: `Button` outline/ghost → `muted` hover; `Card` no shadow; `Sidebar` no shadow.
+- [x] **DS-6** — `docs/DESIGN_SYSTEM.md` added as the single design-system rulebook.
+
+**Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors)
+
+### Design system audit — Simplify color usage (2026-03-18)
+
+- [x] **DS-A1** — `--accent` token changed from purple brand color (`#7C39FF`) to neutral hover surface (slightly darker grey). Purple is now chart-only via `--chart-5`.
+- [x] **DS-A2** — Added `--chart-1` → `--chart-5` tokens (pink → purple gradient) for chart series colors.
+- [x] **DS-A3** — `ReportSidebar` active tab changed from solid `bg-primary` (hot pink fill) to `bg-primary/10 text-primary` (subtle tint). All `hover:bg-accent` → `hover:bg-muted`.
+- [x] **DS-A4** — `Checkbox` unchecked border changed from `border-primary` (pink) to `border-input` (neutral grey). Checked state still uses `bg-primary`.
+- [x] **DS-A5** — `RadioGroupItem` unchecked border changed from `border-primary` to `border-input`. Checked state still uses `border-primary`.
+- [x] **DS-A6** — `docs/DESIGN_SYSTEM.md` updated with new rules (single rulebook).
+
+**Verification:** `npm run build` ✅ (exit 0, 11s)
+
+### KPI cards unification — minimalist style (2026-03-18)
+
+**Goal:** One canonical KPI card component. Remove colored left bar, remove icons.
+
+- [x] **KPI-1** — Rewrote `src/components/slides/KPICardsSection.tsx` as canonical presentational component (`KPICardItem`, `KPICardsSkeleton`, `KPICardsSection`). No icons, no `border-l-4`, no colored left bar.
+- [x] **KPI-2** — `renderKPICards` in `SlideViewPage.tsx` now delegates to `KPICardsSection`. Removed inline card JSX.
+- [x] **KPI-3** — `KPIMetricsCards.tsx` card rendering updated to use `KPICardItem` / `KPICardsSkeleton`. Removed icon/color maps.
+- [x] **KPI-4** — `README.md` updated: `KPICardsSection` documented as canonical component.
+
+**Verification:** `npm run build` ✅ (exit 0)
+
+---
+
+### Route simplification — Data Studio as homepage (2026-03-18)
+
+- [x] `/` now renders `SlideViewPage` directly (Data Studio is the homepage).
+- [x] `/landing`, `/tools/reports/*`, `/tools/data/*` all redirect to `/`.
+- [x] `ReportDashboard`, `SlidesPage`, `Landing` removed from `App.tsx` router.
+- [x] `ReportSidebar` includes Forecast + Price Widget quick-access items.
+
+**Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors)
+
+---
 
 ### Phase 6 — Data source unification + canonical Data Studio fetch path
 
@@ -174,8 +272,8 @@ _None currently._
 
 ## Verification baseline
 
-Last verified: **2026-03-18**
+Last verified: **2026-03-18** (post layout redesign + route simplification)
 
-- `npm run build` ✅
-- `npm run lint` ✅ (warnings only, no errors)
+- `npm run build` ✅ (bundle -45KB vs pre-layout)
+- `npm run lint` ✅ (0 errors, 114 warnings — all pre-existing)
 - `npm run test -- --run` ✅ (49 tests passing)

@@ -7,8 +7,6 @@ import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { JAN_2026_BREAKDOWN_DIMENSIONS } from "@/lib/metasearchJan2026Utils";
 import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
-import { AISummaryButton } from "./AISummaryButton";
-import { AISummaryDisplay } from "./AISummaryDisplay";
 
 interface Dimension {
   id: string;
@@ -41,6 +39,7 @@ interface ChannelTabProps {
   setBreakdownByDimension: (dim: string) => void;
   selectedYear: string;
   selectedMonth: string;
+  customDateRange?: import("react-day-picker").DateRange | undefined;
   filterValues: Record<string, Record<string, string[]>>;
   filterDimensionValues: Record<string, Record<string, string[]>>;
   breakdownDimensions: Record<string, Dimension[]>;
@@ -53,9 +52,6 @@ interface ChannelTabProps {
   UnifiedBreakdownTable: React.ComponentType<any>;
   comparisonTotals?: Record<string, any> | null;
   comparisonType?: string;
-  onAISummaryClick?: () => void;
-  isAISummaryDisabled?: boolean;
-  summaryText?: string | null;
   displayDataFromApi?: boolean;
   apiBreakdowns?: { groupBy: string; rows: Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number; cpc?: number; roas?: number; costOfSale?: number }>; expanded?: Record<string, Array<{ name: string; impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>> };
   suppressExpandedBreakdown?: boolean;
@@ -83,6 +79,7 @@ export function ChannelTab({
   setBreakdownByDimension,
   selectedYear,
   selectedMonth,
+  customDateRange,
   filterValues,
   filterDimensionValues,
   breakdownDimensions,
@@ -95,9 +92,6 @@ export function ChannelTab({
   UnifiedBreakdownTable,
   comparisonTotals,
   comparisonType,
-  onAISummaryClick,
-  isAISummaryDisabled,
-  summaryText,
   displayDataFromApi,
   apiBreakdowns,
   suppressExpandedBreakdown,
@@ -236,6 +230,7 @@ export function ChannelTab({
                     selectedChannel={channel}
                     selectedYear={selectedYear}
                     selectedMonth={selectedMonth}
+                    customDateRange={customDateRange}
                     filterValues={filterValues}
                     filterDimensionValues={filterDimensionValues}
                     onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, [channel]: totals }))}
@@ -251,26 +246,6 @@ export function ChannelTab({
               })()}
             </CardContent>
           </Card>
-
-          {/* AI Summary Display */}
-          {summaryText && (
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">
-                {`AI Summary - ${channel.charAt(0).toUpperCase() + channel.slice(1)}`}
-              </h4>
-              <AISummaryDisplay value={summaryText} />
-            </div>
-          )}
-
-          {/* AI Summary Button */}
-          {onAISummaryClick && (
-            <div className="flex justify-end">
-              <AISummaryButton
-                onClick={onAISummaryClick}
-                disabled={isAISummaryDisabled}
-              />
-            </div>
-          )}
         </>
       )}
     </TabsContent>

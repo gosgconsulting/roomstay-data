@@ -85,6 +85,8 @@ export interface UseFilteredSlideDataParams {
   filterDimensionValues: Record<string, Record<string, string[]>>;
   selectedYear: string;
   selectedMonth: string;
+  /** Exact date range override — when set, filtering uses precise from/to dates instead of month boundaries. */
+  customDateRange?: import("react-day-picker").DateRange | undefined;
   selectedTab?: string;
   slideType?: string;
   dynamicChannelTotals?: Record<string, MetricData>;
@@ -126,15 +128,26 @@ export function useFilteredSlideData({
   filterDimensionValues,
   selectedYear,
   selectedMonth,
+  customDateRange,
   selectedTab,
   slideType,
   dynamicChannelTotals,
   groupByDimensionId,
 }: UseFilteredSlideDataParams): FilteredSlideData {
-  // Build date range based on selected year/month (supports multi-month)
+  // Build date range for filtering.
+  // When customDateRange is set, use exact from/to dates (supports sub-month ranges like 1-5 days).
+  // Otherwise fall back to month-boundary range from selectedYear/selectedMonth.
   const dateRange = useMemo<{ start: Date; end: Date } | undefined>(() => {
+    if (customDateRange?.from) {
+      const from = customDateRange.from;
+      const to = customDateRange.to ?? customDateRange.from;
+      return {
+        start: from,
+        end: new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999),
+      };
+    }
     return buildMultiMonthDateRange(selectedYear, selectedMonth);
-  }, [selectedYear, selectedMonth]);
+  }, [customDateRange, selectedYear, selectedMonth]);
 
   // Check if any filters are active using centralized function
   const hasFilters = useMemo(() => {

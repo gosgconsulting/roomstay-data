@@ -9,8 +9,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { BookmarkPlus, Trash2, Search, ChevronRight, Loader2 } from "lucide-react";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
-import { parseSelectedMonths, enforceConsecutive, formatSelectedMonths } from "@/lib/monthUtils";
-import { DatePresetPicker } from "@/components/slides/DatePresetPicker";
+import { parseSelectedMonths, enforceConsecutive, formatSelectedMonths, slideSelectionToDateRange, dateRangeToSlideSelection, deriveSlideDatePreset, dateRangeFromPreset, derivePresetFromDateRange } from "@/lib/monthUtils";
+import { DateRangeFilter } from "@/components/filters";
+import type { DateRange } from "react-day-picker";
 
 interface Dimension {
   id: string;
@@ -50,6 +51,8 @@ interface FiltersRowProps {
   setSelectedYear: (year: string) => void;
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
+  customDateRange?: DateRange | undefined;
+  setCustomDateRange?: (range: DateRange | undefined) => void;
   comparisonType: string;
   setComparisonType: (type: string) => void;
   pendingFilterValues: Record<string, Record<string, string[]>>;
@@ -86,6 +89,8 @@ export function FiltersRow({
   setSelectedYear,
   selectedMonth,
   setSelectedMonth,
+  customDateRange,
+  setCustomDateRange,
   comparisonType,
   setComparisonType,
   pendingFilterValues,
@@ -99,7 +104,7 @@ export function FiltersRow({
   loadFilterDimensionValues,
 }: FiltersRowProps) {
   return (
-    <div className="flex items-end justify-end gap-6">
+    <div className="flex items-end justify-start gap-6">
       {/* View selector - Show when on overview tab */}
       {selectedTab === "overview" && (
         <div className="flex items-center gap-3">
@@ -513,29 +518,63 @@ export function FiltersRow({
       {/* Date Filters - Show on all tabs except Budget */}
       {selectedTab !== "budget" && (
         <div className="flex items-center gap-6">
-          {/* Date Preset Picker (replaces Year + Month dropdowns) */}
-          <DatePresetPicker
-            selectedYear={selectedYear}
-            selectedMonth={selectedMonth}
-            onYearChange={setSelectedYear}
-            onMonthChange={setSelectedMonth}
-            disabled={isReadOnlyMode}
+          <DateRangeFilter
+            dateRange={customDateRange ?? slideSelectionToDateRange(selectedYear, selectedMonth)}
+            datePreset={customDateRange ? derivePresetFromDateRange(customDateRange) : deriveSlideDatePreset(selectedYear, selectedMonth)}
+            compareEnabled={comparisonType !== "none"}
+            compareType={comparisonType}
+            onDatePresetChange={(preset) => {
+              if (isReadOnlyMode) return;
+              if (preset === "all_time") {
+                setCustomDateRange?.(undefined);
+                setSelectedYear("all");
+                setSelectedMonth("all");
+                setComparisonType("none");
+                return;
+              }
+              // Try to resolve via preset → exact DateRange first
+              const presetRange = dateRangeFromPreset(preset);
+              if (presetRange) {
+                setCustomDateRange?.(presetRange);
+                // Also sync year/month for backward compat (views saving)
+                const next = dateRangeToSlideSelection(presetRange);
+                setSelectedYear(next.year);
+                setSelectedMonth(next.month);
+                return;
+              }
+              // custom: no-op (user picks in calendar)
+            }}
+            onDateRangeChange={(range) => {
+              if (isReadOnlyMode) return;
+              // Always store the exact range
+              setCustomDateRange?.(range);
+              // Also sync year/month for backward compat
+              const next = dateRangeToSlideSelection(range);
+              setSelectedYear(next.year);
+              setSelectedMonth(next.month);
+            }}
+            onCompareEnabledChange={(enabled) => {
+              if (isReadOnlyMode) return;
+              setComparisonType(enabled ? "previous_period" : "none");
+            }}
+            onCompareTypeChange={(type) => {
+              if (isReadOnlyMode) return;
+              setComparisonType(type);
+            }}
+            presets={[
+              { id: "today", label: "Today" },
+              { id: "yesterday", label: "Yesterday" },
+              { id: "last_7_days", label: "Last 7 Days" },
+              { id: "last_14_days", label: "Last 14 Days" },
+              { id: "last_30_days", label: "Last 30 Days" },
+              { id: "this_month", label: "This Month" },
+              { id: "last_month", label: "Last Month" },
+              { id: "this_year", label: "This Year" },
+              { id: "last_year", label: "Last Year" },
+              { id: "all_time", label: "All Time" },
+            ]}
+            showCompare
           />
-          
-          {/* Comparison dropdown */}
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Compare:</span>
-            <Select value={comparisonType} onValueChange={setComparisonType} disabled={isReadOnlyMode}>
-              <SelectTrigger className="w-[160px] bg-background">
-                <SelectValue placeholder="No Comparison" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No Comparison</SelectItem>
-                <SelectItem value="previous_period">Previous Period</SelectItem>
-                <SelectItem value="previous_year">Previous Year</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </div>
       )}
     </div>

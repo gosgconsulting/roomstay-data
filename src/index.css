@@ -2,111 +2,130 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
+/*
+  Roomstay design system — single source of truth.
+  All colors are HSL. Light-only product (dark block mirrors light).
+
+  Brand palette:
+    Primary (CTA)  : #FF0068  — hot pink, primary actions only
+    Chart gradient : #FF0068 → #7C39FF  — charts/visualizations only
+    Neutral surfaces: white + light grey
 */
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
-    --foreground: 240 10% 15%;
+    /* ── Backgrounds ── */
+    --background: 0 0% 100%;                  /* #FFFFFF */
+    --foreground: 265.7 24.1% 11.4%;          /* #1C1624 headline */
 
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 15%;
+    /* ── Card / surface ── */
+    --card: 220 17.6% 96.7%;                  /* #F5F6F8 */
+    --card-foreground: 265.7 24.1% 11.4%;
 
+    /* ── Popover ── */
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 15%;
+    --popover-foreground: 265.7 24.1% 11.4%;
 
-    --primary: 262 83% 58%;
+    /* ── Brand / CTA (primary actions only) ── */
+    --primary: 335.5 100% 50%;                /* #FF0068 */
     --primary-foreground: 0 0% 100%;
-    --primary-light: 262 83% 68%;
-    --primary-lighter: 262 70% 85%;
+    --primary-light: 334.1 100% 55.1%;        /* #FF1A7D */
+    --primary-lighter: 335.5 100% 92%;        /* tint for backgrounds */
 
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 10% 15%;
+    /* ── Secondary surface ── */
+    --secondary: 220 17.6% 96.7%;             /* #F5F6F8 */
+    --secondary-foreground: 0 0% 22.7%;       /* #3A3A3A */
 
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 5% 45%;
+    /* ── Muted surface + text ── */
+    --muted: 220 17.6% 96.7%;
+    --muted-foreground: 0 0% 42%;             /* #6B6B6B */
 
-    --accent: 262 83% 58%;
-    --accent-foreground: 0 0% 100%;
+    /* ── Accent = neutral hover surface (NOT the purple brand color) ── */
+    --accent: 220 17.6% 93%;                  /* slightly darker than muted, for hover states */
+    --accent-foreground: 265.7 24.1% 11.4%;
 
-    --success: 158 64% 52%;
+    /* ── Status ── */
+    --success: 160.1 84.1% 39.4%;            /* #10B981 */
     --success-foreground: 0 0% 100%;
-
-    --destructive: 0 84% 60%;
+    --warning: 37.7 92.1% 50.2%;             /* #F59E0B */
+    --warning-foreground: 265.7 24.1% 11.4%;
+    --info: 182.7 100% 44.1%;                /* #00D7E1 */
+    --info-foreground: 265.7 24.1% 11.4%;
+    --destructive: 0 84.2% 60.2%;            /* #EF4444 */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 262 83% 58%;
-    
-    --chart-gradient-start: 262 83% 58%;
-    --chart-gradient-end: 262 70% 85%;
+    /* ── Borders / inputs ── */
+    --border: 216 12.2% 88%;
+    --input: 216 12.2% 88%;
+    --ring: 335.5 100% 50%;                  /* focus ring = brand pink */
 
+    /* ── Charts (pink → purple gradient; use only in visualizations) ── */
+    --chart-1: 335.5 100% 50%;               /* #FF0068 */
+    --chart-2: 320 100% 50%;                 /* #FF0080 */
+    --chart-3: 290 100% 55%;                 /* #CC00FF */
+    --chart-4: 270 100% 60%;                 /* #9933FF */
+    --chart-5: 260.3 100% 61.2%;            /* #7C39FF */
+    --chart-gradient-start: 335.5 100% 50%;
+    --chart-gradient-end: 260.3 100% 61.2%;
+
+    /* ── Radius ── */
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
+    /* ── Sidebar ── */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 22.7%;
+    --sidebar-primary: 335.5 100% 50%;
     --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 220 17.6% 93%;
+    --sidebar-accent-foreground: 265.7 24.1% 11.4%;
+    --sidebar-border: 216 12.2% 88%;
+    --sidebar-ring: 335.5 100% 50%;
   }
 
+  /* Dark mode intentionally mirrors light — product is light-only. */
   .dark {
-    --background: 240 10% 10%;
-    --foreground: 0 0% 98%;
-
-    --card: 240 10% 13%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 240 10% 13%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 262 83% 58%;
+    --background: 0 0% 100%;
+    --foreground: 265.7 24.1% 11.4%;
+    --card: 220 17.6% 96.7%;
+    --card-foreground: 265.7 24.1% 11.4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 265.7 24.1% 11.4%;
+    --primary: 335.5 100% 50%;
     --primary-foreground: 0 0% 100%;
-    --primary-light: 262 83% 68%;
-    --primary-lighter: 262 50% 30%;
-
-    --secondary: 240 5% 20%;
-    --secondary-foreground: 0 0% 98%;
-
-    --muted: 240 5% 20%;
-    --muted-foreground: 240 5% 65%;
-
-    --accent: 262 83% 58%;
-    --accent-foreground: 0 0% 100%;
-
-    --success: 158 64% 52%;
+    --primary-light: 334.1 100% 55.1%;
+    --primary-lighter: 335.5 100% 92%;
+    --secondary: 220 17.6% 96.7%;
+    --secondary-foreground: 0 0% 22.7%;
+    --muted: 220 17.6% 96.7%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 220 17.6% 93%;
+    --accent-foreground: 265.7 24.1% 11.4%;
+    --success: 160.1 84.1% 39.4%;
     --success-foreground: 0 0% 100%;
-
-    --destructive: 0 62% 50%;
+    --warning: 37.7 92.1% 50.2%;
+    --warning-foreground: 265.7 24.1% 11.4%;
+    --info: 182.7 100% 44.1%;
+    --info-foreground: 265.7 24.1% 11.4%;
+    --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 240 5% 25%;
-    --input: 240 5% 25%;
-    --ring: 262 83% 58%;
-    
-    --chart-gradient-start: 262 83% 58%;
-    --chart-gradient-end: 262 50% 30%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 216 12.2% 88%;
+    --input: 216 12.2% 88%;
+    --ring: 335.5 100% 50%;
+    --chart-1: 335.5 100% 50%;
+    --chart-2: 320 100% 50%;
+    --chart-3: 290 100% 55%;
+    --chart-4: 270 100% 60%;
+    --chart-5: 260.3 100% 61.2%;
+    --chart-gradient-start: 335.5 100% 50%;
+    --chart-gradient-end: 260.3 100% 61.2%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 22.7%;
+    --sidebar-primary: 335.5 100% 50%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 220 17.6% 93%;
+    --sidebar-accent-foreground: 265.7 24.1% 11.4%;
+    --sidebar-border: 216 12.2% 88%;
+    --sidebar-ring: 335.5 100% 50%;
   }
 }
 
@@ -116,6 +135,6 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
   }
 }

@@ -29,10 +29,11 @@ export const filterDimensionsByFilterSettings = async (
   supabaseClient: any
 ): Promise<any[]> => {
   try {
-    // Get filter settings from report_views
+    // Get filter settings from canonical views
     const { data: viewSettings } = await supabaseClient
-      .from("report_views")
+      .from("views")
       .select("filter_dimensions")
+      .eq("mode", "performance_table")
       .eq("report_id", reportId)
       .eq("user_id", userId)
       .eq("is_default", true)
@@ -68,10 +69,11 @@ export const filterDimensionsByVisibility = async (
   supabaseClient: any
 ): Promise<any[]> => {
   try {
-    // Get visibility settings from report_views
+    // Get visibility settings from canonical views
     const { data: viewSettings } = await supabaseClient
-      .from("report_views")
+      .from("views")
       .select("visible_dimensions")
+      .eq("mode", "performance_table")
       .eq("report_id", reportId)
       .eq("user_id", userId)
       .eq("is_default", true)

@@ -7,8 +7,6 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Settings2, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
 import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
-import { AISummaryButton } from "./AISummaryButton";
-import { AISummaryDisplay } from "./AISummaryDisplay";
 
 const GROSS_PROFIT_RATE = 0.15;
 
@@ -47,9 +45,6 @@ interface OverviewTabProps {
   }>;
   comparisonTotals?: Record<string, any> | null;
   comparisonType?: string;
-  onAISummaryClick?: () => void;
-  isAISummaryDisabled?: boolean;
-  summaryText?: string | null;
 }
 
 const hasAnyData = (totals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>): boolean => {
@@ -101,9 +96,6 @@ export function OverviewTab({
   KPI_CARDS,
   comparisonTotals,
   comparisonType,
-  onAISummaryClick,
-  isAISummaryDisabled,
-  summaryText,
 }: OverviewTabProps) {
   // Merge comparison data into chart data
   const mergedChartData = overviewChartData.map((point, i) => ({

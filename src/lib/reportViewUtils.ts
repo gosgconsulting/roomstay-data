@@ -97,8 +97,9 @@ export async function saveDimensionSettings(
     // Get existing view - using correct column names from database schema
     console.log(`[DIMENSION-SELECTOR] Fetching existing view...`);
     const { data: existingViewData, error: existingViewError } = await supabase
-      .from("report_views")
+      .from("views")
       .select("*")
+      .eq("mode", "performance_table")
       .eq("report_id", reportId)
       .eq("user_id", userId)
       .eq("is_default", true)
@@ -144,8 +145,9 @@ export async function saveDimensionSettings(
 
     if (existingView && existingView.id) {
       const { error } = await supabase
-        .from("report_views")
+        .from("views")
         .update(baseViewData)
+        .eq("mode", "performance_table")
         .eq("id", existingView.id);
 
       if (error) {
@@ -153,6 +155,7 @@ export async function saveDimensionSettings(
       }
     } else {
       const insertData = {
+        mode: "performance_table",
         ...baseViewData,
         report_id: reportId,
         user_id: userId,
@@ -161,7 +164,7 @@ export async function saveDimensionSettings(
       };
 
       const { error } = await supabase
-        .from("report_views")
+        .from("views")
         .insert(insertData);
 
       if (error) {

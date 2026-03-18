@@ -38,7 +38,7 @@ SELECT cron.schedule(
   SELECT
     net.http_post(
         url:='https://zcxxwpwheevwavdcgfht.supabase.co/functions/v1/auto-sync-data-sources',
-        headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpjeHh3cHdoZWV2d2F2ZGNnZmh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE4Mzg1MjAsImV4cCI6MjA3NzQxNDUyMH0.zKmexYsPTkNWa65kjH5H6_aMosY9rHHj0lqg8j4T3Lc"}'::jsonb,
+        headers:='{"Content-Type": "application/json", "Authorization": "Bearer <YOUR_SERVICE_ROLE_KEY_OR_JWT>"}'::jsonb,
         body:='{}'::jsonb
     ) as request_id;
   $$

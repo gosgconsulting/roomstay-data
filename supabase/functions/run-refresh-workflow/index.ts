@@ -138,23 +138,6 @@ Deno.serve(async (req: Request) => {
   let refreshSuccess: boolean | undefined;
 
   try {
-    if (clearFirst) {
-      const clearBody: Record<string, unknown> = { accountId, reportId };
-      if (slideReportId) clearBody.slideReportId = slideReportId;
-      const { ok } = await invokeEdgeFunction(supabaseUrl, serviceRoleKey, 'clear-and-resync', clearBody, 2);
-      cleared = ok;
-      if (!ok) {
-        return jsonResponse({
-          success: false,
-          error: 'clear-and-resync failed',
-          cleared: false,
-          resynced: 0,
-          resyncErrors: [],
-          refreshSuccess: undefined,
-        }, 502, cors);
-      }
-    }
-
     let reportIds: string[] = [];
     if (slideReportId) {
       const { data: slideReport, error: slideErr } = await supabase
@@ -203,6 +186,28 @@ Deno.serve(async (req: Request) => {
         refreshSuccess: undefined,
         message: 'No reports found for account',
       }, 200, cors);
+    }
+
+    // Canonical "clearFirst": clear only the canonical table (dimension_data) for the target report(s).
+    // This replaces legacy clear-and-resync (which also touched sheet_data + slide_report_* caches).
+    if (clearFirst && reportIds.length > 0) {
+      const { error: clearErr } = await supabase
+        .from('dimension_data')
+        .delete()
+        .in('report_id', reportIds);
+
+      if (clearErr) {
+        return jsonResponse({
+          success: false,
+          error: 'Failed to clear dimension_data: ' + clearErr.message,
+          cleared: false,
+          resynced: 0,
+          resyncErrors: [],
+          refreshSuccess: undefined,
+        }, 500, cors);
+      }
+
+      cleared = true;
     }
 
     let dataSources: Array<{ id: string }> = [];

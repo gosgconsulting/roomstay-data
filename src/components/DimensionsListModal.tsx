@@ -114,8 +114,9 @@ export const DimensionsListModal = ({
 
       // Try to get saved visibility settings
       const { data: viewSettings, error } = await supabase
-        .from("report_views")
+        .from("views")
         .select("visible_dimensions")
+        .eq("mode", "performance_table")
         .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true)
@@ -214,8 +215,9 @@ export const DimensionsListModal = ({
 
       // Try to get existing view
       const { data: existingView, error: viewError } = await supabase
-        .from("report_views")
+        .from("views")
         .select("id, kpi_order")
+        .eq("mode", "performance_table")
         .eq("report_id", reportId)
         .eq("user_id", user.id)
         .eq("is_default", true)
@@ -244,11 +246,12 @@ export const DimensionsListModal = ({
       if (existingView?.id) {
         // Update existing view
         const { error: updateError } = await supabase
-          .from("report_views")
+          .from("views")
           .update({
             ...updateData,
             name: "Default View", // Use static name since existingView type is unclear
           })
+          .eq("mode", "performance_table")
           .eq("id", existingView.id);
 
         if (updateError) {
@@ -257,8 +260,9 @@ export const DimensionsListModal = ({
       } else {
         // Create new default view
         const { error: insertError } = await supabase
-          .from("report_views")
+          .from("views")
           .insert({
+            mode: "performance_table",
             report_id: reportId,
             user_id: user.id,
             is_default: true,
