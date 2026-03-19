@@ -32,6 +32,31 @@ After coding:
 
 ## Active tasks
 
+### Fix: all-time fetch timeout causing zero data (2026-03-20)
+
+Root cause: CH-1 changed `useSlideReportPage` to pass `'all'` to `useDataStudioRawRows`, which triggered `fetchAllRowsParallel` for 134k+ rows (27+ batches per channel, 80+ parallel requests). The query never completed — metasearch (58k rows) and SEM (48k rows) timed out, so `rawRows` stayed `undefined` forever. All KPI cards, tables, charts, and overview showed zeros because `effectivePivotData` was never populated.
+
+- [x] **ZD-1** — Reverted `selectedYear` from `'all'` to the actual `selectedYear` in `useSlideReportPage`, restoring the fast RPC path (`fetchByDateRpc`) for year-filtered fetches. With `selectedYear='2026'`, data loads in ~8s (social 3.5k rows/4s, SEM 5.4k rows/6s, metasearch 27.4k rows/8s) instead of never completing.
+
+**Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0). Browser verified: Overview KPIs (1.64M impressions, $1.66M revenue), Metasearch ($57.8K rev), SEM ($1.47M rev), Social ($134K rev) all load correctly.
+
+---
+
+### Chart date-source unification refactor (2026-03-20)
+
+Root cause: after adding separate chart range controls (`This Year`, `Last 6 Months`, etc.), Data Studio ended up with two competing date systems. KPI cards, tables, and breakdowns used the top date filter, while charts used an independent chart-range state. That split made the graph show partial data while other components stayed at zero. A second leftover issue was legacy comparison/fallback logic still assuming pivot-style monthly chart data instead of canonical `rawDataRows`.
+
+- [x] **CDU-1** — Removed chart-owned date-range state from `SlideViewPage.tsx`; charts now derive their full date scope from the top date filter only (`customDateRange` or `selectedYear`/`selectedMonth`).
+- [x] **CDU-2** — Added `ChartGranularity` (`month` / `week` / `day`) in `src/types/slideView.ts`.
+- [x] **CDU-3** — Rewrote `useChannelChartDataFromRawRows.ts` to bucket canonical filtered raw rows by exact top-filter date range + granularity, instead of anchoring to relative presets.
+- [x] **CDU-4** — Updated `OverviewTab.tsx` and `ChannelTab.tsx`: removed the chart time-range dropdown and replaced it with a granularity dropdown.
+- [x] **CDU-5** — Removed remaining active legacy comparison/fallback chart path in `SlideViewPage.tsx` that depended on separate chart-range assumptions or pivot monthly blobs, and deleted orphaned `src/hooks/useChartData.ts`.
+- [x] **CDU-6** — Updated README + REFACTOR docs to record the single-date-source chart architecture.
+
+**Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0).
+
+---
+
 ### Data Studio zero-data chart fix (2026-03-20)
 
 Root cause: Data Studio still ran two chart pathways in parallel. The legacy `useChartData` fallback path in `chartDataCalculations.ts` used `channelData.monthly` in no-filter mode, but that blob is empty after the refactor (`rawDataRows` is canonical). This produced zero charts even when DB rows existed. A second issue was `useChannelChartDataFromRawRows` receiving `filterValues` but not applying them, so chart filters diverged from KPI/table filters.
@@ -704,12 +729,9 @@ _None currently._
 
 ---
 
-Last verified: **2026-03-20** (post unified view filters UVF-1–UVF-8)
+Last verified: **2026-03-20** (post ZD-1 all-time fetch fix)
 
 - `npx tsc --noEmit` ✅ (0 errors, main workspace)
 - `npm run build` ✅ (exit 0)
-- `vitest run slideViewHelpers.test.ts` ✅ (27/27 pass)
-- `vitest run monthUtils.test.ts` ✅ (17/17 pass)
-- All linter output is CodeScene/ESLint warnings only — no errors.
-- E2E reports: Data Studio (/) and shared reports; loading/empty states prevent blank page when account or report is missing
-- Saved view filters (e.g. Brady) now apply to KPI cards, charts, and breakdown tables consistently
+- Browser verified: Overview (1.64M impressions, $1.66M revenue), Metasearch ($57.8K), SEM ($1.47M), Social ($134K) — all channels load KPI cards, charts, and breakdown tables correctly
+- Data loads in ~8s via RPC path (vs never completing with all-time fetch)

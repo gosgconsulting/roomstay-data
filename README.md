@@ -126,12 +126,12 @@ Google Sheets / CSV URL
 - **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads `dimension_data` directly. No long-lived cache (refetch on mount, gcTime 0) so KPIs always reflect current DB state.
 - **Filtered data:** `src/hooks/useFilteredSlideData.ts` — pure client-side filtering and aggregation. Single source of truth for KPI totals, monthly chart data, and filtered raw rows.
 - **Filter state:** `src/hooks/useDataStudioFilters.ts` — canonical owner of `filterValues`, `customDateRange`, `comparisonType`, `filterConfigs`. Restores view filters via `applyView`. All consumers (KPI cards, charts, breakdown tables) read from the same `filterValues` and use a shared `configuredDimensionNames` map for global-to-report dimension ID resolution.
-- **Filter flow:** saved view → `applyView` → `filterValues` → `useFilteredSlideData` (KPI totals + monthly data) + `useChannelChartDataFromRawRows` (overview/channel charts) + `BreakdownTableSection` (breakdown tables). All paths resolve filter IDs via `filterRawDataRows(..., combinedDimNames)`.
+- **Filter flow:** saved view → `applyView` → top date filter + `filterValues` → `useFilteredSlideData` (KPI totals + monthly data) + `useChannelChartDataFromRawRows` (overview/channel charts) + `BreakdownTableSection` (breakdown tables). All paths resolve filter IDs via `filterRawDataRows(..., combinedDimNames)`, and charts now use the same top date range as KPI cards/tables.
 - **Performance table:** `src/components/PerformanceTable/` + `src/hooks/performanceTable/`.
 - **View settings:** stored in `views` table (canonical, replaces legacy `report_views` + `slide_report_views`).
 - **Layout:** `flex h-screen overflow-hidden` root → `ReportSidebar` (left nav: tabs + Actions/Manage/Tools sections) + main column (`flex-col flex-1`) → `SlideViewHeader` (topbar: back, report name, Data Sources, Dimensions, Share, Refresh Data) + scrollable tab content.
 - **Filters:** `FiltersRow` component (date range + channel filters); uses `DateRangeFilter` from `src/components/filters/`.
-- **Chart controls:** Overview and channel charts share two dropdowns in the chart header: a KPI metric selector (Revenue, Impressions, Clicks, Cost, Bookings, CTR, Conversion Rate, CPC, AOV, ROAS, Cost of Sale) and a time-range selector (`This Month`, `This Year`, `Last 12/6/3 Months`). Default range is `This Year`. `This Month` renders daily points.
+- **Chart controls:** Overview and channel charts share two dropdowns in the chart header: a KPI metric selector (Revenue, Impressions, Clicks, Cost, Bookings, CTR, Conversion Rate, CPC, AOV, ROAS, Cost of Sale) and a granularity selector (`Month`, `Week`, `Day`). The chart date scope is no longer independent; it always follows the top date filter, and the granularity dropdown only changes bucket size.
 
 ### 4. KPI / Metrics System
 

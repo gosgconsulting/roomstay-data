@@ -227,6 +227,21 @@
 
 ## 8. Change Log
 
+### Chart date-source unification (2026-03-20)
+
+**Changes**
+- Removed the active split between top date filters and chart-specific time range state.
+- Data Studio charts now use the same top date filter as KPI cards, tables, and breakdowns; only chart granularity remains local to the chart UI.
+- Reworked `useChannelChartDataFromRawRows` to bucket filtered canonical `rawDataRows` by `month` / `week` / `day`.
+- Removed the active legacy comparison/fallback chart path in `SlideViewPage` that depended on pivot-style monthly blobs and separate chart-range assumptions.
+
+**Replaced By**
+- Single chart path: `SlideViewPage` → `useChannelChartDataFromRawRows` using top date filter + chart granularity.
+
+**Verification**
+- `npx tsc --noEmit` ✅ exit 0
+- `npm run build` ✅ exit 0
+
 ### Refresh blank-page stabilization (2026-03-19)
 
 **Changes**

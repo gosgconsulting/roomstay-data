@@ -219,10 +219,12 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
 
   // Data Studio: fetch raw rows from dimension_data (canonical DB cache).
   // Uses effectiveReportIdsForFetch so all account channels (including metasearch) get data.
+  // Pass the actual selectedYear so the RPC path is used for year-filtered fetch (fast).
+  // When selectedYear is 'all', falls back to fetchAllRowsParallel (slower but complete).
   const { data: dataStudioResult, isLoading: isLoadingRawRows } = useDataStudioRawRows(
     slideReport,
     !!slideReportId,
-    'all',
+    selectedYear,
     effectiveReportIdsForFetch,
   );
   const dataStudioRawRows = dataStudioResult?.rawRows;

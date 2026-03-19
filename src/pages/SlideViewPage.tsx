@@ -2717,8 +2717,8 @@ export default function SlideViewPage() {
               comparisonChartData={comparisonOverviewChartData}
               chartMetric={chartMetric}
               setChartMetric={setChartMetric}
-              chartTimeRange={chartTimeRange}
-              setChartTimeRange={setChartTimeRange}
+              chartGranularity={chartGranularity}
+              setChartGranularity={setChartGranularity}
               selectedYear={selectedYear}
               selectedMonth={selectedMonth}
               isReadOnlyMode={isReadOnlyMode}
@@ -2751,8 +2751,8 @@ export default function SlideViewPage() {
                 comparisonChannelChartData={comparisonEffectiveChannelChartData}
                 chartMetric={chartMetric}
                 setChartMetric={setChartMetric}
-                chartTimeRange={chartTimeRange}
-                setChartTimeRange={setChartTimeRange}
+                chartGranularity={chartGranularity}
+                setChartGranularity={setChartGranularity}
                 groupByDimension={groupByDimension[channel] || DEFAULT_GROUPBY[channel] || 'account'}
                 breakdownByDimension={breakdownByDimension[channel] || DEFAULT_BREAKDOWNBY[channel] || 'campaign'}
                 expandedRow={expandedRow}
