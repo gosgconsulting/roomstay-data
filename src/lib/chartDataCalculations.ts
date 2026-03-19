@@ -99,6 +99,45 @@ export function applyChartTimeRangeFilter<T extends { year: number; month: strin
   return data;
 }
 
+function aggregateMonthlyRevenueFromRows(
+  rows: Array<{ dimension_values?: Record<string, unknown> } | Record<string, unknown>>,
+  dimensionMap: Record<string, string>,
+  monthStart: Date,
+  monthEnd: Date,
+  channelFilterValues: Record<string, string[]>,
+  configuredDimensionNames?: Record<string, string>
+): number {
+  if (!rows.length) return 0;
+
+  const combinedDimNames = configuredDimensionNames
+    ? { ...dimensionMap, ...configuredDimensionNames }
+    : dimensionMap;
+  const monthFilteredRows = filterRawDataRows(
+    rows,
+    channelFilterValues,
+    { start: monthStart, end: monthEnd },
+    combinedDimNames
+  );
+  if (!monthFilteredRows.length) return 0;
+
+  const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
+  const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
+
+  let monthRevenue = 0;
+  monthFilteredRows.forEach((row) => {
+    const rowData = row.dimension_values || row;
+    for (const key of revenueKeys) {
+      const value = rowData[key];
+      if (value !== undefined && value !== null) {
+        monthRevenue += parseNumericValue(value);
+        break;
+      }
+    }
+  });
+
+  return monthRevenue;
+}
+
 /**
  * Process overview chart data (combined revenue from all channels)
  */
@@ -123,110 +162,43 @@ export function processOverviewChartData(
     social: number;
   }> = [];
 
-  if (hasFilters) {
-    // Generate all months in the chartTimeRange
-    const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
+  // Generate all months in the chartTimeRange and aggregate from canonical raw rows.
+  // This avoids relying on legacy channelData.monthly blobs that may be empty post-refactor.
+  const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
+  const monthlyMap = new Map<
+    string,
+    { year: number; month: string; metasearch: number; sem: number; social: number }
+  >();
 
-    // Build a monthly map initialized with zeros for all months in the time range
-    const monthlyMap = new Map<
-      string,
-      { year: number; month: string; metasearch: number; sem: number; social: number }
-    >();
+  monthsInRange.forEach(({ year, month }) => {
+    const key = `${year}-${month}`;
+    monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
 
-    // For each month in the range, filter and aggregate data for that specific month
-    monthsInRange.forEach(({ year, month }) => {
-      const key = `${year}-${month}`;
-      monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
-
-      // Get month date range
-      const monthIndex = MONTH_NAMES.indexOf(month);
-      const monthStart = new Date(year, monthIndex, 1);
-      const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
-
-      // Process each channel
-      Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
-        const channelFilterValues = filterValues[channel] || {};
-        const hasChannelFilters = channelsWithFilters.has(channel);
-        const rawDataRows = (channelData as any).rawDataRows || [];
-        const dimensionMap = (channelData as any).dimensionMap || {};
-        const combinedDimNames = configuredDimensionNames
-          ? { ...dimensionMap, ...configuredDimensionNames }
-          : dimensionMap;
-
-        if (hasChannelFilters && rawDataRows.length > 0) {
-          const monthFilteredRows = filterRawDataRows(
-            rawDataRows,
-            channelFilterValues,
-            { start: monthStart, end: monthEnd },
-            combinedDimNames
-          );
-
-          if (monthFilteredRows.length > 0) {
-            const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
-            const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
-
-            // Aggregate revenue for this month
-            let monthRevenue = 0;
-            monthFilteredRows.forEach((row) => {
-              const rowData = row.dimension_values || row;
-              for (const key of revenueKeys) {
-                const value = rowData[key];
-                if (value !== undefined && value !== null) {
-                  monthRevenue += parseNumericValue(value);
-                  break;
-                }
-              }
-            });
-
-            const entry = monthlyMap.get(key)!;
-            entry[channel as 'metasearch' | 'sem' | 'social'] = monthRevenue;
-          }
-        } else if (!hasChannelFilters && rawDataRows.length > 0) {
-          // No filters for this channel - use pre-computed monthly data if available
-          const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-          const monthlyData = (channelData as any).monthly?.[monthKey];
-          if (monthlyData) {
-            const entry = monthlyMap.get(key)!;
-            entry[channel as 'metasearch' | 'sem' | 'social'] =
-              monthlyData.revenue || 0;
-          }
-        }
-      });
-    });
-
-    allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-    });
-  } else {
-    // No filters - use pre-computed data (fast path)
-    const monthlyMap = new Map<
-      string,
-      { year: number; month: string; metasearch: number; sem: number; social: number }
-    >();
+    const monthIndex = MONTH_NAMES.indexOf(month);
+    const monthStart = new Date(year, monthIndex, 1);
+    const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
 
     Object.entries(pivotData.channels).forEach(([channel, channelData]) => {
-      if (channelData.monthly) {
-        Object.entries(channelData.monthly).forEach(([monthKey, metrics]) => {
-          const [year, monthNum] = monthKey.split('-').map(Number);
-          const month = MONTH_NAMES[monthNum - 1];
-          const key = `${year}-${month}`;
-
-          if (!monthlyMap.has(key)) {
-            monthlyMap.set(key, { year, month, metasearch: 0, sem: 0, social: 0 });
-          }
-
-          const entry = monthlyMap.get(key)!;
-          entry[channel as 'metasearch' | 'sem' | 'social'] = metrics.revenue || 0;
-        });
-      }
+      const rawDataRows = (channelData as any).rawDataRows || [];
+      const dimensionMap = (channelData as any).dimensionMap || {};
+      const channelFilterValues =
+        hasFilters && channelsWithFilters.has(channel) ? (filterValues[channel] || {}) : {};
+      const monthRevenue = aggregateMonthlyRevenueFromRows(
+        rawDataRows,
+        dimensionMap,
+        monthStart,
+        monthEnd,
+        channelFilterValues,
+        configuredDimensionNames
+      );
+      monthlyMap.get(key)![channel as 'metasearch' | 'sem' | 'social'] = monthRevenue;
     });
+  });
 
-    allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-    });
-  }
+  allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
+    if (a.year !== b.year) return a.year - b.year;
+    return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
+  });
 
   // Apply chartTimeRange filter
   let filtered = applyChartTimeRangeFilter(allMonthlyData, chartTimeRange, anchorDate);
@@ -265,89 +237,39 @@ export function processChannelChartData(
 
   const channelData = pivotData.channels[channel];
 
-  if (hasFilters) {
-    // Generate all months in the chartTimeRange
-    const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
+  const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
+  const monthlyMap = new Map<
+    string,
+    { year: number; month: string; revenue: number }
+  >();
+  const channelFilterValues =
+    hasFilters && channelsWithFilters.has(channel) ? (filterValues[channel] || {}) : {};
+  const rawDataRows = (channelData as any).rawDataRows || [];
+  const dimensionMap = (channelData as any).dimensionMap || {};
 
-    // Build a monthly map initialized with zeros for all months in the time range
-    const monthlyMap = new Map<
-      string,
-      { year: number; month: string; revenue: number }
-    >();
-
-    const channelFilterValues = filterValues[channel] || {};
-    const hasChannelFilters = channelsWithFilters.has(channel);
-    const rawDataRows = (channelData as any).rawDataRows || [];
-    const dimensionMap = (channelData as any).dimensionMap || {};
-    const combinedDimNames = configuredDimensionNames
-      ? { ...dimensionMap, ...configuredDimensionNames }
-      : dimensionMap;
-
-    monthsInRange.forEach(({ year, month }) => {
-      const key = `${year}-${month}`;
-      monthlyMap.set(key, { year, month, revenue: 0 });
-
-      const monthIndex = MONTH_NAMES.indexOf(month);
-      const monthStart = new Date(year, monthIndex, 1);
-      const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
-
-      if (hasChannelFilters && rawDataRows.length > 0) {
-        const monthFilteredRows = filterRawDataRows(
-          rawDataRows,
-          channelFilterValues,
-          { start: monthStart, end: monthEnd },
-          combinedDimNames
-        );
-
-        if (monthFilteredRows.length > 0) {
-          const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
-          const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
-
-          // Aggregate revenue for this month
-          let monthRevenue = 0;
-          monthFilteredRows.forEach((row) => {
-            const rowData = row.dimension_values || row;
-            for (const key of revenueKeys) {
-              const value = rowData[key];
-              if (value !== undefined && value !== null) {
-                monthRevenue += parseNumericValue(value);
-                break;
-              }
-            }
-          });
-
-          const entry = monthlyMap.get(key)!;
-          entry.revenue = monthRevenue;
-        }
-      } else if (!hasChannelFilters && rawDataRows.length > 0) {
-        // No filters for this channel - use pre-computed monthly data if available
-        const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-        const monthlyData = (channelData as any).monthly?.[monthKey];
-        if (monthlyData) {
-          const entry = monthlyMap.get(key)!;
-          entry.revenue = monthlyData.revenue || 0;
-        }
-      }
+  monthsInRange.forEach(({ year, month }) => {
+    const key = `${year}-${month}`;
+    const monthIndex = MONTH_NAMES.indexOf(month);
+    const monthStart = new Date(year, monthIndex, 1);
+    const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+    monthlyMap.set(key, {
+      year,
+      month,
+      revenue: aggregateMonthlyRevenueFromRows(
+        rawDataRows,
+        dimensionMap,
+        monthStart,
+        monthEnd,
+        channelFilterValues,
+        configuredDimensionNames
+      ),
     });
+  });
 
-    allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
-    });
-  } else {
-    // No filters - fill all months in chart time range (zeros for months with no data)
-    const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
-    const monthly = (channelData as any).monthly as Record<string, { revenue?: number }> | undefined;
-    allMonthlyData = monthsInRange.map(({ year, month }) => {
-      const monthIndex = MONTH_NAMES.indexOf(month);
-      const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
-      return {
-        year,
-        month,
-        revenue: monthly?.[monthKey]?.revenue ?? 0,
-      };
-    });
-  }
+  allMonthlyData = Array.from(monthlyMap.values()).sort((a, b) => {
+    if (a.year !== b.year) return a.year - b.year;
+    return MONTH_NAMES.indexOf(a.month) - MONTH_NAMES.indexOf(b.month);
+  });
 
   // Apply chartTimeRange filter
   let filtered = applyChartTimeRangeFilter(allMonthlyData, chartTimeRange, anchorDate);
@@ -373,6 +295,44 @@ export function buildOverviewChartDataFromMonthlyData(
   metric: ChartMetric = 'revenue',
   anchorDate?: Date
 ): Array<{ label: string; value: number }> {
+  const getOverviewMetricValue = (point: MonthlyDataPoint, selectedMetric: ChartMetric): number => {
+    const revenue = (point.metasearch ?? 0) + (point.sem ?? 0) + (point.social ?? 0);
+    if (selectedMetric === 'revenue') return revenue;
+
+    // MonthlyDataPoint currently stores per-channel revenue totals only.
+    // Keep fallback safe for other metrics by reading optional aggregate fields
+    // if present (future-compatible), otherwise return 0.
+    const baseImpressions = Number((point as any).impressions ?? 0);
+    const baseClicks = Number((point as any).clicks ?? 0);
+    const baseCost = Number((point as any).cost ?? 0);
+    const baseBookings = Number((point as any).bookings ?? 0);
+
+    switch (selectedMetric) {
+      case 'impressions':
+        return baseImpressions;
+      case 'clicks':
+        return baseClicks;
+      case 'cost':
+        return baseCost;
+      case 'bookings':
+        return baseBookings;
+      case 'ctr':
+        return baseImpressions > 0 ? (baseClicks / baseImpressions) * 100 : 0;
+      case 'conversionRate':
+        return baseClicks > 0 ? (baseBookings / baseClicks) * 100 : 0;
+      case 'cpc':
+        return baseClicks > 0 ? baseCost / baseClicks : 0;
+      case 'aov':
+        return baseBookings > 0 ? revenue / baseBookings : 0;
+      case 'roas':
+        return baseCost > 0 ? revenue / baseCost : 0;
+      case 'costOfSale':
+        return revenue > 0 ? (baseCost / revenue) * 100 : 0;
+      default:
+        return 0;
+    }
+  };
+
   const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
   if (!monthsInRange.length) return [];
 
@@ -389,10 +349,16 @@ export function buildOverviewChartDataFromMonthlyData(
   return monthsInRange.map(({ year, month }) => {
     const key = `${year}-${month}`;
     const data = dataByKey.get(key) ?? { metasearch: 0, sem: 0, social: 0 };
-    const totalRevenue = data.metasearch + data.sem + data.social;
+    const monthlyPoint = {
+      year,
+      month,
+      metasearch: data.metasearch,
+      sem: data.sem,
+      social: data.social,
+    } as MonthlyDataPoint;
     return {
       label: `${month.slice(0, 3)} ${year.toString().slice(-2)}`,
-      value: metric === 'revenue' ? totalRevenue : 0,
+      value: getOverviewMetricValue(monthlyPoint, metric),
     };
   });
 }

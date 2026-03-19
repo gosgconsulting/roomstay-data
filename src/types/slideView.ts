@@ -53,6 +53,8 @@ export type ChartTimeRange =
   | 'last_6_months'
   | 'last_3_months';
 
+export type ChartGranularity = 'month' | 'week' | 'day';
+
 export type ChartMetric =
   | 'revenue'
   | 'impressions'

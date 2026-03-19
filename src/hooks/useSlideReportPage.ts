@@ -30,13 +30,6 @@ export interface UseSlideReportPageParams {
   customDateRange?: import("react-day-picker").DateRange | undefined;
   selectedTab: string;
   comparisonType: string;
-  chartTimeRange:
-    | 'this_month'
-    | 'this_year'
-    | 'last_12_months'
-    | 'last_6_months'
-    | 'last_3_months'
-    | null;
   groupByDimensionId: string;
   breakdownByDimensionId: string;
   selectedViewId: string | null;
@@ -102,7 +95,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     customDateRange,
     selectedTab,
     comparisonType,
-    chartTimeRange,
     groupByDimensionId,
     breakdownByDimensionId,
     selectedViewId,

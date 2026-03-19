@@ -32,6 +32,20 @@ After coding:
 
 ## Active tasks
 
+### Data Studio zero-data chart fix (2026-03-20)
+
+Root cause: Data Studio still ran two chart pathways in parallel. The legacy `useChartData` fallback path in `chartDataCalculations.ts` used `channelData.monthly` in no-filter mode, but that blob is empty after the refactor (`rawDataRows` is canonical). This produced zero charts even when DB rows existed. A second issue was `useChannelChartDataFromRawRows` receiving `filterValues` but not applying them, so chart filters diverged from KPI/table filters.
+
+- [x] **DZ-1** — `useChannelChartDataFromRawRows.ts`: wired `filterValues` into chart aggregation with `filterRawDataRows` and merged `configuredDimensionNames` so global filter IDs resolve to report row keys.
+- [x] **DZ-2** — `chartDataCalculations.ts`: replaced no-filter `channelData.monthly` reads in `processOverviewChartData` and `processChannelChartData` with canonical raw-row monthly aggregation.
+- [x] **DZ-3** — `chartDataCalculations.ts`: removed hardcoded revenue-only fallback expression in `buildOverviewChartDataFromMonthlyData`; added metric-aware fallback resolver for available monthly aggregates.
+- [x] **DZ-4** — `SlideViewPage.tsx`: removed duplicate `useOverviewChartData` / `useAllChannelChartData` path, promoted `useChannelChartDataFromRawRows` as chart source of truth, and simplified effective chart fallback logic.
+- [x] **DZ-5** — README updated to document the single chart path (`useChannelChartDataFromRawRows`) in Data Studio flow + hooks table.
+
+**Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0).
+
+---
+
 ### Chart feature enhancements (2026-03-20)
 
 - [x] **CH-1** — Fixed chart data completeness for rolling ranges: Data Studio raw rows for charts now fetch all history (`useSlideReportPage` passes `'all'` to `useDataStudioRawRows`) so `Last 12/6/3 Months` always has cross-year data.

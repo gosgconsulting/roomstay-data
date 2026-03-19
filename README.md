@@ -126,7 +126,7 @@ Google Sheets / CSV URL
 - **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads `dimension_data` directly. No long-lived cache (refetch on mount, gcTime 0) so KPIs always reflect current DB state.
 - **Filtered data:** `src/hooks/useFilteredSlideData.ts` — pure client-side filtering and aggregation. Single source of truth for KPI totals, monthly chart data, and filtered raw rows.
 - **Filter state:** `src/hooks/useDataStudioFilters.ts` — canonical owner of `filterValues`, `customDateRange`, `comparisonType`, `filterConfigs`. Restores view filters via `applyView`. All consumers (KPI cards, charts, breakdown tables) read from the same `filterValues` and use a shared `configuredDimensionNames` map for global-to-report dimension ID resolution.
-- **Filter flow:** saved view → `applyView` → `filterValues` → `useFilteredSlideData` (KPI totals + monthly data) + `processOverviewChartData`/`processChannelChartData` (chart fallbacks) + `BreakdownTableSection` (breakdown tables). All paths resolve filter IDs via `filterRawDataRows(..., combinedDimNames)`.
+- **Filter flow:** saved view → `applyView` → `filterValues` → `useFilteredSlideData` (KPI totals + monthly data) + `useChannelChartDataFromRawRows` (overview/channel charts) + `BreakdownTableSection` (breakdown tables). All paths resolve filter IDs via `filterRawDataRows(..., combinedDimNames)`.
 - **Performance table:** `src/components/PerformanceTable/` + `src/hooks/performanceTable/`.
 - **View settings:** stored in `views` table (canonical, replaces legacy `report_views` + `slide_report_views`).
 - **Layout:** `flex h-screen overflow-hidden` root → `ReportSidebar` (left nav: tabs + Actions/Manage/Tools sections) + main column (`flex-col flex-1`) → `SlideViewHeader` (topbar: back, report name, Data Sources, Dimensions, Share, Refresh Data) + scrollable tab content.
@@ -250,6 +250,7 @@ Google Sheets / CSV URL
 | `useSlideReportPage` | `src/hooks/useSlideReportPage.ts` | Master orchestrator for report view |
 | `useFilteredSlideData` | `src/hooks/useFilteredSlideData.ts` | Client-side filtering + aggregation |
 | `useDataStudioRawRows` | `src/hooks/useDataStudioRawRows.ts` | Raw `dimension_data` rows |
+| `useChannelChartDataFromRawRows` | `src/hooks/useChannelChartDataFromRawRows.ts` | Canonical chart aggregation from filtered raw rows |
 | `useUser` / `getUser` | `src/lib/auth.ts` | Auth state (React Query backed) |
 | `useUserAccount` | `src/hooks/useUserAccount.ts` | Resolves current user's account |
 | `useCachedSourceData` | `src/hooks/dataSources/useCachedSourceData.ts` | Cache-first data source rows |

@@ -6,7 +6,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Settings2, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
 import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
-import type { ChartMetric, ChartTimeRange } from "@/types/slideView";
+import type { ChartGranularity, ChartMetric } from "@/types/slideView";
 import { CHART_METRIC_OPTIONS, formatChartMetricValue, getChartMetricLabel } from "@/lib/chartMetric";
 
 interface OverviewTabProps {
@@ -18,8 +18,8 @@ interface OverviewTabProps {
   currentTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   overviewChartData: Array<{ label: string; value: number }>;
   comparisonChartData?: Array<{ label: string; value: number }> | null;
-  chartTimeRange: ChartTimeRange;
-  setChartTimeRange: (range: ChartTimeRange) => void;
+  chartGranularity: ChartGranularity;
+  setChartGranularity: (value: ChartGranularity) => void;
   chartMetric: ChartMetric;
   setChartMetric: (metric: ChartMetric) => void;
   selectedYear: string;
@@ -69,8 +69,8 @@ export function OverviewTab({
   currentTotals,
   overviewChartData,
   comparisonChartData,
-  chartTimeRange,
-  setChartTimeRange,
+  chartGranularity,
+  setChartGranularity,
   chartMetric,
   setChartMetric,
   selectedYear,
@@ -143,16 +143,14 @@ export function OverviewTab({
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as ChartTimeRange)} disabled={isReadOnlyMode}>
-                <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
+              <Select value={chartGranularity} onValueChange={(v) => setChartGranularity(v as ChartGranularity)} disabled={isReadOnlyMode}>
+                <SelectTrigger className="w-[120px] h-8 text-sm bg-background">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-popover z-50">
-                  <SelectItem value="this_month">This Month</SelectItem>
-                  <SelectItem value="this_year">This Year</SelectItem>
-                  <SelectItem value="last_12_months">Last 12 Months</SelectItem>
-                  <SelectItem value="last_6_months">Last 6 Months</SelectItem>
-                  <SelectItem value="last_3_months">Last 3 Months</SelectItem>
+                  <SelectItem value="month">Month</SelectItem>
+                  <SelectItem value="week">Week</SelectItem>
+                  <SelectItem value="day">Day</SelectItem>
                 </SelectContent>
               </Select>
             </div>

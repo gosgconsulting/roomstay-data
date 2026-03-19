@@ -1,9 +1,23 @@
 import { useMemo } from 'react';
-import { MONTH_NAMES } from '@/constants/slideViewConstants';
-import { buildMetricNameToIdsMap, getMetricKeys } from '@/lib/slideViewHelpers';
+import {
+  addDays,
+  addMonths,
+  addWeeks,
+  endOfDay,
+  endOfMonth,
+  endOfWeek,
+  format,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+} from 'date-fns';
+import {
+  buildMetricNameToIdsMap,
+  filterRawDataRows,
+  getMetricKeys,
+} from '@/lib/slideViewHelpers';
 import { parseNumericValue } from '@/lib/parseNumericValue';
-import type { ChartTimeRange } from '@/lib/chartDataCalculations';
-import type { ChartMetric, RawDataRow } from '@/types/slideView';
+import type { ChartGranularity, ChartMetric, RawDataRow } from '@/types/slideView';
 
 type Channel = 'metasearch' | 'sem' | 'social';
 
@@ -57,50 +71,47 @@ function getMetricValue(totals: BaseMetricTotals, metric: ChartMetric): number {
   }
 }
 
-function getRangeStart(timeRange: ChartTimeRange, now: Date): Date {
-  if (timeRange === 'this_month') return new Date(now.getFullYear(), now.getMonth(), 1);
-  if (timeRange === 'this_year') return new Date(now.getFullYear(), 0, 1);
-  if (timeRange === 'last_12_months') return new Date(now.getFullYear(), now.getMonth() - 11, 1);
-  if (timeRange === 'last_6_months') return new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  return new Date(now.getFullYear(), now.getMonth() - 2, 1);
+function getBucketStart(date: Date, granularity: ChartGranularity): Date {
+  if (granularity === 'day') return startOfDay(date);
+  if (granularity === 'week') return startOfWeek(date, { weekStartsOn: 1 });
+  return startOfMonth(date);
 }
 
-function buildTimeBuckets(timeRange: ChartTimeRange, anchorDate: Date): Date[] {
+function getBucketEnd(date: Date, granularity: ChartGranularity): Date {
+  if (granularity === 'day') return endOfDay(date);
+  if (granularity === 'week') return endOfWeek(date, { weekStartsOn: 1 });
+  return endOfMonth(date);
+}
+
+function getNextBucket(date: Date, granularity: ChartGranularity): Date {
+  if (granularity === 'day') return addDays(date, 1);
+  if (granularity === 'week') return addWeeks(date, 1);
+  return addMonths(date, 1);
+}
+
+function buildTimeBuckets(start: Date, end: Date, granularity: ChartGranularity): Date[] {
   const buckets: Date[] = [];
-  if (timeRange === 'this_month') {
-    const dayCount = anchorDate.getDate();
-    for (let day = 1; day <= dayCount; day += 1) {
-      buckets.push(new Date(anchorDate.getFullYear(), anchorDate.getMonth(), day));
-    }
-    return buckets;
+  let current = getBucketStart(start, granularity);
+  const finalBoundary = getBucketStart(end, granularity);
+
+  while (current <= finalBoundary) {
+    buckets.push(current);
+    current = getNextBucket(current, granularity);
   }
 
-  const start = getRangeStart(timeRange, anchorDate);
-  const current = new Date(start.getFullYear(), start.getMonth(), 1);
-  const end = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
-  while (current <= end) {
-    buckets.push(new Date(current.getFullYear(), current.getMonth(), 1));
-    current.setMonth(current.getMonth() + 1);
-  }
   return buckets;
 }
 
-function getBucketKey(date: Date, timeRange: ChartTimeRange): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  if (timeRange === 'this_month') {
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-  return `${year}-${month}`;
+function getBucketKey(date: Date, granularity: ChartGranularity): string {
+  if (granularity === 'day') return format(date, 'yyyy-MM-dd');
+  if (granularity === 'week') return format(date, 'yyyy-MM-dd');
+  return format(date, 'yyyy-MM');
 }
 
-function getBucketLabel(date: Date, timeRange: ChartTimeRange): string {
-  const monthName = MONTH_NAMES[date.getMonth()];
-  if (timeRange === 'this_month') {
-    return `${monthName.slice(0, 3)} ${date.getDate()}`;
-  }
-  return `${monthName.slice(0, 3)} ${date.getFullYear().toString().slice(-2)}`;
+function getBucketLabel(date: Date, granularity: ChartGranularity): string {
+  if (granularity === 'day') return format(date, 'MMM d');
+  if (granularity === 'week') return format(date, 'MMM d');
+  return format(date, 'MMM yy');
 }
 
 function readRowDate(rowData: Record<string, unknown>): Date | null {
@@ -146,20 +157,53 @@ function getRowMetricTotals(
 function buildChartDataFromRawRows(
   rawRows: Record<string, RawDataRow[]>,
   dimensionMaps: Record<string, Record<string, string>>,
-  chartTimeRange: ChartTimeRange,
+  dateRange: { start: Date; end: Date } | undefined,
+  granularity: ChartGranularity,
   metric: ChartMetric,
-  anchorDate: Date
+  filterValues: Record<string, Record<string, string[]>> | null,
+  configuredDimensionNames?: Record<string, string>
 ): RawRowsChartResult | null {
   const channels: Channel[] = ['metasearch', 'sem', 'social'];
-  const start = getRangeStart(chartTimeRange, anchorDate);
-  const bucketDates = buildTimeBuckets(chartTimeRange, anchorDate);
+  const filteredRowsByChannel: Record<Channel, RawDataRow[]> = {
+    metasearch: [],
+    sem: [],
+    social: [],
+  };
+  let inferredStart: Date | null = dateRange?.start ?? null;
+  let inferredEnd: Date | null = dateRange?.end ?? null;
+
+  for (const channel of channels) {
+    const rows = rawRows[channel] || [];
+    if (rows.length === 0) continue;
+    const dimensionMap = dimensionMaps[channel] || {};
+    const combinedDimNames = configuredDimensionNames
+      ? { ...dimensionMap, ...configuredDimensionNames }
+      : dimensionMap;
+    const channelFilterValues = filterValues?.[channel] || {};
+    const filteredRows = filterRawDataRows(rows, channelFilterValues, dateRange, combinedDimNames);
+    filteredRowsByChannel[channel] = filteredRows;
+
+    if (!dateRange) {
+      for (const row of filteredRows) {
+        const rowData = ((row as any).dimension_values || row) as Record<string, unknown>;
+        const rowDate = readRowDate(rowData);
+        if (!rowDate) continue;
+        inferredStart = inferredStart ? new Date(Math.min(inferredStart.getTime(), rowDate.getTime())) : rowDate;
+        inferredEnd = inferredEnd ? new Date(Math.max(inferredEnd.getTime(), rowDate.getTime())) : rowDate;
+      }
+    }
+  }
+
+  if (!inferredStart || !inferredEnd) return null;
+
+  const bucketDates = buildTimeBuckets(inferredStart, inferredEnd, granularity);
   const bucketMap = new Map<
     string,
     Record<Channel, BaseMetricTotals>
   >();
 
   for (const bucketDate of bucketDates) {
-    const key = getBucketKey(bucketDate, chartTimeRange);
+    const key = getBucketKey(bucketDate, granularity);
     bucketMap.set(key, {
       metasearch: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
       sem: { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 },
@@ -169,17 +213,18 @@ function buildChartDataFromRawRows(
 
   let hasRowsInRange = false;
   for (const channel of channels) {
-    const rows = rawRows[channel] || [];
-    if (rows.length === 0) continue;
-    const nameToIdsMap = buildMetricNameToIdsMap(dimensionMaps[channel] || {});
+    const filteredRows = filteredRowsByChannel[channel];
+    if (filteredRows.length === 0) continue;
+    const dimensionMap = dimensionMaps[channel] || {};
+    const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
 
-    for (const row of rows) {
+    for (const row of filteredRows) {
       const rowData = ((row as any).dimension_values || row) as Record<string, unknown>;
       const rowDate = readRowDate(rowData);
       if (!rowDate) continue;
-      if (rowDate < start || rowDate > anchorDate) continue;
 
-      const key = getBucketKey(rowDate, chartTimeRange);
+      const bucketStart = getBucketStart(rowDate, granularity);
+      const key = getBucketKey(bucketStart, granularity);
       const channelBuckets = bucketMap.get(key);
       if (!channelBuckets) continue;
 
@@ -199,8 +244,8 @@ function buildChartDataFromRawRows(
   const overviewData: Array<{ label: string; value: number }> = [];
 
   for (const bucketDate of bucketDates) {
-    const key = getBucketKey(bucketDate, chartTimeRange);
-    const label = getBucketLabel(bucketDate, chartTimeRange);
+    const key = getBucketKey(bucketDate, granularity);
+    const label = getBucketLabel(bucketDate, granularity);
     const bucketTotals = bucketMap.get(key);
     if (!bucketTotals) continue;
 
@@ -235,28 +280,29 @@ function buildChartDataFromRawRows(
 export function useChannelChartDataFromRawRows(
   rawRows: Record<string, RawDataRow[]> | undefined,
   dimensionMaps: Record<string, Record<string, string>> | undefined,
-  chartTimeRange: ChartTimeRange | null,
+  dateRange: { start: Date; end: Date } | undefined,
+  granularity: ChartGranularity,
   metric: ChartMetric = 'revenue',
-  _filterValues: Record<string, Record<string, string[]>> | null = null,
-  anchorDate?: Date
+  filterValues: Record<string, Record<string, string[]>> | null = null,
+  configuredDimensionNames?: Record<string, string>
 ): {
   data: ChannelChartDataFromRawRows | null;
   overviewData: Array<{ label: string; value: number }> | null;
   isLoading: boolean;
   isSuccess: boolean;
 } {
-  const effectiveAnchor = anchorDate ?? new Date();
-
   const computed = useMemo(() => {
-    if (!rawRows || !chartTimeRange) return null;
+    if (!rawRows) return null;
     return buildChartDataFromRawRows(
       rawRows,
       dimensionMaps || {},
-      chartTimeRange,
+      dateRange,
+      granularity,
       metric,
-      effectiveAnchor
+      filterValues,
+      configuredDimensionNames
     );
-  }, [rawRows, dimensionMaps, chartTimeRange, metric, effectiveAnchor]);
+  }, [rawRows, dimensionMaps, dateRange, granularity, metric, filterValues, configuredDimensionNames]);
 
   const data = useMemo(() => {
     return computed?.channelData ?? null;

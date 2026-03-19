@@ -3,9 +3,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { UnifiedBreakdownTable } from "@/components/slides/BreakdownTableSection";
-import type { ChartTimeRange } from "@/components/slides/MonthlyChartSection";
 import { MoreHorizontal } from "lucide-react";
-import type { ChartMetric } from "@/types/slideView";
+import type { ChartGranularity, ChartMetric } from "@/types/slideView";
 import { CHART_METRIC_OPTIONS, formatChartMetricValue, getChartMetricLabel } from "@/lib/chartMetric";
 
 interface Dimension {
@@ -28,8 +27,8 @@ interface ChannelTabProps {
   currentTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   channelChartData: Record<string, Array<{ label: string; value: number }>>;
   comparisonChannelChartData?: Record<string, Array<{ label: string; value: number }>> | null;
-  chartTimeRange: ChartTimeRange;
-  setChartTimeRange: (range: ChartTimeRange) => void;
+  chartGranularity: ChartGranularity;
+  setChartGranularity: (value: ChartGranularity) => void;
   chartMetric: ChartMetric;
   setChartMetric: (metric: ChartMetric) => void;
   groupByDimension: string;
@@ -66,8 +65,8 @@ export function ChannelTab({
   currentTotals,
   channelChartData,
   comparisonChannelChartData,
-  chartTimeRange,
-  setChartTimeRange,
+  chartGranularity,
+  setChartGranularity,
   chartMetric,
   setChartMetric,
   groupByDimension,
@@ -137,16 +136,14 @@ export function ChannelTab({
                     ))}
                   </SelectContent>
                 </Select>
-                <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as ChartTimeRange)}>
-                  <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
+                <Select value={chartGranularity} onValueChange={(v) => setChartGranularity(v as ChartGranularity)}>
+                  <SelectTrigger className="w-[120px] h-8 text-sm bg-background">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-popover z-50">
-                    <SelectItem value="this_month">This Month</SelectItem>
-                    <SelectItem value="this_year">This Year</SelectItem>
-                    <SelectItem value="last_12_months">Last 12 Months</SelectItem>
-                    <SelectItem value="last_6_months">Last 6 Months</SelectItem>
-                    <SelectItem value="last_3_months">Last 3 Months</SelectItem>
+                    <SelectItem value="month">Month</SelectItem>
+                    <SelectItem value="week">Week</SelectItem>
+                    <SelectItem value="day">Day</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
