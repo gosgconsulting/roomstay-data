@@ -75,6 +75,8 @@ export interface UseSlideReportPageReturn {
   isLoadingViews: boolean;
   isLoadingViewBudgets: boolean;
   isLoadingMonthlyData: boolean;
+  isLoadingRawRows: boolean;
+  isFetchingRawRows: boolean;
   needEditSourceForMasterReport: boolean;
   createSlideReport: ReturnType<typeof useCreateSlideReport>;
   updateSlideReport: ReturnType<typeof useUpdateSlideReport>;
@@ -221,7 +223,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   // Uses effectiveReportIdsForFetch so all account channels (including metasearch) get data.
   // Pass the actual selectedYear so the RPC path is used for year-filtered fetch (fast).
   // When selectedYear is 'all', falls back to fetchAllRowsParallel (slower but complete).
-  const { data: dataStudioResult, isLoading: isLoadingRawRows } = useDataStudioRawRows(
+  const { data: dataStudioResult, isLoading: isLoadingRawRows, isFetching: isFetchingRawRows } = useDataStudioRawRows(
     slideReport,
     !!slideReportId,
     selectedYear,
@@ -230,40 +232,74 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   const dataStudioRawRows = dataStudioResult?.rawRows;
   const dataStudioDimensionMaps = dataStudioResult?.dimensionMaps;
 
+  // When comparisonType is 'previous_year', also fetch the previous year's rows so that
+  // useChannelMetrics can aggregate comparison data. Without this, filtering for the
+  // previous-year date range against current-year rows returns nothing.
+  const comparisonYear = useMemo((): string => {
+    if (comparisonType !== 'previous_year') return '';
+    if (!selectedYear || selectedYear === 'all') return '';
+    const prevYear = parseInt(selectedYear) - 1;
+    return isNaN(prevYear) ? '' : String(prevYear);
+  }, [comparisonType, selectedYear]);
+
+  const { data: comparisonYearResult } = useDataStudioRawRows(
+    slideReport,
+    !!slideReportId && comparisonYear !== '',
+    comparisonYear || 'all',
+    effectiveReportIdsForFetch,
+  );
+
   const effectivePivotData = useMemo((): SlideReportPivotData | null => {
     const base = slideReport?.pivot_data as SlideReportPivotData | null;
     const emptyMetrics: ChannelMetrics = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0, ctr: 0, conversionRate: 0, cpc: 0, roas: 0, costOfSale: 0 };
     const emptyBudget: SlideReportPivotData['budget'] = { monthly: [], totals: { totalBudget: 0, totalActual: 0, variance: 0 } };
 
+    // Merge current-year rows with previous-year comparison rows (if fetched).
+    // Both sets are stored in rawDataRows so the single filterRawDataRows path
+    // can apply the correct date range for both current and comparison windows.
+    const mergedRawRows: Record<string, Record<string, any>[]> = {};
+    const mergedDimMaps: Record<string, Record<string, string>> = {};
+    const channels = new Set([
+      ...Object.keys(dataStudioRawRows || {}),
+      ...Object.keys(comparisonYearResult?.rawRows || {}),
+    ]);
+    for (const ch of channels) {
+      const currentRows = dataStudioRawRows?.[ch] ?? [];
+      const prevRows = comparisonYearResult?.rawRows?.[ch] ?? [];
+      mergedRawRows[ch] = [...currentRows, ...prevRows];
+      const currentDimMap = dataStudioDimensionMaps?.[ch] ?? {};
+      const prevDimMap = comparisonYearResult?.dimensionMaps?.[ch] ?? {};
+      mergedDimMaps[ch] = { ...currentDimMap, ...prevDimMap };
+    }
+    const hasMergedRows = Object.keys(mergedRawRows).length > 0;
+
     // When pivot_data is null (post-refactor: canonical data is in dimension_data), build from raw rows
     // so that tabs and charts get data instead of a blank page.
-    if (!base && dataStudioRawRows && Object.keys(dataStudioRawRows).length > 0) {
-      const channels: SlideReportPivotData['channels'] = {};
-      for (const [ch, rows] of Object.entries(dataStudioRawRows)) {
-        const dimMap = dataStudioDimensionMaps?.[ch] || {};
-        channels[ch] = {
+    if (!base && hasMergedRows) {
+      const pivotChannels: SlideReportPivotData['channels'] = {};
+      for (const [ch, rows] of Object.entries(mergedRawRows)) {
+        pivotChannels[ch] = {
           current: emptyMetrics,
           monthly: {},
           rawDataRows: rows,
-          dimensionMap: dimMap,
+          dimensionMap: mergedDimMaps[ch] || {},
         };
       }
       return {
         overview: { current: emptyMetrics, monthly: {}, yearly: {} },
-        channels,
+        channels: pivotChannels,
         budget: emptyBudget,
       };
     }
 
     if (!base) return null;
-    if (!dataStudioRawRows || Object.keys(dataStudioRawRows).length === 0) {
-      return base;
-    }
-    const channels: SlideReportPivotData['channels'] = { ...base.channels };
-    for (const [ch, rows] of Object.entries(dataStudioRawRows)) {
+    if (!hasMergedRows) return base;
+
+    const pivotChannels: SlideReportPivotData['channels'] = { ...base.channels };
+    for (const [ch, rows] of Object.entries(mergedRawRows)) {
       const baseChannel = base.channels?.[ch];
-      const freshDimMap = dataStudioDimensionMaps?.[ch] || {};
-      channels[ch] = {
+      const freshDimMap = mergedDimMaps[ch] || {};
+      pivotChannels[ch] = {
         current: emptyMetrics,
         monthly: {},
         ...(baseChannel || {}),
@@ -274,8 +310,8 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
         filterUniqueValues: baseChannel?.filterUniqueValues || {},
       } as SlideReportPivotData['channels'][string];
     }
-    return { ...base, channels };
-  }, [slideReport?.pivot_data, dataStudioRawRows, dataStudioDimensionMaps]);
+    return { ...base, channels: pivotChannels };
+  }, [slideReport?.pivot_data, dataStudioRawRows, dataStudioDimensionMaps, comparisonYearResult]);
 
   const filteredData = useFilteredSlideData({
     pivotData: effectivePivotData,
@@ -362,6 +398,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     isLoadingViewBudgets,
     isLoadingMonthlyData,
     isLoadingRawRows,
+    isFetchingRawRows,
     needEditSourceForMasterReport,
     createSlideReport: createSlideReportMutation,
     updateSlideReport,

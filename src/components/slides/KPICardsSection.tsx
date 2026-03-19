@@ -70,7 +70,7 @@ export const KPICardItem = React.memo<KPICardItemProps>(
 );
 KPICardItem.displayName = 'KPICardItem';
 
-// ─── Skeleton ─────────────────────────────────────────────────────────────────
+// ─── Skeleton (first-load only) ───────────────────────────────────────────────
 
 export const KPICardsSkeleton = ({ count = 10 }: { count?: number }) => (
   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -88,15 +88,20 @@ export const KPICardsSkeleton = ({ count = 10 }: { count?: number }) => (
 interface KPICardsSectionProps {
   cards: KPICard[];
   comparisonMetrics?: Record<string, number | string | undefined> | null;
+  /** When true and cards exist, dims the grid instead of replacing with skeletons */
   isLoading?: boolean;
 }
 
 export const KPICardsSection = React.memo<KPICardsSectionProps>(
   ({ cards, comparisonMetrics, isLoading }) => {
-    if (isLoading) return <KPICardsSkeleton count={cards.length || 10} />;
+    // First-load: no cards yet — show skeleton placeholders
+    if (isLoading && cards.length === 0) return <KPICardsSkeleton count={10} />;
 
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+      <div className={cn(
+        "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 transition-opacity duration-200",
+        isLoading ? "opacity-50 pointer-events-none" : "opacity-100"
+      )}>
         {cards.map((kpi) => {
           const compValue = comparisonMetrics?.[kpi.key];
           const percentChange =

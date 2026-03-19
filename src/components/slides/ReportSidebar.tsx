@@ -54,6 +54,8 @@ interface ReportSidebarProps {
   setIsSaveViewDialogOpen: (open: boolean) => void;
   setIsSaveOrUpdateViewDialogOpen: (open: boolean) => void;
   isReadOnlyMode: boolean;
+  userLabel?: string;
+  onSignOut?: () => Promise<void> | void;
 }
 
 export function ReportSidebar({
@@ -72,18 +74,20 @@ export function ReportSidebar({
   setIsSaveViewDialogOpen,
   setIsSaveOrUpdateViewDialogOpen,
   isReadOnlyMode,
+  userLabel,
+  onSignOut,
 }: ReportSidebarProps) {
   return (
     <aside className="flex flex-col w-56 shrink-0 border-r bg-card h-screen sticky top-0 overflow-y-auto">
-      {/* Brand / report name */}
+      {/* Brand */}
       <div className="px-4 py-5 border-b">
-        <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-md bg-primary flex items-center justify-center">
-            <BarChart2 className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="font-semibold text-sm truncate leading-tight">
-            {reportName || "Data Studio"}
-          </span>
+        <div className="flex flex-col leading-tight">
+          <span className="font-semibold text-sm truncate">Data Studio</span>
+          {userLabel ? (
+            <span className="text-xs text-muted-foreground truncate">by {userLabel}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground truncate">{reportName || "Workspace"}</span>
+          )}
         </div>
       </div>
 
@@ -208,6 +212,14 @@ export function ReportSidebar({
           <LineChart className="h-4 w-4" />
           Price Widget
         </button>
+        {onSignOut && (
+          <button
+            onClick={() => void onSignOut()}
+            className="mt-3 w-full px-3 py-2 text-left text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Sign out
+          </button>
+        )}
       </div>
     </aside>
   );

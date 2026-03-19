@@ -12,6 +12,7 @@ import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
 import { formatNumber } from "@/lib/slideViewHelpers";
 import { calculateProfit } from "@/lib/budgetCalculations";
+import { cn } from "@/lib/utils";
 
 /** Derive display label and pivot key from row.month (handles "August 2025" or "2025-08"). */
 function getMonthDisplayAndKey(rowMonth: string): { display: string; key: string } {
@@ -471,9 +472,13 @@ export function BudgetTab({
         </div>
       </div>
 
-      {isLoadingViewBudgets || isLoadingDisplayData ? (
+      {isLoadingViewBudgets ? (
         <BudgetTabSkeleton />
       ) : (
+        <div className={cn(
+          "transition-all duration-300",
+          isLoadingDisplayData ? "opacity-40 blur-sm pointer-events-none" : "opacity-100 blur-0"
+        )}>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base font-medium">Monthly Budget Breakdown {selectedYear === 'all' ? '(All Years)' : `(${selectedYear})`}</CardTitle>
@@ -529,6 +534,7 @@ export function BudgetTab({
             </Tabs>
           </CardContent>
         </Card>
+        </div>
       )}
     </TabsContent>
   );

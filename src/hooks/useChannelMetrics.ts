@@ -10,7 +10,7 @@
  */
 
 import { useMemo } from 'react';
-import { buildMultiMonthDateRange, buildComparisonDateRange } from '@/lib/monthUtils';
+import { buildMultiMonthDateRange, buildComparisonDateRange, buildComparisonDateRangeFromExact, exactDateRangeFromDayPicker } from '@/lib/monthUtils';
 import {
   filterRawDataRows,
   aggregateRowsToMetrics,
@@ -19,6 +19,7 @@ import {
 } from '@/lib/slideViewHelpers';
 import type { SlideReportPivotData } from '@/types/slideReports';
 import type { MetricData } from '@/types/slideView';
+import type { DateRange } from 'react-day-picker';
 
 /**
  * Channel metrics structure containing totals for each channel
@@ -50,6 +51,8 @@ interface UseChannelMetricsParams {
   slideType: string;
   /** Comparison type for metrics comparison */
   comparisonType: 'none' | 'previous_period' | 'previous_year';
+  /** Exact custom date range from top date filter (if selected). */
+  customDateRange?: DateRange;
 }
 
 /**
@@ -85,6 +88,7 @@ export function useChannelMetrics({
   filterDimensionValues,
   slideType,
   comparisonType,
+  customDateRange,
 }: UseChannelMetricsParams) {
   const ZERO_METRICS: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
 
@@ -178,8 +182,12 @@ export function useChannelMetrics({
     const hasFilters = hasAnyActiveFilters(filterValues, filterDimensionValues);
     const channelsWithFilters = getChannelsWithFilters(filterValues, filterDimensionValues);
 
-    // Build comparison period date range (supports multi-month)
-    const comparisonDateRange = buildComparisonDateRange(selectedYear, selectedMonth, comparisonType);
+    // Build comparison period date range.
+    // Prefer exact DateRange (custom / preset exact windows), then fall back to year/month model.
+    const exactCurrentRange = exactDateRangeFromDayPicker(customDateRange);
+    const comparisonDateRange = exactCurrentRange
+      ? buildComparisonDateRangeFromExact(exactCurrentRange, comparisonType)
+      : buildComparisonDateRange(selectedYear, selectedMonth, comparisonType);
 
     // Compute comparison totals using the same unified aggregateChannelRows helper.
     const channelTotals: Record<string, MetricData> = {};
@@ -204,7 +212,7 @@ export function useChannelMetrics({
       channelTotals[channel] = { ...ZERO_METRICS };
     }
     return channelTotals as unknown as ChannelMetrics;
-  }, [comparisonType, pivotData, filterValues, filterDimensionValues, selectedYear, selectedMonth]);
+  }, [comparisonType, pivotData, filterValues, filterDimensionValues, selectedYear, selectedMonth, customDateRange]);
 
   return {
     currentTotals,

@@ -1,10 +1,14 @@
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
+import type { DateRange } from "react-day-picker";
+import { format } from "date-fns";
+import { buildComparisonDateRangeFromExact, exactDateRangeFromDayPicker } from "@/lib/monthUtils";
 
 interface ComparisonBannerProps {
   selectedTab: string;
   comparisonType: string;
   selectedYear: string;
   selectedMonth: string;
+  customDateRange?: DateRange;
 }
 
 export function ComparisonBanner({
@@ -12,10 +16,34 @@ export function ComparisonBanner({
   comparisonType,
   selectedYear,
   selectedMonth,
+  customDateRange,
 }: ComparisonBannerProps) {
   // Don't show on budget tab or when comparison is none
   if (selectedTab === "budget" || comparisonType === "none") {
     return null;
+  }
+
+  const customExactRange = exactDateRangeFromDayPicker(customDateRange);
+  if (
+    customExactRange &&
+    (comparisonType === "previous_period" || comparisonType === "previous_year")
+  ) {
+    const comparisonRange = buildComparisonDateRangeFromExact(customExactRange, comparisonType);
+    const formatRange = (start: Date, end: Date) => {
+      if (start.toDateString() === end.toDateString()) {
+        return format(start, "MMM d, yyyy");
+      }
+      return `${format(start, "MMM d, yyyy")} - ${format(end, "MMM d, yyyy")}`;
+    };
+
+    return (
+      <div className="mb-4 p-3 bg-muted rounded-lg text-sm">
+        <span>
+          Comparing {formatRange(customExactRange.start, customExactRange.end)} vs{" "}
+          {formatRange(comparisonRange.start, comparisonRange.end)}
+        </span>
+      </div>
+    );
   }
 
   // Calculate previous period/year information

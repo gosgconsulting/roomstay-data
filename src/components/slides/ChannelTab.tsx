@@ -6,6 +6,7 @@ import { UnifiedBreakdownTable } from "@/components/slides/BreakdownTableSection
 import { MoreHorizontal } from "lucide-react";
 import type { ChartGranularity, ChartMetric } from "@/types/slideView";
 import { CHART_METRIC_OPTIONS, formatChartMetricValue, getChartMetricLabel } from "@/lib/chartMetric";
+import { cn } from "@/lib/utils";
 
 interface Dimension {
   id: string;
@@ -104,13 +105,25 @@ export function ChannelTab({
   }));
   const hasComparison = !!compData && compData.length > 0;
 
+  // hasStaleData: real numbers already on screen → keep them visible (blur+fade) during refresh.
+  // showSkeleton: first load with no data yet → pulse skeletons.
+  const effectiveTotalsForCheck = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+  const hasStaleData = Object.values(effectiveTotalsForCheck).some(v => (v ?? 0) !== 0) || currentData.some(p => (p.value ?? 0) !== 0);
+  const showSkeleton = (isSlideReportsLoading || isLoadingData) && !hasStaleData;
+  const showDim = isLoadingData && hasStaleData;
+
+  // Single CSS class for the stale-refresh effect — always on the same DOM node so transition fires.
+  const dimClass = showDim
+    ? "opacity-40 blur-sm pointer-events-none transition-all duration-300"
+    : "opacity-100 blur-0 transition-all duration-300";
+
   return (
     <div className="space-y-6">
-      {/* Show content when report is loaded; data comes from dimension_data (pivotData prop), not slide_report.pivot_data */}
-      {isSlideReportsLoading || (slideReportId && isLoadingData) ? (
+      {/* KPI cards + chart + breakdown: skeleton on first load, blur+fade on date-change refresh */}
+      {showSkeleton ? (
         renderKPICardsSkeleton()
       ) : (
-        <>
+        <div className={dimClass}>
           {(() => {
             const effectiveTotals = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
             return renderKPICards(
@@ -261,7 +274,7 @@ export function ChannelTab({
               })()}
             </CardContent>
           </Card>
-        </>
+        </div>
       )}
     </div>
   );

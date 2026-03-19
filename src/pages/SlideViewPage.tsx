@@ -51,9 +51,9 @@ import { BudgetTab } from "@/components/slides/BudgetTab";
 import { BookingTab } from "@/components/slides/BookingTab";
 import { PriceCheckTab } from "@/components/slides/PriceCheckTab";
 import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
-import { addDays, addYears, differenceInCalendarDays, isWithinInterval } from "date-fns";
+import { isWithinInterval } from "date-fns";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
-import { buildMultiMonthDateRange, exactDateRangeFromDayPicker, parseSelectedMonths } from "@/lib/monthUtils";
+import { buildComparisonDateRange, buildComparisonDateRangeFromExact, buildMultiMonthDateRange, exactDateRangeFromDayPicker, parseSelectedMonths } from "@/lib/monthUtils";
 import type { AccountReportIds } from "@/lib/accountReportIds";
 import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
 import {
@@ -93,6 +93,17 @@ export default function SlideViewPage() {
   const location = useLocation();
   const { data: userData } = useUser();
   const user = userData?.user || null;
+  const userLabel = user?.email?.split("@")[0] || user?.email || "user";
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error("Sign out failed:", error);
+    } finally {
+      navigate("/auth", { replace: true });
+    }
+  }, [navigate]);
 
   // Resolve account from URL param or from auth context (short-entry route support).
   const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
@@ -137,7 +148,7 @@ export default function SlideViewPage() {
   });
   const [selectedTab, setSelectedTab] = useState("overview");
   const [chartMetric, setChartMetric] = useState<ChartMetric>('revenue');
-  const [chartGranularity, setChartGranularity] = useState<ChartGranularity>('month');
+  const [chartGranularity, setChartGranularity] = useState<ChartGranularity>('week');
   const [priceCheckChartTimeRange, setPriceCheckChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
   // Per-channel breakdown table dimensions.
   // Defaults: metasearch → Hotel, sem → Account, social → Account.
@@ -266,6 +277,8 @@ export default function SlideViewPage() {
     isLoadingViews,
     isLoadingViewBudgets,
     isLoadingMonthlyData,
+    isLoadingRawRows,
+    isFetchingRawRows,
     createSlideReport,
     updateSlideReport,
     createView,
@@ -604,8 +617,10 @@ export default function SlideViewPage() {
 
   // filteredData comes from reportPage (useSlideReportPage)
 
-  // Combined loading: show skeleton when slide data is loading OR display-data API is in flight (avoids glitch when data arrives late)
-  const isLoadingSlideContent = isLoadingData;
+  // isFetchingRawRows is true on first load AND on every date-change refetch (React Query isFetching).
+  // isLoadingRawRows is only true on first load (no cached data yet).
+  // Using isFetchingRawRows ensures the dim animation fires on date changes too.
+  const isLoadingSlideContent = isFetchingRawRows;
 
   // Filter monthly data - now uses unified filteredData hook
   // Fallback to dynamicMonthlyData if no pivot data
@@ -633,18 +648,20 @@ export default function SlideViewPage() {
 
   const comparisonChartDateRange = useMemo(() => {
     if (comparisonType === 'none' || !chartDateRange) return undefined;
-    if (comparisonType === 'previous_year') {
-      return {
-        start: addYears(chartDateRange.start, -1),
-        end: addYears(chartDateRange.end, -1),
-      };
+    if (customDateRange?.from) {
+      const exactRange = exactDateRangeFromDayPicker(customDateRange);
+      if (!exactRange) return undefined;
+      return buildComparisonDateRangeFromExact(
+        { from: exactRange.start, to: exactRange.end },
+        comparisonType as 'previous_period' | 'previous_year'
+      );
     }
-    const spanDays = differenceInCalendarDays(chartDateRange.end, chartDateRange.start) + 1;
-    return {
-      start: addDays(chartDateRange.start, -spanDays),
-      end: addDays(chartDateRange.end, -spanDays),
-    };
-  }, [comparisonType, chartDateRange]);
+    return buildComparisonDateRange(
+      selectedYear,
+      selectedMonth,
+      comparisonType as 'none' | 'previous_period' | 'previous_year'
+    );
+  }, [comparisonType, chartDateRange, customDateRange, selectedYear, selectedMonth]);
 
   // Extract rawRows and dimensionMaps from effectivePivotData for chart computation
   const chartRawRows = useMemo(() => {
@@ -777,6 +794,7 @@ export default function SlideViewPage() {
     filterDimensionValues,
     slideType,
     comparisonType: comparisonType as 'none' | 'previous_period' | 'previous_year',
+    customDateRange,
   });
 
   // Get current totals - uses unified filteredData hook (single source of truth)
@@ -2562,7 +2580,7 @@ export default function SlideViewPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button variant="outline" onClick={() => navigate("/auth")}>
+            <Button variant="ghost" className="px-0 text-muted-foreground hover:text-foreground" onClick={handleSignOut}>
               Sign out
             </Button>
           </CardContent>
@@ -2611,6 +2629,8 @@ export default function SlideViewPage() {
         selectedTab={selectedTab}
         onTabChange={setSelectedTab}
         reportName={slideReport?.name}
+        userLabel={userLabel}
+        onSignOut={handleSignOut}
         onDataSources={() => navigate(accountId ? `/tools/data-sources/${accountId}` : '/tools/data-sources')}
         onDimensions={() => navigate(accountId ? `/tools/dimensions/${accountId}` : '/tools/dimensions')}
         onForecast={() => navigate('/tools/forecasting')}
@@ -2677,6 +2697,7 @@ export default function SlideViewPage() {
             onRefreshData={handleRefreshDataWithModal}
             isRefreshInProgress={isRefreshModalOpen}
             showRefreshButton={!slideReport?.configuration?.isChildReport}
+            isDataLoading={isLoadingSlideContent}
           />
         </div>
 
@@ -2699,7 +2720,13 @@ export default function SlideViewPage() {
 
         {/* Comparison Banner */}
         {comparisonType !== 'none' && (
-          <ComparisonBanner comparisonType={comparisonType} selectedTab={selectedTab} selectedYear={selectedYear} selectedMonth={selectedMonth} />
+          <ComparisonBanner
+            comparisonType={comparisonType}
+            selectedTab={selectedTab}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            customDateRange={customDateRange}
+          />
         )}
 
         {/* Tab Content */}
@@ -2804,7 +2831,7 @@ export default function SlideViewPage() {
               views={views.map(v => ({ id: v.id, name: v.name }))}
               handleApplyView={handleApplyView}
               isLoadingViewBudgets={isLoadingViewBudgets}
-              isLoadingDisplayData={false}
+              isLoadingDisplayData={isLoadingSlideContent}
               budgetMonthlyData={budgetMonthlyData}
               slideReport={slideReport}
               pivotData={effectivePivotData}

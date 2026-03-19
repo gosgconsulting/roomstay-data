@@ -435,7 +435,9 @@ export function useDataStudioFilters({
     });
     if (view.selected_year) setSelectedYear(view.selected_year);
     if (view.selected_month) setSelectedMonth(view.selected_month);
-    if (view.comparison_type) setComparisonTypeRaw(view.comparison_type);
+    // Always restore comparison_type from the view — including 'none', so switching
+    // views doesn't silently keep a comparison active from a previous view.
+    setComparisonTypeRaw(view.comparison_type ?? 'none');
     // Reconstruct customDateRange from the view's year/month so the label, filtering,
     // and query scope all agree. Without this, a stale customDateRange could override
     // the year/month restored above.

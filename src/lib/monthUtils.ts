@@ -77,6 +77,32 @@ export function buildComparisonDateRange(
 }
 
 /**
+ * Build comparison date range from an exact DateRange (custom from/to dates).
+ * Uses day-precise shifting so custom ranges compare correctly across KPIs/charts/tables.
+ */
+export function buildComparisonDateRangeFromExact(
+  range: { from: Date; to: Date } | { start: Date; end: Date },
+  comparisonType: 'previous_period' | 'previous_year'
+): { start: Date; end: Date } {
+  const start = 'from' in range ? range.from : range.start;
+  const end = 'to' in range ? range.to : range.end;
+
+  if (comparisonType === 'previous_year') {
+    return {
+      start: new Date(start.getFullYear() - 1, start.getMonth(), start.getDate(), start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds()),
+      end: new Date(end.getFullYear() - 1, end.getMonth(), end.getDate(), end.getHours(), end.getMinutes(), end.getSeconds(), end.getMilliseconds()),
+    };
+  }
+
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const spanDays = Math.floor((end.getTime() - start.getTime()) / MS_PER_DAY) + 1;
+  return {
+    start: new Date(start.getTime() - spanDays * MS_PER_DAY),
+    end: new Date(end.getTime() - spanDays * MS_PER_DAY),
+  };
+}
+
+/**
  * Given a set of selected month indices (0-based), enforce consecutive selection
  * by filling gaps between min and max.
  */

@@ -32,6 +32,46 @@ After coding:
 
 ## Active tasks
 
+### Auth redirect + sidebar sign-out UX (2026-03-20)
+
+- [x] **AS-1** — Confirmed `/` remains protected by `ProtectedRoute` in `src/App.tsx`, so unauthenticated users are redirected to `/auth`.
+- [x] **AS-2** — Updated `ReportSidebar` to a minimalist identity block: `Data Studio` + `by <user>`.
+- [x] **AS-3** — Added a text-only `Sign out` action in `ReportSidebar` and wired it to `supabase.auth.signOut()` from `SlideViewPage`.
+- [x] **AS-4** — Updated the no-account fallback sign-out control in `SlideViewPage` to use the same sign-out handler.
+
+**Verification:** `npm run build` ✅ (exit 0), `ReadLints` ✅ (no new errors in edited files).
+
+---
+
+### Compare Previous Year + View comparison fixes (2026-03-20)
+
+Two follow-up bugs reported after the initial comparison refactor:
+
+**Bug 1 — Previous year showed zeros:** `useDataStudioRawRows` only fetched the current `selectedYear` via the fast RPC path. When `comparisonType = 'previous_year'`, filtering for previous-year dates against current-year-only rows returned nothing. Fix: added a second conditional `useDataStudioRawRows` call in `useSlideReportPage` scoped to `comparisonYear = selectedYear - 1`. Both years' rows are merged into `effectivePivotData.rawDataRows` per channel, so `useChannelMetrics` can apply the correct date window for either period.
+
+**Bug 2 — Comparison didn't work on saved views:** `applyView` in `useDataStudioFilters` only set `comparisonType` when `view.comparison_type` was truthy — but `'none'` is truthy, so views saved without comparison always reset it. The real issue was the view applying its stored `comparison_type` (typically `'none'`) regardless of what the user had active before switching. Fixed: always `setComparisonTypeRaw(view.comparison_type ?? 'none')` unconditionally so view application always wins.
+
+- [x] **CPR-6** — `useSlideReportPage.ts`: compute `comparisonYear`, add second `useDataStudioRawRows` for previous year when `comparisonType = 'previous_year'`, merge rows per channel before building `effectivePivotData`.
+- [x] **CPR-7** — `useDataStudioFilters.ts` `applyView`: always restore `comparison_type` from the view, not conditionally.
+
+**Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0).
+
+---
+
+### Compare to Previous Period / Year — full refactor (2026-03-20)
+
+Refactored the comparison system so KPI cards, charts, banner text, and breakdown tables all derive comparison windows from the same canonical top date filter model (exact custom date ranges first, month/year fallback second).
+
+- [x] **CPR-1** — Added `buildComparisonDateRangeFromExact` in `src/lib/monthUtils.ts` for exact from/to comparisons (`previous_period` and `previous_year`).
+- [x] **CPR-2** — `useChannelMetrics.ts` now accepts `customDateRange` and computes `comparisonTotals` from exact date ranges when present.
+- [x] **CPR-3** — `SlideViewPage.tsx` now passes `customDateRange` into `useChannelMetrics` and uses the shared comparison date utility for chart comparison ranges (removed inline duplicate date-shift logic).
+- [x] **CPR-4** — `ComparisonBanner.tsx` now supports custom date ranges and renders exact current-vs-comparison labels for both compare modes.
+- [x] **CPR-5** — `BreakdownTableSection.tsx` comparison output extended beyond total revenue: percent change now appears across all metric columns in grouped rows and totals row when comparison is active; comparison grouping is computed from comparison-period filtered raw rows.
+
+**Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0).
+
+---
+
 ### Fix: all-time fetch timeout causing zero data (2026-03-20)
 
 Root cause: CH-1 changed `useSlideReportPage` to pass `'all'` to `useDataStudioRawRows`, which triggered `fetchAllRowsParallel` for 134k+ rows (27+ batches per channel, 80+ parallel requests). The query never completed — metasearch (58k rows) and SEM (48k rows) timed out, so `rawRows` stayed `undefined` forever. All KPI cards, tables, charts, and overview showed zeros because `effectivePivotData` was never populated.
