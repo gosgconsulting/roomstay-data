@@ -123,7 +123,7 @@ Google Sheets / CSV URL
 
 - **Entry point:** `/` renders `SlideViewPage` directly — Data Studio is the app homepage.
 - **Orchestrator hook:** `src/hooks/useSlideReportPage.ts` — composes sub-hooks for report identity, raw rows, filtered data, views, budgets, and mutations.
-- **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads `dimension_data` directly. No long-lived cache (refetch on mount, gcTime 0) so KPIs always reflect current DB state.
+- **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads via `get-cached-report-data` edge function. The canonical source remains `dimension_data`; query results are cache-aside stored in `query_cache` (30m TTL) and React Query uses `staleTime` (5m) + `gcTime` (10m) to reduce repeated fetches.
 - **Filtered data:** `src/hooks/useFilteredSlideData.ts` — pure client-side filtering and aggregation. Single source of truth for KPI totals, monthly chart data, and filtered raw rows.
 - **Filter state:** `src/hooks/useDataStudioFilters.ts` — canonical owner of `filterValues`, `customDateRange`, `comparisonType`, `filterConfigs`. Restores view filters via `applyView`. All consumers (KPI cards, charts, breakdown tables) read from the same `filterValues` and use a shared `configuredDimensionNames` map for global-to-report dimension ID resolution.
 - **Filter flow:** saved view → `applyView` → top date filter + `filterValues` → `useFilteredSlideData` (KPI totals + monthly data) + `useChannelChartDataFromRawRows` (overview/channel charts) + `BreakdownTableSection` (breakdown tables). All paths resolve filter IDs via `filterRawDataRows(..., combinedDimNames)`, and charts now use the same top date range as KPI cards/tables.
@@ -142,7 +142,7 @@ Google Sheets / CSV URL
 ### 5. Refresh / Sync Workflow
 
 - **Entry point:** `src/lib/refreshWorkflow.ts` → `run-refresh-workflow` edge function.
-- **Workflow:** the UI always passes `clearFirst: true`, so the workflow first deletes all `dimension_data` for the target report(s), then calls `resync-data-source` for each data source. This gives erase-then-replace behavior and prevents duplicate or stale rows. The Refresh Data modal shows an explicit "Clearing and resetting data" step before "Fetching from sources". Full Refresh uses `refreshMode: 'full'` and reloads all data from all sources. See `docs/REFRESH_WORKFLOW_AUDIT.md` for the full SEM/Social/Metasearch flow and dimension-resolution fix (metasearch 0 cost). For hard-refresh steps and fixing metasearch cost via direct Supabase data, see `docs/HARD_REFRESH_AND_METASEARCH_COST.md`.
+- **Workflow:** the UI always passes `clearFirst: true`, so the workflow first deletes all `dimension_data` for the target report(s), then calls `resync-data-source` for each data source. This gives erase-then-replace behavior and prevents duplicate or stale rows. After resync, the workflow now pre-warms `get-cached-report-data` (`forceRefresh=true`) per report for the current year so first post-refresh loads are fast across users. The Refresh Data modal shows an explicit "Clearing and resetting data" step before "Fetching from sources". Full Refresh uses `refreshMode: 'full'` and reloads all data from all sources. See `docs/REFRESH_WORKFLOW_AUDIT.md` for the full SEM/Social/Metasearch flow and dimension-resolution fix (metasearch 0 cost). For hard-refresh steps and fixing metasearch cost via direct Supabase data, see `docs/HARD_REFRESH_AND_METASEARCH_COST.md`.
 - **Supabase MCP:** When the project is linked to the Supabase MCP (Cursor/integration), you can run SQL (e.g. metasearch cost fix) and deploy Edge Functions from the IDE. See `docs/MCP_SUPABASE.md`.
 
 ### 6. Sharing System
@@ -164,6 +164,7 @@ Google Sheets / CSV URL
 |---|---|
 | `resync-data-source` | Sole writer to `dimension_data` |
 | `run-refresh-workflow` | Orchestrates full resync per account |
+| `get-cached-report-data` | Cache-aside reader for report/year raw rows |
 | `auto-sync-data-sources` | Cron-triggered auto-sync |
 | `fetch-google-sheets` | Fetches Google Sheets data (server-side API key) |
 | `fetch-csv-url` | Fetches CSV from URL |
@@ -181,6 +182,7 @@ Google Sheets / CSV URL
 | Table | Purpose |
 |---|---|
 | `dimension_data` | Canonical fact store (post-mapping, dimension-id keyed rows) |
+| `query_cache` | Server-side cache for report/year query payloads (TTL via `expires_at`) |
 | `dimensions` | Dimension registry (account, custom, global scopes) |
 | `data_sources` | Google Sheets / CSV source configs |
 | `reports` | Report identity per account |
@@ -208,7 +210,7 @@ Google Sheets / CSV URL
 
 3. User opens Data Studio (homepage `/`)
    → SlideViewPage → useSlideReportPage
-   → useDataStudioRawRows → supabase.from('dimension_data').select(...)
+   → useDataStudioRawRows → get-cached-report-data (cache miss computes from `dimension_data`, cache hit returns `query_cache.payload`)
    → useFilteredSlideData → client-side filtering + aggregation
    → ReportSidebar (left nav) + SlideViewHeader (topbar) + tab content
    → PerformanceTable / KPICards / Charts rendered

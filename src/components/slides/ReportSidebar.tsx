@@ -33,8 +33,6 @@ const TABS: Tab[] = [
   { value: "sem", label: "SEM", icon: <TrendingUp className="h-4 w-4" /> },
   { value: "social", label: "Social", icon: <Users className="h-4 w-4" /> },
   { value: "budget", label: "Budget", icon: <DollarSign className="h-4 w-4" /> },
-  { value: "booking", label: "Booking", icon: <BookOpen className="h-4 w-4" /> },
-  { value: "price-check", label: "Price Check", icon: <Tag className="h-4 w-4" /> },
 ];
 
 interface ReportSidebarProps {
@@ -42,8 +40,6 @@ interface ReportSidebarProps {
   onTabChange: (tab: string) => void;
   onDataSources: () => void;
   onDimensions: () => void;
-  onForecast: () => void;
-  onPriceWidget: () => void;
   reportName?: string;
   /** View selector (above Reports) */
   selectedViewId: string | null;
@@ -63,8 +59,6 @@ export function ReportSidebar({
   onTabChange,
   onDataSources,
   onDimensions,
-  onForecast,
-  onPriceWidget,
   reportName,
   selectedViewId,
   setSelectedViewId,
@@ -196,21 +190,29 @@ export function ReportSidebar({
         </button>
 
         <p className="mt-3 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          Tools
+          DEV
         </p>
+        {/* DEV items are intentionally disabled until these tools are ready. */}
         <button
-          onClick={onForecast}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-left"
+          disabled
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground/70 cursor-not-allowed text-left"
         >
-          <TrendingUp className="h-4 w-4" />
-          Forecast
+          <BookOpen className="h-4 w-4" />
+          Booking
         </button>
         <button
-          onClick={onPriceWidget}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-left"
+          disabled
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground/70 cursor-not-allowed text-left"
+        >
+          <Tag className="h-4 w-4" />
+          Prie check
+        </button>
+        <button
+          disabled
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground/70 cursor-not-allowed text-left"
         >
           <LineChart className="h-4 w-4" />
-          Price Widget
+          Widget
         </button>
         {onSignOut && (
           <button

@@ -2694,8 +2694,6 @@ export default function SlideViewPage() {
         onSignOut={handleSignOut}
         onDataSources={() => navigate(accountId ? `/tools/data-sources/${accountId}` : '/tools/data-sources')}
         onDimensions={() => navigate(accountId ? `/tools/dimensions/${accountId}` : '/tools/dimensions')}
-        onForecast={() => navigate('/tools/forecasting')}
-        onPriceWidget={() => navigate('/tools/price-widget')}
         selectedViewId={selectedViewId}
         setSelectedViewId={setSelectedViewId}
         availableViews={availableViews}

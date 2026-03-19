@@ -23,7 +23,7 @@ import { Label } from '@/components/ui/label';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { calculateDerivedMetrics, formatNumber, filterRawDataRows, hasActiveFiltersForChannel, aggregateRowsToMetrics, buildMetricNameToIdsMap, getMetricValueFromRow } from '@/lib/slideViewHelpers';
-import { parseSelectedMonths, buildMultiMonthDateRange, buildComparisonDateRange, buildComparisonDateRangeFromExact, exactDateRangeFromDayPicker } from '@/lib/monthUtils';
+import { parseSelectedMonths, buildMultiMonthDateRange } from '@/lib/monthUtils';
 import type { SlideReportPivotData } from '@/types/slideReports';
 
 /** Get value from row by dimension ID or by matching dimension name in dimensionMap (row keys are dimension IDs) */
@@ -288,109 +288,6 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       configuredDimensionNames,
     ]);
 
-    const comparisonBreakdownDateRange = useMemo(() => {
-      if (comparisonType !== 'previous_period' && comparisonType !== 'previous_year') return undefined;
-      if (customDateRange?.from) {
-        const exact = exactDateRangeFromDayPicker(customDateRange);
-        if (!exact) return undefined;
-        return buildComparisonDateRangeFromExact(exact, comparisonType);
-      }
-      return buildComparisonDateRange(
-        selectedYear || 'all',
-        selectedMonth || 'all',
-        comparisonType as 'none' | 'previous_period' | 'previous_year'
-      );
-    }, [comparisonType, customDateRange, selectedYear, selectedMonth]);
-
-    const comparisonGroupedDataMap = useMemo(() => {
-      if (!comparisonBreakdownDateRange || !pivotData?.channels) return {} as Record<string, ReturnType<typeof calculateDerivedMetrics>>;
-
-      const groupByDim =
-        availableDimensions.find((d) => d.id === groupBy) ??
-        availableDimensions.find((d) => d.name.toLowerCase() === String(groupBy).toLowerCase());
-      const groupByName = groupByDim?.name || groupBy;
-      const groupByDimId = groupByDim?.id || groupBy;
-
-      const channelsToCheck =
-        selectedChannel && selectedChannel !== 'overview'
-          ? [selectedChannel]
-          : Object.keys(pivotData.channels);
-
-      const comparisonByGroup: Record<
-        string,
-        { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }
-      > = {};
-
-      for (const channel of channelsToCheck) {
-        const channelData = pivotData.channels[channel];
-        if (!channelData) continue;
-
-        const rawDataRows = (channelData as any).rawDataRows || [];
-        if (rawDataRows.length === 0) continue;
-        const dimensionMap = (channelData as any).dimensionMap || {};
-        const combinedDimNames = configuredDimensionNames
-          ? { ...dimensionMap, ...configuredDimensionNames }
-          : dimensionMap;
-
-        const channelFilterValues = filterValues?.[channel] || {};
-        const hasChannelFilters = hasActiveFiltersForChannel(channelFilterValues);
-        const effectiveFilterValues = hasChannelFilters ? channelFilterValues : {};
-        const filteredRows = filterRawDataRows(
-          rawDataRows,
-          effectiveFilterValues,
-          comparisonBreakdownDateRange,
-          combinedDimNames
-        );
-
-        const groupedRows: Record<string, any[]> = {};
-        filteredRows.forEach((row) => {
-          const rowData = (row.dimension_values || row) as Record<string, unknown>;
-          const groupValue =
-            getDimensionValueFromRow(rowData, dimensionMap, groupByDimId, groupByName) ?? 'Unknown';
-          const normalizedGroupValue = String(groupValue).trim();
-
-          if (normalizedGroupValue && normalizedGroupValue !== 'Unknown') {
-            if (!groupedRows[normalizedGroupValue]) {
-              groupedRows[normalizedGroupValue] = [];
-            }
-            groupedRows[normalizedGroupValue].push(row);
-          }
-        });
-
-        Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
-          if (!comparisonByGroup[groupValue]) {
-            comparisonByGroup[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-          }
-          const agg = aggregateRowsToMetrics(groupRows, dimensionMap);
-          comparisonByGroup[groupValue].impressions += agg.impressions;
-          comparisonByGroup[groupValue].clicks += agg.clicks;
-          comparisonByGroup[groupValue].cost += agg.cost;
-          comparisonByGroup[groupValue].revenue += agg.revenue;
-          comparisonByGroup[groupValue].bookings += agg.bookings;
-        });
-      }
-
-      return Object.fromEntries(
-        Object.entries(comparisonByGroup).map(([groupValue, data]) => {
-          const cleanData = {
-            impressions: Number(data.impressions) || 0,
-            clicks: Number(data.clicks) || 0,
-            cost: Number(data.cost) || 0,
-            revenue: Number(data.revenue) || 0,
-            bookings: Number(data.bookings) || 0,
-          };
-          return [groupValue, calculateDerivedMetrics(cleanData)];
-        })
-      ) as Record<string, ReturnType<typeof calculateDerivedMetrics>>;
-    }, [
-      comparisonBreakdownDateRange,
-      pivotData,
-      availableDimensions,
-      groupBy,
-      selectedChannel,
-      configuredDimensionNames,
-      filterValues,
-    ]);
 
     const getExpandedBreakdownData = useMemo(() => {
       if (!expandedRow || !pivotData?.channels || !breakdownBy) return [];
@@ -524,59 +421,8 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
     const groupByOptions = availableDimensions;
     const breakdownByOptions = availableDimensions.filter((d) => d.id !== groupBy);
 
-    // Comparison totals for the active channel (or aggregated overview channel)
-    const compTotals = useMemo(() => {
-      if (!comparisonChannelTotals || comparisonType === 'none') return null;
-      if (selectedChannel && selectedChannel !== 'overview') {
-        return comparisonChannelTotals[selectedChannel] ?? null;
-      }
-      const channelKeys: Array<'metasearch' | 'sem' | 'social'> = ['metasearch', 'sem', 'social'];
-      const acc = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-      let hasAny = false;
-      for (const key of channelKeys) {
-        const c = comparisonChannelTotals[key];
-        if (!c) continue;
-        hasAny = true;
-        acc.impressions += Number(c.impressions) || 0;
-        acc.clicks += Number(c.clicks) || 0;
-        acc.cost += Number(c.cost) || 0;
-        acc.revenue += Number(c.revenue) || 0;
-        acc.bookings += Number(c.bookings) || 0;
-      }
-      return hasAny ? acc : null;
-    }, [comparisonChannelTotals, comparisonType, selectedChannel]);
-
-    const totalComparisonMetrics = useMemo(
-      () => (compTotals ? calculateDerivedMetrics(compTotals) : null),
-      [compTotals]
-    );
-
-    const renderPercentChange = (
-      current: number,
-      comparison: number | undefined,
-      isCostMetric = false
-    ) => {
-      if (comparison == null || comparison === 0) return null;
-      const pct = ((current - comparison) / Math.abs(comparison)) * 100;
-      const isPositive = pct >= 0;
-      const isGood = isCostMetric ? !isPositive : isPositive;
-      return (
-        <span className={cn('text-xs', isGood ? 'text-success' : 'text-destructive')}>
-          {isPositive ? '+' : ''}{pct.toFixed(1)}%
-        </span>
-      );
-    };
-
-    const renderMetricCell = (
-      currentDisplay: string,
-      currentValue: number,
-      comparisonValue: number | undefined,
-      isCostMetric = false
-    ) => (
-      <div className="flex flex-col items-end leading-tight gap-0.5">
-        <span>{currentDisplay}</span>
-        {comparisonType !== 'none' && renderPercentChange(currentValue, comparisonValue, isCostMetric)}
-      </div>
+    const renderMetricCell = (currentDisplay: string) => (
+      <span>{currentDisplay}</span>
     );
 
     if (groupedData.length === 0) {
@@ -674,9 +520,6 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
             <TableBody>
               {groupedData.map((group) => (
                 <React.Fragment key={group.groupValue}>
-                  {(() => {
-                    const comparisonMetrics = comparisonGroupedDataMap[group.groupValue];
-                    return (
                   <TableRow
                     className="hover:bg-muted/50 cursor-pointer"
                     onClick={() =>
@@ -692,91 +535,18 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                       />
                     </TableCell>
                     <TableCell className="font-medium">{group.groupValue}</TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        formatNumber(group.metrics.impressions),
-                        group.metrics.impressions,
-                        comparisonMetrics?.impressions
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        formatNumber(group.metrics.clicks),
-                        group.metrics.clicks,
-                        comparisonMetrics?.clicks
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        `${group.metrics.ctr.toFixed(2)}%`,
-                        group.metrics.ctr,
-                        comparisonMetrics?.ctr
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        group.metrics.bookings.toFixed(2),
-                        group.metrics.bookings,
-                        comparisonMetrics?.bookings
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        `${group.metrics.conversionRate.toFixed(2)}%`,
-                        group.metrics.conversionRate,
-                        comparisonMetrics?.conversionRate
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        formatNumber(group.metrics.cpc, 'currency', displayCurrency, group.metrics.cpc < 0.01 ? 4 : 2),
-                        group.metrics.cpc,
-                        comparisonMetrics?.cpc,
-                        true
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        formatNumber(group.metrics.cost, 'currency', displayCurrency),
-                        group.metrics.cost,
-                        comparisonMetrics?.cost,
-                        true
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        formatNumber(group.metrics.aov, 'currency', displayCurrency, group.metrics.aov < 1 ? 4 : 2),
-                        group.metrics.aov,
-                        comparisonMetrics?.aov
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        formatNumber(group.metrics.revenue, 'currency', displayCurrency),
-                        group.metrics.revenue,
-                        comparisonMetrics?.revenue
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        `${group.metrics.roas.toFixed(1)}x`,
-                        group.metrics.roas,
-                        comparisonMetrics?.roas
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {renderMetricCell(
-                        `${group.metrics.costOfSale < 0.01
-                          ? group.metrics.costOfSale.toFixed(4)
-                          : group.metrics.costOfSale.toFixed(2)}%`,
-                        group.metrics.costOfSale,
-                        comparisonMetrics?.costOfSale,
-                        true
-                      )}
-                    </TableCell>
+                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.impressions))}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.clicks))}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(`${group.metrics.ctr.toFixed(2)}%`)}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(group.metrics.bookings.toFixed(2))}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(`${group.metrics.conversionRate.toFixed(2)}%`)}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.cpc, 'currency', displayCurrency, group.metrics.cpc < 0.01 ? 4 : 2))}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.cost, 'currency', displayCurrency))}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.aov, 'currency', displayCurrency, group.metrics.aov < 1 ? 4 : 2))}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.revenue, 'currency', displayCurrency))}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(`${group.metrics.roas.toFixed(1)}x`)}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(`${group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%`)}</TableCell>
                   </TableRow>
-                    );
-                  })()}
                   {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
                     <>
                       {getExpandedBreakdownData.map((item) => (
@@ -814,91 +584,18 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
               {/* Totals Row */}
               <TableRow className="bg-muted/50 font-semibold border-t-2">
                 <TableCell></TableCell>
-                <TableCell className="font-bold">
-                  Total
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    formatNumber(totalMetrics.impressions),
-                    totalMetrics.impressions,
-                    totalComparisonMetrics?.impressions
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    formatNumber(totalMetrics.clicks),
-                    totalMetrics.clicks,
-                    totalComparisonMetrics?.clicks
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    `${totalMetrics.ctr.toFixed(2)}%`,
-                    totalMetrics.ctr,
-                    totalComparisonMetrics?.ctr
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    totalMetrics.bookings.toFixed(2),
-                    totalMetrics.bookings,
-                    totalComparisonMetrics?.bookings
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    `${totalMetrics.conversionRate.toFixed(2)}%`,
-                    totalMetrics.conversionRate,
-                    totalComparisonMetrics?.conversionRate
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    formatNumber(totalMetrics.cpc, 'currency', displayCurrency, totalMetrics.cpc < 0.01 ? 4 : 2),
-                    totalMetrics.cpc,
-                    totalComparisonMetrics?.cpc,
-                    true
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    formatNumber(totalMetrics.cost, 'currency', displayCurrency),
-                    totalMetrics.cost,
-                    totalComparisonMetrics?.cost,
-                    true
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    formatNumber(totalMetrics.aov, 'currency', displayCurrency, totalMetrics.aov < 1 ? 4 : 2),
-                    totalMetrics.aov,
-                    totalComparisonMetrics?.aov
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    formatNumber(totalMetrics.revenue, 'currency', displayCurrency),
-                    totalMetrics.revenue,
-                    totalComparisonMetrics?.revenue
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    `${totalMetrics.roas.toFixed(1)}x`,
-                    totalMetrics.roas,
-                    totalComparisonMetrics?.roas
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {renderMetricCell(
-                    `${totalMetrics.costOfSale < 0.01
-                      ? totalMetrics.costOfSale.toFixed(4)
-                      : totalMetrics.costOfSale.toFixed(2)}%`,
-                    totalMetrics.costOfSale,
-                    totalComparisonMetrics?.costOfSale,
-                    true
-                  )}
-                </TableCell>
+                <TableCell className="font-bold">Total</TableCell>
+                <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.impressions))}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.clicks))}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(`${totalMetrics.ctr.toFixed(2)}%`)}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(totalMetrics.bookings.toFixed(2))}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(`${totalMetrics.conversionRate.toFixed(2)}%`)}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.cpc, 'currency', displayCurrency, totalMetrics.cpc < 0.01 ? 4 : 2))}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.cost, 'currency', displayCurrency))}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.aov, 'currency', displayCurrency, totalMetrics.aov < 1 ? 4 : 2))}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.revenue, 'currency', displayCurrency))}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(`${totalMetrics.roas.toFixed(1)}x`)}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(`${totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%`)}</TableCell>
               </TableRow>
             </TableBody>
           </Table>

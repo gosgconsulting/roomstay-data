@@ -133,7 +133,9 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
   let cleared = false;
   const resyncErrors: Array<{ dataSourceId: string; error: string }> = [];
+  const cacheWarmErrors: Array<{ reportId: string; error: string }> = [];
   let resyncedCount = 0;
+  let warmedCacheCount = 0;
   let totalRowsProcessed = 0;
 
   try {
@@ -254,11 +256,55 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // Warm query cache for current year so first post-refresh load is fast for all users.
+    if (reportIds.length > 0) {
+      const currentYear = new Date().getUTCFullYear();
+      const yearsToWarm = [String(currentYear), String(currentYear - 1)];
+      const warmTargets = reportIds.flatMap((targetReportId) =>
+        yearsToWarm.map((selectedYear) => ({ targetReportId, selectedYear }))
+      );
+
+      const cacheWarmResults = await runInBatches(warmTargets, CONCURRENCY, async ({ targetReportId, selectedYear }) => {
+        const { data, ok } = await invokeEdgeFunction(
+          supabaseUrl,
+          serviceRoleKey,
+          'get-cached-report-data',
+          {
+            reportId: targetReportId,
+            selectedYear,
+            selectedMonth: 'all',
+            forceRefresh: true,
+          },
+          2
+        );
+        const cacheData = data as { success?: boolean; error?: string } | null;
+        if (ok && cacheData?.success !== false) {
+          return { reportId: targetReportId, selectedYear, success: true as const };
+        }
+        return {
+          reportId: targetReportId,
+          selectedYear,
+          success: false as const,
+          error: cacheData?.error || 'cache warm failed',
+        };
+      });
+
+      for (const r of cacheWarmResults) {
+        if (r.success) {
+          warmedCacheCount++;
+        } else {
+          cacheWarmErrors.push({ reportId: `${r.reportId}:${r.selectedYear}`, error: r.error });
+        }
+      }
+    }
+
     return jsonResponse({
       success: true,
       cleared,
       resynced: resyncedCount,
       rowsProcessed: totalRowsProcessed,
+      cacheWarmed: warmedCacheCount,
+      cacheWarmErrors: cacheWarmErrors.length > 0 ? cacheWarmErrors : undefined,
       resyncErrors: resyncErrors.length > 0 ? resyncErrors : undefined,
     }, 200, cors);
   } catch (e) {
@@ -269,6 +315,8 @@ Deno.serve(async (req: Request) => {
       cleared,
       resynced: resyncedCount,
       rowsProcessed: totalRowsProcessed,
+      cacheWarmed: warmedCacheCount,
+      cacheWarmErrors: cacheWarmErrors.length > 0 ? cacheWarmErrors : undefined,
       resyncErrors,
     }, 500, cors);
   }

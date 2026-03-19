@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.get-fx-rate]
 verify_jwt = false
+
+[functions.get-cached-report-data]
+verify_jwt = false

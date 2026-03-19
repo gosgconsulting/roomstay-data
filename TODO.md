@@ -32,6 +32,51 @@ After coding:
 
 ## Active tasks
 
+### Cache miss fallback fix (2026-03-20)
+
+- [x] **CACHE-FIX-1** — `useDataStudioRawRows` now has a hard fallback to direct DB fetching (`dimension_data` + RPC path) when `get-cached-report-data` fails or cold miss returns 0 rows. This prevents zero-data screens when cache is unavailable.
+- [x] **CACHE-FIX-2** — `run-refresh-workflow` cache warm-up now pre-warms both current year and previous year per report (`forceRefresh=true`) so comparison (`previous_year`) is fast after refresh.
+
+**Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0), `ReadLints` ✅ (no new errors).
+
+---
+
+### Server-side data caching for Data Studio (2026-03-20)
+
+- [x] **CACHE-1** — Added DB migration `20260320000000_create_query_cache.sql` to create `query_cache` with `cache_key`, `report_id`, `payload`, `expires_at`, `cache_version`, and indexes.
+- [x] **CACHE-2** — Added edge function `get-cached-report-data`: cache-aside read path (cache hit from `query_cache`, miss computes from `dimension_data` + RPC, `forceRefresh=true` invalidates and re-populates).
+- [x] **CACHE-3** — Updated `useDataStudioRawRows` to call `get-cached-report-data` per channel and changed React Query settings to `staleTime=5m`, `gcTime=10m`, `refetchOnWindowFocus=false`.
+- [x] **CACHE-4** — Updated `run-refresh-workflow` to warm cache after resync (`get-cached-report-data` with `forceRefresh=true` per report, current year).
+- [x] **CACHE-5** — Updated `README.md` to document `query_cache`, `get-cached-report-data`, and post-refresh warm-cache behavior.
+
+**Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0), `ReadLints` on edited files ✅ (no new errors).
+
+---
+
+### Remove comparison % from breakdown and channel perf tables (2026-03-20)
+
+- [x] **CMP-1** — Removed `renderPercentChange` / `PercentChangeBadge` from the **Breakdown Analysis** table (`BreakdownTableSection.tsx`). All rows and the total row now show plain metric values. Deleted dead `comparisonBreakdownDateRange`, `comparisonGroupedDataMap`, `compTotals`, `totalComparisonMetrics` `useMemo` hooks — no wasted computation.
+- [x] **CMP-2** — Removed `PercentChangeBadge` from the **Channel Performance** table (`OverviewTab.tsx`). Deleted `PercentChangeBadge` function, unused `calculatePercentChange` / `ArrowUpRight` / `ArrowDownRight` imports, and dead comparison data aggregation inside that table.
+- [x] **CMP-3** — Comparison % is still shown in **KPI cards** only — the correct and canonical place.
+
+**Feasibility note:** No loading implications — purely rendering-layer removal. KPI cards already display comparison % correctly via `KPICardsSection`.
+
+**Verification:** `npm run build` ✅ (exit 0, 8.75s). `ReadLints` ✅ on both edited files.
+
+---
+
+### Sidebar DEV section update (2026-03-20)
+
+- [x] **SD-1** — Updated `ReportSidebar` menu structure: removed `Forecast` from the sidebar tools list.
+- [x] **SD-2** — Moved `Booking` and `Price Check` out of the main `Reports` tabs.
+- [x] **SD-3** — Added a dedicated `DEV` section with `Booking`, `Prie check`, and `Widget` entries.
+- [x] **SD-4** — Marked DEV tools as not-ready in UI behavior: `Booking`, `Prie check`, and `Widget` are disabled.
+- [x] **SD-5** — Removed obsolete menu callback wiring from `SlideViewPage` → `ReportSidebar` (`onForecast`, `onPriceWidget`).
+
+**Verification:** `ReadLints` run on edited files; no new sidebar-related errors introduced. One existing workspace diagnostic remains in `SlideViewPage.tsx` (`@/components/slides/ChannelTab` module resolution).
+
+---
+
 ### Auth redirect + sidebar sign-out UX (2026-03-20)
 
 - [x] **AS-1** — Confirmed `/` remains protected by `ProtectedRoute` in `src/App.tsx`, so unauthenticated users are redirected to `/auth`.

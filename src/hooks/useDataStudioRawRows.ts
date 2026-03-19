@@ -1,22 +1,15 @@
 /**
- * Hook to fetch rows for Data Studio from Supabase-cached dimension_data.
- * This keeps Data Studio on the single canonical row store (dimension_data).
- * Groups rows by channel based on the slide report's report_ids mapping.
- *
- * Performance strategy:
- * - When selectedYear is provided (not 'all'), uses the server-side RPC
- *   `get_dimension_data_by_report_and_date` to fetch only rows for the
- *   selected year/month. This reduces payload from 50k+ rows to ~5k.
- * - When selectedYear is 'all', fetches all rows in parallel batches.
+ * Hook to fetch rows for Data Studio from a server-side cached edge function.
+ * Keeps the canonical read path on dimension_data while allowing shared cache
+ * across users.
  */
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getUser } from '@/lib/auth';
-import { parseSelectedMonths } from '@/lib/monthUtils';
-import type { SlideReport } from '@/types/slideReports';
 import type { CachedDataRow } from '@/hooks/dataSources/useCachedSourceData';
+import type { SlideReport } from '@/types/slideReports';
 
 interface ChannelRawRows {
   [channel: string]: Record<string, any>[];
@@ -31,9 +24,16 @@ export interface DataStudioSourceResult {
   dimensionMaps: ChannelDimensionMaps;
 }
 
-/**
- * Build dimensionId -> dimensionName map for a set of dimension IDs
- */
+interface CachedEdgeResponse {
+  success?: boolean;
+  error?: string;
+  rows?: Record<string, any>[];
+  dimMap?: Record<string, string>;
+  cache?: {
+    hit?: boolean;
+  };
+}
+
 async function buildDimensionNameMap(dimensionIds: string[]): Promise<Record<string, string>> {
   if (dimensionIds.length === 0) return {};
   const { data } = await supabase
@@ -49,10 +49,6 @@ async function buildDimensionNameMap(dimensionIds: string[]): Promise<Record<str
   return map;
 }
 
-/**
- * Find the date dimension ID from a sample of rows.
- * Returns the UUID key whose value is an ISO date string (YYYY-MM-DD).
- */
 function findDateDimensionId(rows: Record<string, any>[]): string | null {
   if (rows.length === 0) return null;
   const sample = rows.slice(0, 20);
@@ -67,10 +63,6 @@ function findDateDimensionId(rows: Record<string, any>[]): string | null {
   return null;
 }
 
-/**
- * Fetch rows using the server-side RPC (date-filtered, efficient).
- * Returns flat objects with UUID keys (dimension_values spread to top level).
- */
 async function fetchByDateRpc(
   reportId: string,
   dateDimId: string,
@@ -85,23 +77,19 @@ async function fetchByDateRpc(
     p_max_rows: 500000,
   });
   if (error) throw error;
-  
+
   if (data && data.length >= 500000) {
-    console.warn(`[fetchByDateRpc] Warning: Returned row count (${data.length}) hit the hard cap of 500,000 for report ${reportId}. Data may be truncated.`);
+    console.warn(
+      `[fetchByDateRpc] Warning: Returned row count (${data.length}) hit hard cap of 500,000 for report ${reportId}.`
+    );
   }
 
-  // RPC returns SETOF jsonb — each element is a dimension_values object
   return (data || []).map((dv: Record<string, any>) => ({ ...dv }));
 }
 
-/**
- * Fetch all rows in parallel batches (used for "All Time" view).
- * Splits into parallel requests of batchSize each.
- */
 async function fetchAllRowsParallel(reportId: string): Promise<CachedDataRow[]> {
   const batchSize = 5000;
 
-  // First, get the total count
   const { count, error: countError } = await supabase
     .from('dimension_data')
     .select('id', { count: 'exact', head: true })
@@ -111,7 +99,6 @@ async function fetchAllRowsParallel(reportId: string): Promise<CachedDataRow[]> 
   const total = count ?? 0;
   if (total === 0) return [];
 
-  // Build parallel batch requests
   const batchCount = Math.ceil(total / batchSize);
   const batchPromises = Array.from({ length: batchCount }, (_, i) => {
     const offset = i * batchSize;
@@ -132,19 +119,13 @@ async function fetchAllRowsParallel(reportId: string): Promise<CachedDataRow[]> 
   return allRows;
 }
 
-/**
- * Fetch rows for a channel, using RPC when possible (year selected) or
- * parallel batch fetch for all-time.
- */
-async function fetchChannelRows(
+async function fetchChannelRowsDirect(
   channelReportId: string,
-  selectedYear: string,
-  selectedMonth: string
+  selectedYear: string
 ): Promise<{ rows: Record<string, any>[]; dimMap: Record<string, string> }> {
   const isAllTime = !selectedYear || selectedYear === 'all';
 
   if (!isAllTime) {
-    // Step 1: Fetch a small sample to discover the date dimension ID
     const { data: sampleData, error: sampleError } = await supabase
       .from('dimension_data')
       .select('dimension_values')
@@ -154,52 +135,33 @@ async function fetchChannelRows(
     if (sampleError) throw sampleError;
 
     const sampleRows = (sampleData || []).map((r) => ({ ...(r.dimension_values || {}) }));
-
-    // Collect all dimension IDs from sample for the name map
-    const dimIds = new Set<string>();
-    for (const row of sampleRows) {
-      for (const id of Object.keys(row)) dimIds.add(id);
-    }
-    const dimMap = await buildDimensionNameMap(Array.from(dimIds));
-
-    // Find the date dimension ID
     const dateDimId = findDateDimensionId(sampleRows);
 
     if (dateDimId) {
-      // Use server-side RPC for date-filtered fetch.
-      // Always fetch the full selected year (not just the selected month) so that
-      // the monthly revenue chart has data for all months in the year.
-      // The client-side useFilteredSlideData hook then narrows to the selected month
-      // for KPI totals.
-      const yearNum = parseInt(selectedYear);
+      const yearNum = parseInt(selectedYear, 10);
       const rows = await fetchByDateRpc(channelReportId, dateDimId, yearNum, null);
 
-      // Rebuild dimension map from ALL fetched rows so we include every dimension ID
-      // from every data source. The initial 20-row sample can miss Cost/other dimensions
-      // that only appear in later rows (e.g. second data source), causing under-counted KPIs.
       const allDimIds = new Set<string>();
-      for (const r of rows) {
-        for (const id of Object.keys(r)) {
+      for (const row of rows) {
+        for (const id of Object.keys(row)) {
           if (id === '_row_number') continue;
           allDimIds.add(id);
         }
       }
-      const fullDimMap = await buildDimensionNameMap(Array.from(allDimIds));
-
-      return { rows: rows.map((r, i) => ({ ...r, _row_number: i + 1 })), dimMap: fullDimMap };
+      const dimMap = await buildDimensionNameMap(Array.from(allDimIds));
+      return {
+        rows: rows.map((r, i) => ({ ...r, _row_number: i + 1 })),
+        dimMap,
+      };
     }
-
-    // No date dimension found — fall through to full fetch
   }
 
-  // All-time or no date dim: fetch all rows in parallel
   const cachedRows = await fetchAllRowsParallel(channelReportId);
   const allRawRows = cachedRows.map((row) => ({
     ...(row.dimension_values || {}),
     _row_number: row.row_number,
   }));
 
-  // Build dimension map from ALL rows so every data source's dimension IDs are included
   const allDimIds = new Set<string>();
   for (const row of cachedRows) {
     const dv = (row.dimension_values || {}) as Record<string, unknown>;
@@ -208,6 +170,47 @@ async function fetchChannelRows(
   const dimMap = await buildDimensionNameMap(Array.from(allDimIds));
 
   return { rows: allRawRows, dimMap };
+}
+
+async function fetchChannelRows(
+  channelReportId: string,
+  selectedYear: string
+): Promise<{ rows: Record<string, any>[]; dimMap: Record<string, string> }> {
+  try {
+    const { data, error } = await supabase.functions.invoke('get-cached-report-data', {
+      body: {
+        reportId: channelReportId,
+        selectedYear,
+        selectedMonth: 'all',
+      },
+    });
+
+    if (error) throw error;
+    const response = (data || {}) as CachedEdgeResponse;
+    if (!response.success) {
+      throw new Error(response.error || 'Failed to fetch cached report data');
+    }
+
+    const rows = Array.isArray(response.rows) ? response.rows : [];
+    const dimMap =
+      response.dimMap && typeof response.dimMap === 'object' ? response.dimMap : {};
+
+    // Safety net: if cache was a cold miss and returned no rows, verify directly from DB.
+    if (!response.cache?.hit && rows.length === 0) {
+      console.warn(
+        `[DataStudio] cache miss returned 0 rows for report ${channelReportId}, falling back to direct DB fetch`
+      );
+      return await fetchChannelRowsDirect(channelReportId, selectedYear);
+    }
+
+    return { rows, dimMap };
+  } catch (error) {
+    console.warn(
+      `[DataStudio] cached edge fetch failed for report ${channelReportId}, using direct DB path`,
+      error
+    );
+    return await fetchChannelRowsDirect(channelReportId, selectedYear);
+  }
 }
 
 /**
@@ -252,7 +255,7 @@ export function useDataStudioRawRows(
         if (!channelReportId) return { channel, rows: [] as any[], dimMap: {} };
 
         const startTime = performance.now();
-        const { rows, dimMap } = await fetchChannelRows(channelReportId, selectedYear, undefined);
+        const { rows, dimMap } = await fetchChannelRows(channelReportId, selectedYear);
         const duration = Math.round(performance.now() - startTime);
         console.log(`[DataStudio] ${channel}: ${rows.length} rows in ${duration}ms (year=${selectedYear})`);
 
@@ -270,10 +273,10 @@ export function useDataStudioRawRows(
       return { rawRows: result, dimensionMaps };
     },
     enabled: enabled && !!slideReport?.id && Object.keys(reportIds).length > 0,
-    staleTime: 0,
-    gcTime: 0, // Do not retain stale raw rows — avoids wrong KPIs (e.g. metasearch cost) from old cache
-    refetchOnMount: true, // Always fetch fresh data when Data Studio mounts
-    refetchOnWindowFocus: true, // Refetch when user returns to tab so totals stay correct
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
 }

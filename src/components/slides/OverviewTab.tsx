@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { Settings2, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
-import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
+import { calculateDerivedMetrics, formatNumber } from "@/lib/slideViewHelpers";
 import type { ChartGranularity, ChartMetric } from "@/types/slideView";
 import { CHART_METRIC_OPTIONS, formatChartMetricValue, getChartMetricLabel } from "@/lib/chartMetric";
 
@@ -47,18 +47,6 @@ interface OverviewTabProps {
   comparisonType?: string;
 }
 
-function PercentChangeBadge({ current, previous, isCostMetric = false }: { current: number; previous: number; isCostMetric?: boolean }) {
-  const pct = calculatePercentChange(current, previous);
-  if (pct === null) return null;
-  const isPositive = pct >= 0;
-  const isGood = isCostMetric ? !isPositive : isPositive;
-  return (
-    <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${isGood ? 'text-success' : 'text-destructive'}`}>
-      {isPositive ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}
-      {Math.abs(pct).toFixed(1)}%
-    </span>
-  );
-}
 
 export function OverviewTab({
   slideReportId,
@@ -248,13 +236,9 @@ export function OverviewTab({
                       const channelKey = channel as 'metasearch' | 'sem' | 'social';
                       const data = filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
                       const derived = calculateDerivedMetrics(data);
-                      const compData = showComparison && comparisonTotals?.[channelKey];
-                      const hasCompData = compData && ((compData.impressions || 0) > 0 || (compData.clicks || 0) > 0 || (compData.cost || 0) > 0 || (compData.revenue || 0) > 0 || (compData.bookings || 0) > 0);
-                      const compDerived = hasCompData ? calculateDerivedMetrics(compData) : null;
                       return {
                         report: channel.charAt(0).toUpperCase() + channel.slice(1),
                         ...derived,
-                        compDerived,
                       };
                     });
                     const rowsWithData = rows.filter(row => 
@@ -270,41 +254,14 @@ export function OverviewTab({
                     }), { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
                     const totalDerived = calculateDerivedMetrics(totals);
 
-                    // Aggregate comparison totals for the total row
-                    const totalCompDerived = showComparison && comparisonTotals ? (() => {
-                      const compTotals = channels.reduce((acc, ch) => {
-                        const c = comparisonTotals[ch];
-                        if (!c) return acc;
-                        return {
-                          impressions: acc.impressions + (c.impressions || 0),
-                          clicks: acc.clicks + (c.clicks || 0),
-                          cost: acc.cost + (c.cost || 0),
-                          revenue: acc.revenue + (c.revenue || 0),
-                          bookings: acc.bookings + (c.bookings || 0),
-                        };
-                      }, { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 });
-                      const hasData = compTotals.impressions > 0 || compTotals.clicks > 0 || compTotals.cost > 0 || compTotals.revenue > 0 || compTotals.bookings > 0;
-                      return hasData ? calculateDerivedMetrics(compTotals) : null;
-                    })() : null;
-
-                    const renderMetricCell = (current: number, comparison: number | undefined, format: 'number' | 'currency' | 'currency_cpc' | 'percent' | 'roas' = 'number', isCostMetric = false) => {
-                      const formatted = format === 'currency_cpc'
-                        ? formatNumber(current, 'currency', undefined, 2)
-                        : format === 'currency' 
-                          ? formatNumber(current, 'currency') 
-                          : format === 'percent' 
-                            ? `${current.toFixed(2)}%` 
-                            : format === 'roas' 
-                              ? `${current.toFixed(1)}x`
-                              : formatNumber(current);
-                      return (
-                        <TableCell className="text-right">
-                          <div>{formatted}</div>
-                          {comparison !== undefined && showComparison && (
-                            <PercentChangeBadge current={current} previous={comparison} isCostMetric={isCostMetric} />
-                          )}
-                        </TableCell>
-                      );
+                    const renderMetricCell = (current: number, format: 'number' | 'currency' | 'currency_cpc' | 'percent' | 'roas' = 'number') => {
+                      const formatted =
+                        format === 'currency_cpc' ? formatNumber(current, 'currency', undefined, 2) :
+                        format === 'currency' ? formatNumber(current, 'currency') :
+                        format === 'percent' ? `${current.toFixed(2)}%` :
+                        format === 'roas' ? `${current.toFixed(1)}x` :
+                        formatNumber(current);
+                      return <TableCell className="text-right">{formatted}</TableCell>;
                     };
 
                     return (
@@ -320,31 +277,31 @@ export function OverviewTab({
                             {rowsWithData.map((row) => (
                               <TableRow key={row.report}>
                                 <TableCell className="font-medium">{row.report}</TableCell>
-                                {renderMetricCell(row.impressions, row.compDerived?.impressions)}
-                                {renderMetricCell(row.clicks, row.compDerived?.clicks)}
-                                {renderMetricCell(row.ctr, row.compDerived?.ctr, 'percent')}
-                                {renderMetricCell(row.bookings, row.compDerived?.bookings)}
-                                {renderMetricCell(row.conversionRate, row.compDerived?.conversionRate, 'percent')}
-                                {renderMetricCell(row.cpc, row.compDerived?.cpc, 'currency_cpc', true)}
-                                {renderMetricCell(row.cost, row.compDerived?.cost, 'currency', true)}
-                                {renderMetricCell(row.revenue, row.compDerived?.revenue, 'currency')}
-                                {renderMetricCell(row.roas, row.compDerived?.roas, 'roas')}
-                                {renderMetricCell(row.costOfSale, row.compDerived?.costOfSale, 'percent', true)}
+                                {renderMetricCell(row.impressions)}
+                                {renderMetricCell(row.clicks)}
+                                {renderMetricCell(row.ctr, 'percent')}
+                                {renderMetricCell(row.bookings)}
+                                {renderMetricCell(row.conversionRate, 'percent')}
+                                {renderMetricCell(row.cpc, 'currency_cpc')}
+                                {renderMetricCell(row.cost, 'currency')}
+                                {renderMetricCell(row.revenue, 'currency')}
+                                {renderMetricCell(row.roas, 'roas')}
+                                {renderMetricCell(row.costOfSale, 'percent')}
                               </TableRow>
                             ))}
                             {rowsWithData.length > 0 && (
                               <TableRow className="bg-muted/50 font-semibold border-t-2">
                                 <TableCell className="font-bold">Total</TableCell>
-                                {renderMetricCell(totalDerived.impressions, totalCompDerived?.impressions)}
-                                {renderMetricCell(totalDerived.clicks, totalCompDerived?.clicks)}
-                                {renderMetricCell(totalDerived.ctr, totalCompDerived?.ctr, 'percent')}
-                                {renderMetricCell(totalDerived.bookings, totalCompDerived?.bookings)}
-                                {renderMetricCell(totalDerived.conversionRate, totalCompDerived?.conversionRate, 'percent')}
-                                {renderMetricCell(totalDerived.cpc, totalCompDerived?.cpc, 'currency_cpc', true)}
-                                {renderMetricCell(totalDerived.cost, totalCompDerived?.cost, 'currency', true)}
-                                {renderMetricCell(totalDerived.revenue, totalCompDerived?.revenue, 'currency')}
-                                {renderMetricCell(totalDerived.roas, totalCompDerived?.roas, 'roas')}
-                                {renderMetricCell(totalDerived.costOfSale, totalCompDerived?.costOfSale, 'percent', true)}
+                                {renderMetricCell(totalDerived.impressions)}
+                                {renderMetricCell(totalDerived.clicks)}
+                                {renderMetricCell(totalDerived.ctr, 'percent')}
+                                {renderMetricCell(totalDerived.bookings)}
+                                {renderMetricCell(totalDerived.conversionRate, 'percent')}
+                                {renderMetricCell(totalDerived.cpc, 'currency_cpc')}
+                                {renderMetricCell(totalDerived.cost, 'currency')}
+                                {renderMetricCell(totalDerived.revenue, 'currency')}
+                                {renderMetricCell(totalDerived.roas, 'roas')}
+                                {renderMetricCell(totalDerived.costOfSale, 'percent')}
                               </TableRow>
                             )}
                           </>
