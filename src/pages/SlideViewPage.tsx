@@ -2534,11 +2534,60 @@ export default function SlideViewPage() {
   const renderKPICardsSkeleton = useCallback(() => <KPICardsSkeleton />, []);
 
   const renderChartSkeleton = useCallback(() => (
-    <Card><CardContent className="p-6"><Skeleton className="h-[300px] w-full" /></CardContent></Card>
+    <Card>
+      <CardContent className="p-6">
+        {/* Header row: title + two dropdowns */}
+        <div className="flex items-center justify-between mb-4">
+          <Skeleton className="h-4 w-24" />
+          <div className="flex gap-2">
+            <Skeleton className="h-8 w-[120px]" />
+            <Skeleton className="h-8 w-[90px]" />
+          </div>
+        </div>
+        {/* Y-axis labels + chart area */}
+        <div className="flex gap-3 h-[250px]">
+          <div className="flex flex-col justify-between pb-5 w-10">
+            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-3 w-8" />)}
+          </div>
+          <div className="flex-1 flex flex-col justify-end gap-0 relative">
+            {/* Simulated area chart with stacked bars of varying heights */}
+            <div className="absolute inset-0 flex items-end gap-[3px] px-1">
+              {[55,70,60,80,75,90,65,85,70,95,80,75].map((h, i) => (
+                <Skeleton key={i} className="flex-1 rounded-t-sm animate-pulse" style={{ height: `${h}%`, animationDelay: `${i * 80}ms` }} />
+              ))}
+            </div>
+          </div>
+        </div>
+        {/* X-axis labels */}
+        <div className="flex gap-[3px] mt-2 pl-13">
+          {[...Array(12)].map((_, i) => <Skeleton key={i} className="flex-1 h-3" />)}
+        </div>
+      </CardContent>
+    </Card>
   ), []);
 
   const renderTableSkeleton = useCallback(() => (
-    <Card><CardContent className="p-6"><Skeleton className="h-[400px] w-full" /></CardContent></Card>
+    <Card>
+      <CardContent className="p-6">
+        <Skeleton className="h-5 w-40 mb-4" />
+        <div className="space-y-0">
+          {/* Header row */}
+          <div className="flex gap-3 pb-3 border-b border-border">
+            {[120, 80, 80, 60, 80, 80, 70, 80, 80, 70, 80].map((w, i) => (
+              <Skeleton key={i} className="h-3" style={{ width: w, flexShrink: 0 }} />
+            ))}
+          </div>
+          {/* Data rows */}
+          {[...Array(4)].map((_, row) => (
+            <div key={row} className="flex gap-3 py-3 border-b border-border">
+              {[120, 80, 80, 60, 80, 80, 70, 80, 80, 70, 80].map((w, i) => (
+                <Skeleton key={i} className="h-4" style={{ width: w * (0.6 + Math.random() * 0.5), flexShrink: 0, animationDelay: `${(row * 11 + i) * 40}ms` }} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   ), []);
 
   // ========== Revenue Type state ==========
@@ -2624,6 +2673,18 @@ export default function SlideViewPage() {
   // ========== JSX Return ==========
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* Full-width fixed loading bar — gentle pulse glow across the entire top edge */}
+      <div
+        className={cn(
+          "fixed top-0 left-0 right-0 h-[2px] z-[9999] transition-opacity duration-500",
+          isLoadingSlideContent ? "opacity-100" : "opacity-0 pointer-events-none"
+        )}
+        style={{
+          background: 'hsl(var(--primary))',
+          animation: isLoadingSlideContent ? 'loading-pulse 1.8s ease-in-out infinite' : 'none',
+        }}
+      />
+
       {/* Left sidebar */}
       <ReportSidebar
         selectedTab={selectedTab}
@@ -2697,7 +2758,6 @@ export default function SlideViewPage() {
             onRefreshData={handleRefreshDataWithModal}
             isRefreshInProgress={isRefreshModalOpen}
             showRefreshButton={!slideReport?.configuration?.isChildReport}
-            isDataLoading={isLoadingSlideContent}
           />
         </div>
 

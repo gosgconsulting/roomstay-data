@@ -8,7 +8,6 @@ import { SlideReport } from "@/types/slideReports";
 import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
 import type { ChartGranularity, ChartMetric } from "@/types/slideView";
 import { CHART_METRIC_OPTIONS, formatChartMetricValue, getChartMetricLabel } from "@/lib/chartMetric";
-import { cn } from "@/lib/utils";
 
 interface OverviewTabProps {
   slideReportId: string | null;
@@ -98,18 +97,8 @@ export function OverviewTab({
   const showComparison = comparisonType && comparisonType !== 'none';
   const compLabel = comparisonType === 'previous_period' ? 'Previous Period' : 'Previous Year';
 
-  // hasStaleData: any non-zero KPI or chart point means we have real data to keep showing.
-  // showSkeleton: first-load with no data yet → show pulse skeletons.
-  // showDim: refresh with existing data → blur + fade the existing content in place.
-  const hasStaleData = KPI_CARDS.some(c => (c.value ?? 0) !== 0) || overviewChartData.some(p => (p.value ?? 0) !== 0);
-  const showSkeleton = (isSlideReportsLoading || isLoadingData) && !hasStaleData;
-  const showDim = isLoadingData && hasStaleData;
-
-  // Shared class for the stale-refresh dim+blur overlay — always on the same DOM element
-  // so the CSS transition actually fires instead of mount/unmount.
-  const dimClass = showDim
-    ? "opacity-40 blur-sm pointer-events-none transition-all duration-300"
-    : "opacity-100 blur-0 transition-all duration-300";
+  // Show skeletons whenever any loading is in flight — no blur/stale-dim.
+  const isLoading = isSlideReportsLoading || isLoadingData;
 
   return (
     <div className="space-y-6">
@@ -130,20 +119,18 @@ export function OverviewTab({
         </div>
       )}
 
-      {/* KPI Cards — skeleton on first load, blur+fade on date-change refresh */}
-      {showSkeleton ? (
+      {/* KPI Cards */}
+      {isLoading ? (
         renderKPICardsSkeleton()
       ) : slideReportId ? (
-        <div className={dimClass}>
-          {renderKPICards(KPI_CARDS, getOverviewComparisonMetrics())}
-        </div>
+        renderKPICards(KPI_CARDS, getOverviewComparisonMetrics())
       ) : null}
 
-      {/* Monthly Results Chart — skeleton on first load, blur+fade on date-change refresh */}
-      {showSkeleton ? (
+      {/* Monthly Results Chart */}
+      {(isLoading || isLoadingMonthlyData) ? (
         renderChartSkeleton()
       ) : (
-        <div className={cn(dimClass, isLoadingMonthlyData ? "opacity-40 blur-sm pointer-events-none" : "")}>
+        <div>
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
             <CardTitle className="text-base font-medium">{getChartMetricLabel(chartMetric)}</CardTitle>
@@ -227,11 +214,11 @@ export function OverviewTab({
         </div>
       )}
 
-      {/* Channel Performance Table — skeleton on first load, blur+fade on date-change refresh */}
-      {showSkeleton ? (
+      {/* Channel Performance Table */}
+      {isLoading ? (
         renderTableSkeleton()
       ) : (
-        <div className={dimClass}>
+        <div>
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-medium">Channel Performance</CardTitle>
