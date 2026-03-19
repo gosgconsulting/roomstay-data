@@ -18,7 +18,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
-import { dateRangeFromPreset, dateRangeToSlideSelection, slideSelectionToDateRange } from '@/lib/monthUtils';
+import { buildMultiMonthDateRange, dateRangeFromPreset, dateRangeToSlideSelection, slideSelectionToDateRange } from '@/lib/monthUtils';
+import { filterRawDataRows } from '@/lib/slideViewHelpers';
 import type { SlideReportConfiguration, SlideReportView } from '@/types/slideReports';
 
 type Channel = 'metasearch' | 'sem' | 'social';
@@ -239,15 +240,48 @@ export function useDataStudioFilters({
   const filterOptions = useMemo((): FilterOptions => {
     const result: FilterOptions = { metasearch: {}, sem: {}, social: {} };
     const channels: Channel[] = ['metasearch', 'sem', 'social'];
+    const optionDateRange = customDateRange?.from
+      ? {
+          start: customDateRange.from,
+          end: new Date(
+            (customDateRange.to ?? customDateRange.from).getFullYear(),
+            (customDateRange.to ?? customDateRange.from).getMonth(),
+            (customDateRange.to ?? customDateRange.from).getDate(),
+            23, 59, 59, 999
+          ),
+        }
+      : buildMultiMonthDateRange(selectedYear, selectedMonth);
 
     for (const channel of channels) {
       const channelData = effectivePivotData?.channels?.[channel];
       if (!channelData) continue;
       const rows = channelData.rawDataRows ?? [];
       const dimMap = channelData.dimensionMap ?? {};
+      const combinedDimNames = configuredDimensionNames
+        ? { ...dimMap, ...configuredDimensionNames }
+        : dimMap;
       const enabledIds = filterConfigs[channel]?.filterDimensionIds ?? [];
+      const channelFilterValues = filterValues[channel] ?? {};
+      // Inline filter UI uses empty selection as "All". For option derivation we
+      // treat empty arrays as no filter and only keep non-empty selections.
+      const normalizedChannelFilterValues: Record<string, string[]> = Object.fromEntries(
+        Object.entries(channelFilterValues).filter(([, values]) => Array.isArray(values) && values.length > 0)
+      );
 
       for (const dimId of enabledIds) {
+        // Build options for each dimension from rows filtered by all OTHER active
+        // filters (and date), so options remain constrained by the view without
+        // self-filtering into empty sets.
+        const otherFilterValues: Record<string, string[]> = Object.fromEntries(
+          Object.entries(normalizedChannelFilterValues).filter(([filterId]) => filterId !== dimId)
+        );
+        const scopedRows = filterRawDataRows(
+          rows,
+          otherFilterValues,
+          optionDateRange ?? undefined,
+          combinedDimNames
+        );
+
         // Resolve the human name for this configured ID. It may be a global UUID not
         // present in dimMap, so fall back to configuredDimensionNames.
         const resolvedName = dimMap[dimId] ?? configuredDimensionNames[dimId];
@@ -256,11 +290,19 @@ export function useDataStudioFilters({
           (CHANNEL_FILTER_NAMES[channel] || []).map((n) => n.toLowerCase())
         );
         if (resolvedName && allowedNames.size > 0 && !allowedNames.has(resolvedName.toLowerCase())) continue;
-        result[channel][dimId] = extractUniqueValues(rows, dimId, dimMap, configuredDimensionNames);
+        result[channel][dimId] = extractUniqueValues(scopedRows, dimId, dimMap, configuredDimensionNames);
       }
     }
     return result;
-  }, [effectivePivotData, filterConfigs, configuredDimensionNames]);
+  }, [
+    effectivePivotData,
+    filterConfigs,
+    configuredDimensionNames,
+    filterValues,
+    customDateRange,
+    selectedYear,
+    selectedMonth,
+  ]);
 
   // ── Build a flat dimensionId -> name map from all channels ──────────────────
   // Also includes entries for configured filter dimension IDs (which may be global IDs

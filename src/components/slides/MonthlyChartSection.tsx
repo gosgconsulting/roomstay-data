@@ -20,7 +20,12 @@ import type { SlideReportPivotData } from '@/types/slideReports';
 /**
  * Available chart time range options
  */
-export type ChartTimeRange = 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
+export type ChartTimeRange =
+  | 'this_month'
+  | 'this_year'
+  | 'last_12_months'
+  | 'last_6_months'
+  | 'last_3_months';
 
 /**
  * Props for MonthlyChartSection component
@@ -165,7 +170,13 @@ export const MonthlyChartSection = React.memo<MonthlyChartSectionProps>(
       const now = new Date();
       let filteredData = allMonthlyData;
 
-      if (chartTimeRange === 'this_year') {
+      if (chartTimeRange === 'this_month') {
+        const currentYear = now.getFullYear();
+        const currentMonth = MONTH_NAMES[now.getMonth()];
+        filteredData = allMonthlyData.filter(
+          (m) => m.year === currentYear && m.month === currentMonth
+        );
+      } else if (chartTimeRange === 'this_year') {
         const currentYear = now.getFullYear();
         filteredData = allMonthlyData.filter((m) => m.year === currentYear);
       } else if (chartTimeRange === 'last_12_months') {
@@ -223,6 +234,7 @@ export const MonthlyChartSection = React.memo<MonthlyChartSectionProps>(
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-popover z-50">
+              <SelectItem value="this_month">This Month</SelectItem>
               <SelectItem value="this_year">This Year</SelectItem>
               <SelectItem value="last_12_months">Last 12 Months</SelectItem>
               <SelectItem value="last_6_months">Last 6 Months</SelectItem>

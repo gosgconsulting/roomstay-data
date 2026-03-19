@@ -18,7 +18,8 @@ export function useOverviewChartData(
   filterValues: Record<string, Record<string, string[]>>,
   channelsWithFilters: Set<string>,
   chartTimeRange: ChartTimeRange,
-  anchorDate?: Date
+  anchorDate?: Date,
+  configuredDimensionNames?: Record<string, string>
 ) {
   return useMemo(() => {
     return processOverviewChartData(
@@ -26,9 +27,10 @@ export function useOverviewChartData(
       filterValues,
       channelsWithFilters,
       chartTimeRange,
-      anchorDate
+      anchorDate,
+      configuredDimensionNames
     );
-  }, [pivotData, filterValues, channelsWithFilters, chartTimeRange, anchorDate]);
+  }, [pivotData, filterValues, channelsWithFilters, chartTimeRange, anchorDate, configuredDimensionNames]);
 }
 
 /**
@@ -40,7 +42,8 @@ export function useChannelChartData(
   filterValues: Record<string, Record<string, string[]>>,
   channelsWithFilters: Set<string>,
   chartTimeRange: ChartTimeRange,
-  anchorDate?: Date
+  anchorDate?: Date,
+  configuredDimensionNames?: Record<string, string>
 ) {
   return useMemo(() => {
     return processChannelChartData(
@@ -49,9 +52,10 @@ export function useChannelChartData(
       filterValues,
       channelsWithFilters,
       chartTimeRange,
-      anchorDate
+      anchorDate,
+      configuredDimensionNames
     );
-  }, [channel, pivotData, filterValues, channelsWithFilters, chartTimeRange, anchorDate]);
+  }, [channel, pivotData, filterValues, channelsWithFilters, chartTimeRange, anchorDate, configuredDimensionNames]);
 }
 
 /**
@@ -62,7 +66,8 @@ export function useAllChannelChartData(
   filterValues: Record<string, Record<string, string[]>>,
   channelsWithFilters: Set<string>,
   chartTimeRange: ChartTimeRange,
-  anchorDate?: Date
+  anchorDate?: Date,
+  configuredDimensionNames?: Record<string, string>
 ) {
   const metasearch = useChannelChartData(
     'metasearch',
@@ -70,7 +75,8 @@ export function useAllChannelChartData(
     filterValues,
     channelsWithFilters,
     chartTimeRange,
-    anchorDate
+    anchorDate,
+    configuredDimensionNames
   );
   const sem = useChannelChartData(
     'sem',
@@ -78,7 +84,8 @@ export function useAllChannelChartData(
     filterValues,
     channelsWithFilters,
     chartTimeRange,
-    anchorDate
+    anchorDate,
+    configuredDimensionNames
   );
   const social = useChannelChartData(
     'social',
@@ -86,7 +93,8 @@ export function useAllChannelChartData(
     filterValues,
     channelsWithFilters,
     chartTimeRange,
-    anchorDate
+    anchorDate,
+    configuredDimensionNames
   );
 
   return useMemo(

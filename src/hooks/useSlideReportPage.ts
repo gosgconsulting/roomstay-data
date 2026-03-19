@@ -30,13 +30,21 @@ export interface UseSlideReportPageParams {
   customDateRange?: import("react-day-picker").DateRange | undefined;
   selectedTab: string;
   comparisonType: string;
-  chartTimeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months' | null;
+  chartTimeRange:
+    | 'this_month'
+    | 'this_year'
+    | 'last_12_months'
+    | 'last_6_months'
+    | 'last_3_months'
+    | null;
   groupByDimensionId: string;
   breakdownByDimensionId: string;
   selectedViewId: string | null;
   dynamicChannelTotals?: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   displayCurrency?: 'AUD' | 'USD';
   audPerUsd?: number;
+  /** Global dimension-ID → human-name map for filter ID resolution in filterRawDataRows. */
+  configuredDimensionNames?: Record<string, string>;
 }
 
 export interface ViewBudgetItem {
@@ -100,6 +108,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     selectedViewId,
     displayCurrency,
     audPerUsd,
+    configuredDimensionNames,
   } = params;
 
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
@@ -221,7 +230,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   const { data: dataStudioResult, isLoading: isLoadingRawRows } = useDataStudioRawRows(
     slideReport,
     !!slideReportId,
-    selectedYear,
+    'all',
     effectiveReportIdsForFetch,
   );
   const dataStudioRawRows = dataStudioResult?.rawRows;
@@ -284,6 +293,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     selectedTab,
     slideType,
     groupByDimensionId,
+    configuredDimensionNames,
   });
 
   const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);

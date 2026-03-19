@@ -55,7 +55,7 @@ import { PriceCheckTab } from "@/components/slides/PriceCheckTab";
 import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
 import { isWithinInterval } from "date-fns";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
-import { getChartAnchorDate, buildMultiMonthDateRange, parseSelectedMonths } from "@/lib/monthUtils";
+import { buildMultiMonthDateRange, parseSelectedMonths } from "@/lib/monthUtils";
 import type { AccountReportIds } from "@/lib/accountReportIds";
 import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
 import {
@@ -70,7 +70,7 @@ import {
   getMetricKeys,
   ensureMinimumChartData,
 } from "@/lib/slideViewHelpers";
-import type { RawDataRow, MetricData } from "@/types/slideView";
+import type { RawDataRow, MetricData, ChartMetric } from "@/types/slideView";
 
 // Default groupBy / breakdownBy dimension name hints per channel.
 // These are resolved to actual IDs by BreakdownTableSection once dimensions load.
@@ -138,7 +138,8 @@ export default function SlideViewPage() {
     booking: {},
   });
   const [selectedTab, setSelectedTab] = useState("overview");
-  const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
+  const [chartMetric, setChartMetric] = useState<ChartMetric>('revenue');
+  const [chartTimeRange, setChartTimeRange] = useState<'this_month' | 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('this_year');
   const [priceCheckChartTimeRange, setPriceCheckChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
   // Per-channel breakdown table dimensions.
   // Defaults: metasearch → Hotel, sem → Account, social → Account.
@@ -213,6 +214,24 @@ export default function SlideViewPage() {
   // Check for share authentication when user is not authenticated
   const [isSharedAccess, setIsSharedAccess] = useState(false);
 
+  // breakdownDimensions must be declared before useSlideReportPage so configuredDimensionNames
+  // can be passed through to useFilteredSlideData for global-ID → report-specific-ID resolution.
+  const [breakdownDimensions, setBreakdownDimensions] = useState<Record<string, Dimension[]>>({
+    metasearch: [],
+    sem: [],
+    social: [],
+  });
+
+  const configuredDimensionNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const dims of Object.values(breakdownDimensions)) {
+      for (const d of dims) {
+        if (d.id && d.name) map[d.id] = d.name;
+      }
+    }
+    return map;
+  }, [breakdownDimensions]);
+
   // Single hook for report page: report data, display data, views, summaries, mutations, account IDs, budgets, monthly data
   const reportPage = useSlideReportPage({
     accountId,
@@ -231,6 +250,7 @@ export default function SlideViewPage() {
     selectedViewId,
     displayCurrency: undefined,
     audPerUsd,
+    configuredDimensionNames,
   });
   const {
     slideReportId,
@@ -290,27 +310,6 @@ export default function SlideViewPage() {
       toast({ title: 'Failed to save filter settings', variant: 'destructive' });
     }
   }, [slideReportId, slideReport?.configuration, updateSlideReport, user]);
-
-  // breakdownDimensions must be declared here (before dsFilters) so configuredDimensionNames
-  // can be derived from it and passed into the filter hook for global-ID → name resolution.
-  const [breakdownDimensions, setBreakdownDimensions] = useState<Record<string, Dimension[]>>({
-    metasearch: [],
-    sem: [],
-    social: [],
-  });
-
-  // Build a flat globalDimensionId → name map from breakdownDimensions.
-  // Allows useDataStudioFilters to resolve configured filter IDs (global UUIDs) to the
-  // report-specific row keys used in rawDataRows.
-  const configuredDimensionNames = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const dims of Object.values(breakdownDimensions)) {
-      for (const d of dims) {
-        if (d.id && d.name) map[d.id] = d.name;
-      }
-    }
-    return map;
-  }, [breakdownDimensions]);
 
   const dsFilters = useDataStudioFilters({
     effectivePivotData: effectivePivotData as any,
@@ -628,25 +627,26 @@ export default function SlideViewPage() {
   }, [filteredData.monthlyData, dynamicMonthlyData, selectedYear]);
 
 
-  // Compute anchor date from selected year/month for chart time range
-  const chartAnchorDate = useMemo(() => getChartAnchorDate(selectedYear, selectedMonth), [selectedYear, selectedMonth]);
+  // Chart range must always be relative to today (not global date filter year/month).
+  const chartAnchorDate = useMemo(() => new Date(), []);
 
   // Chart data helpers - using hooks
   const overviewChartData = useOverviewChartData(
     effectivePivotData,
     filterValues,
     filteredData.channelsWithFilters,
-    chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months',
-    chartAnchorDate
+    chartTimeRange as 'this_month' | 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months',
+    chartAnchorDate,
+    configuredDimensionNames
   );
 
-  // Channel-specific chart data (for individual channel tabs) - using hook
   const channelChartData = useAllChannelChartData(
     effectivePivotData,
     filterValues,
     filteredData.channelsWithFilters,
-    chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months',
-    chartAnchorDate
+    chartTimeRange as 'this_month' | 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months',
+    chartAnchorDate,
+    configuredDimensionNames
   );
 
   // Extract rawRows and dimensionMaps from effectivePivotData for chart computation
@@ -669,11 +669,12 @@ export default function SlideViewPage() {
   }, [effectivePivotData]);
 
   // Channel Revenue chart: computed from rawDataRows (fresh from dimension_data, no DB query).
-  const chartTimeRangeTyped = chartTimeRange as 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
-  const { data: channelChartDataFromTable } = useChannelChartDataFromRawRows(
+  const chartTimeRangeTyped = chartTimeRange as 'this_month' | 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
+  const { data: channelChartDataFromTable, overviewData: overviewChartDataFromTable } = useChannelChartDataFromRawRows(
     chartRawRows,
     chartDimensionMaps,
     chartTimeRangeTyped,
+    chartMetric,
     filterValues,
     chartAnchorDate
   );
@@ -694,37 +695,59 @@ export default function SlideViewPage() {
     comparisonType !== 'none' ? chartRawRows : undefined,
     chartDimensionMaps,
     chartTimeRangeTyped,
+    chartMetric,
     filterValues,
     comparisonChartAnchorDate
   );
 
   // Overview Revenue chart: prefer slide_report_channel_month_data (filterValues applied when View changes)
   const effectiveOverviewChartData = useMemo(() => {
-    if (channelChartDataFromTable && (channelChartDataFromTable.metasearch?.length > 0 || channelChartDataFromTable.sem?.length > 0 || channelChartDataFromTable.social?.length > 0)) {
-      return buildOverviewChartDataFromChannelChartData(channelChartDataFromTable);
+    if (overviewChartDataFromTable && overviewChartDataFromTable.length > 0) {
+      return overviewChartDataFromTable;
     }
     if (filteredData.monthlyData?.length > 0) {
-      return buildOverviewChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped, chartAnchorDate);
+      return buildOverviewChartDataFromMonthlyData(
+        filteredData.monthlyData,
+        chartTimeRangeTyped,
+        chartMetric,
+        chartAnchorDate
+      );
     }
-    return overviewChartData;
-  }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, overviewChartData, chartAnchorDate]);
+    if (chartMetric === 'revenue') {
+      return overviewChartData.map((point) => ({ label: point.label, value: point.total }));
+    }
+    return [];
+  }, [overviewChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, chartMetric, overviewChartData, chartAnchorDate]);
 
   const effectiveChannelChartData = useMemo(() => {
     if (channelChartDataFromTable && (channelChartDataFromTable.metasearch?.length > 0 || channelChartDataFromTable.sem?.length > 0 || channelChartDataFromTable.social?.length > 0)) {
       return channelChartDataFromTable;
     }
     if (filteredData.monthlyData?.length > 0) {
-      return buildChannelChartDataFromMonthlyData(filteredData.monthlyData, chartTimeRangeTyped, chartAnchorDate);
+      return buildChannelChartDataFromMonthlyData(
+        filteredData.monthlyData,
+        chartTimeRangeTyped,
+        chartMetric,
+        chartAnchorDate
+      );
     }
-    return channelChartData;
-  }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, channelChartData, chartAnchorDate]);
+    if (chartMetric === 'revenue') {
+      return {
+        metasearch: (channelChartData.metasearch || []).map((point) => ({ label: point.month, value: point.revenue })),
+        sem: (channelChartData.sem || []).map((point) => ({ label: point.month, value: point.revenue })),
+        social: (channelChartData.social || []).map((point) => ({ label: point.month, value: point.revenue })),
+      };
+    }
+    return { metasearch: [], sem: [], social: [] };
+  }, [channelChartDataFromTable, filteredData.monthlyData, chartTimeRangeTyped, chartMetric, channelChartData, chartAnchorDate]);
 
   // Comparison chart data (overview + per-channel)
   // Build from pivotData.channels[ch].monthly (same source as KPI comparison totals)
   // to ensure chart and KPI cards are always consistent.
   // Falls back to slide_report_channel_month_data table if pivotData has no comparison-period data.
-  const comparisonChartDataFromPivot = useMemo((): Record<'metasearch' | 'sem' | 'social', Array<{ month: string; revenue: number }>> | null => {
+  const comparisonChartDataFromPivot = useMemo((): Record<'metasearch' | 'sem' | 'social', Array<{ label: string; value: number }>> | null => {
     if (comparisonType === 'none' || !comparisonChartAnchorDate) return null;
+    if (chartMetric !== 'revenue') return null;
 
     // Build comparison period monthly data from pivotData
     const channels: ('metasearch' | 'sem' | 'social')[] = ['metasearch', 'sem', 'social'];
@@ -732,7 +755,7 @@ export default function SlideViewPage() {
     if (!monthsInRange.length) return null;
 
     let hasAnyData = false;
-    const result: Record<string, Array<{ month: string; revenue: number }>> = { metasearch: [], sem: [], social: [] };
+    const result: Record<string, Array<{ label: string; value: number }>> = { metasearch: [], sem: [], social: [] };
 
     // Also build the current period months so we can use their labels
     const currentMonths = generateMonthsInTimeRange(chartTimeRangeTyped, chartAnchorDate);
@@ -750,24 +773,31 @@ export default function SlideViewPage() {
         const currentLabel = currentMonths[idx]
           ? `${currentMonths[idx].month.slice(0, 3)} ${currentMonths[idx].year.toString().slice(-2)}`
           : `${month.slice(0, 3)} ${year.toString().slice(-2)}`;
-        return { month: currentLabel, revenue: rev };
+        return { label: currentLabel, value: rev };
       });
     }
 
-    return hasAnyData ? result as Record<'metasearch' | 'sem' | 'social', Array<{ month: string; revenue: number }>> : null;
-  }, [comparisonType, effectivePivotData, chartTimeRangeTyped, comparisonChartAnchorDate, chartAnchorDate]);
+    return hasAnyData
+      ? result as Record<'metasearch' | 'sem' | 'social', Array<{ label: string; value: number }>>
+      : null;
+  }, [comparisonType, chartMetric, effectivePivotData, chartTimeRangeTyped, comparisonChartAnchorDate, chartAnchorDate]);
 
-  const comparisonOverviewChartData = useMemo((): Array<{ label: string; total: number }> | null => {
+  const comparisonOverviewChartData = useMemo((): Array<{ label: string; value: number }> | null => {
     if (comparisonType === 'none') return null;
-    const src = comparisonChartDataFromPivot ?? comparisonChannelChartDataFromTable;
+    const src = chartMetric === 'revenue'
+      ? (comparisonChartDataFromPivot ?? comparisonChannelChartDataFromTable)
+      : comparisonChannelChartDataFromTable;
     if (!src) return null;
     return buildOverviewChartDataFromChannelChartData(src);
-  }, [comparisonType, comparisonChartDataFromPivot, comparisonChannelChartDataFromTable]);
+  }, [comparisonType, chartMetric, comparisonChartDataFromPivot, comparisonChannelChartDataFromTable]);
 
   const comparisonEffectiveChannelChartData = useMemo(() => {
     if (comparisonType === 'none') return null;
-    return comparisonChartDataFromPivot ?? comparisonChannelChartDataFromTable ?? null;
-  }, [comparisonType, comparisonChartDataFromPivot, comparisonChannelChartDataFromTable]);
+    if (chartMetric === 'revenue') {
+      return comparisonChartDataFromPivot ?? comparisonChannelChartDataFromTable ?? null;
+    }
+    return comparisonChannelChartDataFromTable ?? null;
+  }, [comparisonType, chartMetric, comparisonChartDataFromPivot, comparisonChannelChartDataFromTable]);
 
   // Get channel totals from monthly_data table (same source as SlideDataBrowser)
   // This is the correct source of truth for the data
@@ -2306,10 +2336,11 @@ export default function SlideViewPage() {
     // Delegate filter value + date restore to the canonical hook
     dsFilters.applyView(view);
 
-    // Chart-level settings not owned by dsFilters
-    if (view?.chart_time_range) setChartTimeRange(view.chart_time_range);
-    if (view?.price_check_chart_time_range) setPriceCheckChartTimeRange(view.price_check_chart_time_range);
+    // Chart-level settings not owned by dsFilters — restore from view or reset to defaults
+    setChartTimeRange(view?.chart_time_range || 'this_year');
+    setPriceCheckChartTimeRange(view?.price_check_chart_time_range || 'last_6_months');
     if (view?.tab) setSelectedTab(view.tab);
+    else if (!viewId) setSelectedTab('overview');
 
     // Update URL with viewId
     const newParams = new URLSearchParams(searchParams);
@@ -2551,7 +2582,7 @@ export default function SlideViewPage() {
     const enriched = cards.map((kpi: any) => {
       const formattedValue = (() => {
         if (kpi.format === 'currency') {
-          if (kpi.key === 'cpc') return formatNumber(kpi.value, 'currency', undefined, 2);
+          if (kpi.key === 'cpc' || kpi.key === 'aov') return formatNumber(kpi.value, 'currency', undefined, 2);
           return formatNumber(kpi.value, 'currency');
         }
         if (kpi.format === 'percent') return `${kpi.value.toFixed(2)}%`;
@@ -2769,6 +2800,8 @@ export default function SlideViewPage() {
               currentTotals={currentTotals}
               overviewChartData={effectiveOverviewChartData}
               comparisonChartData={comparisonOverviewChartData}
+              chartMetric={chartMetric}
+              setChartMetric={setChartMetric}
               chartTimeRange={chartTimeRange}
               setChartTimeRange={setChartTimeRange}
               selectedYear={selectedYear}
@@ -2801,6 +2834,8 @@ export default function SlideViewPage() {
                 currentTotals={currentTotals}
                 channelChartData={effectiveChannelChartData}
                 comparisonChannelChartData={comparisonEffectiveChannelChartData}
+                chartMetric={chartMetric}
+                setChartMetric={setChartMetric}
                 chartTimeRange={chartTimeRange}
                 setChartTimeRange={setChartTimeRange}
                 groupByDimension={groupByDimension[channel] || DEFAULT_GROUPBY[channel] || 'account'}
@@ -2838,6 +2873,7 @@ export default function SlideViewPage() {
                   setDimensionSettingsInitialChannel(ch);
                   setDimensionSettingsOpen(true);
                 }}
+                configuredDimensionNames={configuredDimensionNames}
               />
             </TabsContent>
           ))}

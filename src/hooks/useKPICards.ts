@@ -3,7 +3,7 @@
  */
 
 import { useMemo, useCallback } from 'react';
-import { Eye, MousePointer, Percent, ShoppingCart, DollarSign, TrendingUp } from 'lucide-react';
+import { Eye, MousePointer, Percent, ShoppingCart, DollarSign, TrendingUp, Receipt } from 'lucide-react';
 import { calculateDerivedMetrics } from '@/lib/slideViewHelpers';
 import type { MetricData, DerivedMetrics } from '@/types/slideView';
 
@@ -73,6 +73,14 @@ export function useKPICards(metrics: DerivedMetrics): KPICard[] {
         value: metrics.cost,
         icon: DollarSign,
         color: 'text-blue-600',
+        format: 'currency',
+      },
+      {
+        label: 'AOV',
+        key: 'aov',
+        value: metrics.aov,
+        icon: Receipt,
+        color: 'text-teal-600',
         format: 'currency',
       },
       {
@@ -162,6 +170,14 @@ export function useReportKPICards() {
           value: metrics.cost,
           icon: DollarSign,
           color: 'text-blue-600',
+          format: 'currency',
+        },
+        {
+          label: 'AOV',
+          key: 'aov',
+          value: metrics.aov,
+          icon: Receipt,
+          color: 'text-teal-600',
           format: 'currency',
         },
         {

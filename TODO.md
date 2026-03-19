@@ -32,6 +32,17 @@ After coding:
 
 ## Active tasks
 
+### Chart feature enhancements (2026-03-20)
+
+- [x] **CH-1** — Fixed chart data completeness for rolling ranges: Data Studio raw rows for charts now fetch all history (`useSlideReportPage` passes `'all'` to `useDataStudioRawRows`) so `Last 12/6/3 Months` always has cross-year data.
+- [x] **CH-2** — Improved all-time raw-row fetch throughput: increased `fetchAllRowsParallel` batch size from `1000` to `5000` in `useDataStudioRawRows`.
+- [x] **CH-3** — Updated default chart range to `This Year` and decoupled chart anchor from global date filter (`chartAnchorDate` now uses current date), so chart ranges are always relative to today.
+- [x] **CH-4** — Added `This Month` chart range and daily granularity support for overview + channel charts.
+- [x] **CH-5** — Added chart KPI metric dropdown (before time range dropdown) with base + derived KPI options: Revenue, Impressions, Clicks, Cost, Bookings, CTR, Conversion Rate, CPC, AOV, ROAS, Cost of Sale.
+- [x] **CH-6** — Reworked raw-row chart aggregation to compute chart values for selected KPI (including derived formulas) per bucket; overview and channel charts now both read from the same metric-aware pipeline.
+
+**Verification:** `npm run build` ✅ (exit 0)
+
 ### Refresh blank page hotfix (2026-03-19)
 
 - [x] **RB-1** — Fixed runtime crash in `useChannelMetrics`: removed stale `dynamicChannelTotals` dependency reference left after refactor.
@@ -369,6 +380,59 @@ Full plan, brief fixes, and new-table/migration notes: **docs/REFACTOR_UNIFY_PLA
 
 ---
 
+### Unified view filters — breakdown & chart alignment (2026-03-20)
+
+Root cause: saved view filters (e.g. Brady view filtering by Hotel) were not applied to breakdown tables or charts. Three separate issues:
+1. `BreakdownTableSection` disabled dimension filters on the overview tab (`selectedChannel !== 'overview'` guard).
+2. `BreakdownTableSection` called `filterRawDataRows` without the merged dimension-name map, so global/configured filter UUIDs could not resolve to report-specific row keys.
+3. `chartDataCalculations.ts` also called `filterRawDataRows` without the merged dimension-name map.
+4. `handleApplyView` did not reset chart time range and tab when switching to master view, leaving stale visual state.
+
+- [x] **UVF-1** — `BreakdownTableSection`: removed `selectedChannel !== 'overview'` guard. Each channel's filters now apply independently via per-channel `hasActiveFiltersForChannel` check. Overview breakdown aggregates filtered rows from all channels.
+- [x] **UVF-2** — `BreakdownTableSection`: added `configuredDimensionNames` prop. All `filterRawDataRows` calls now receive `combinedDimNames` (`dimensionMap + configuredDimensionNames`) for proper global-ID → row-key resolution.
+- [x] **UVF-3** — `chartDataCalculations.ts`: `processOverviewChartData` and `processChannelChartData` accept `configuredDimensionNames` and pass to `filterRawDataRows`.
+- [x] **UVF-4** — `useChartData.ts`: all chart hooks thread `configuredDimensionNames` through.
+- [x] **UVF-5** — `ChannelTab.tsx`: accepts and passes `configuredDimensionNames` to `UnifiedBreakdownTable`.
+- [x] **UVF-6** — `SlideViewPage.tsx`: passes `configuredDimensionNames` to chart hooks and `ChannelTab`.
+- [x] **UVF-7** — `handleApplyView`: master reset now resets `chartTimeRange` to `'last_6_months'`, `priceCheckChartTimeRange` to `'last_6_months'`, and `selectedTab` to `'overview'`.
+- [x] **UVF-8** — Added 7 regression tests to `slideViewHelpers.test.ts` for `filterRawDataRows`: direct ID filtering, global-ID resolution via `dimensionIdToName`, date range, combined filters, empty filters, exclude-all, and AND logic across multiple dimensions.
+
+**Verification:** `npx tsc --noEmit` ✅ (0 errors), `npm run build` ✅ (exit 0), `vitest run slideViewHelpers.test.ts` ✅ (27/27), `vitest run monthUtils.test.ts` ✅ (17/17).
+
+---
+
+### Top filter options scoped to active view filters (2026-03-20)
+
+Root cause: the top inline filter dropdown options were derived from all raw rows in the selected channel. Even when a saved view (e.g. Brady) was applied and data/table were filtered, the hotel dropdown still showed the full unfiltered hotel list.
+
+- [x] **UVF-9** — `useDataStudioFilters.ts`: filter option derivation now scopes rows with `filterRawDataRows` using:
+  - active **other** filter dimensions for that channel (excluding the dimension currently being rendered),
+  - active date scope (`customDateRange` or `selectedYear`/`selectedMonth`),
+  - merged dimension name map (`dimensionMap + configuredDimensionNames`) for global ID resolution.
+- [x] **UVF-10** — Kept the canonical single-path architecture: no new state pathway added; top filter options now follow the same filter scope as KPI cards and breakdown table data.
+- [x] **UVF-11** — Regression fix after first UVF-9 rollout: empty-array selections in inline filter UI represent “All” mode and must not be treated as hard filters when deriving options. Reworked option derivation to normalize out empty arrays and self-filter exclusion (`dimId` excluded) so data no longer collapses to zero while options still remain view-scoped.
+- [x] **UVF-12** — Root-cause fix in canonical filter engine (`slideViewHelpers.ts`): aligned filter semantics with UI by treating empty arrays as “All / no filter” in both `hasActiveFiltersForChannel` and `filterRawDataRows`. This prevents zero-data states when view/filter payloads contain `[]`.
+
+**Verification:** `npx tsc --noEmit` ✅ (0 errors), `npm run build` ✅ (exit 0), `vitest run src/lib/__tests__/slideViewHelpers.test.ts` ✅ (27/27), `ReadLints` on `useDataStudioFilters.ts` ✅ (no errors).
+
+---
+
+### AOV (Average Order Value) KPI (2026-03-20)
+
+Added AOV as a computed derived metric (Revenue / Bookings) across the entire system.
+
+- [x] **AOV-1** — Extended `DerivedMetrics` type with `aov: number` in `src/types/slideView.ts`.
+- [x] **AOV-2** — Computed AOV in `calculateDerivedMetrics` (`src/lib/slideViewHelpers.ts`): `bookings > 0 ? revenue / bookings : 0`.
+- [x] **AOV-3** — Added AOV card before Revenue in `useKPICards` and `useReportKPICards` (`src/hooks/useKPICards.ts`).
+- [x] **AOV-4** — Added AOV to `KPIMetricsCards` (`src/components/KPIMetricsCards.tsx`): formula metric, default KPI list, derived calculation, display formatting.
+- [x] **AOV-5** — Added AOV column before Revenue in `BreakdownTableSection` (`src/components/slides/BreakdownTableSection.tsx`): header, data rows, expanded rows, totals row.
+- [x] **AOV-6** — Updated `SlideViewPage.renderKPICards` to format AOV with 2 decimal places.
+- [x] **AOV-7** — Removed OverviewTab's inline KPI card array exception; Overview now always renders the canonical `KPI_CARDS` from `useKPICards` (includes AOV) via `renderKPICards`, so AOV appears in the overview main KPI section with the same ordering/format pipeline as channel tabs.
+
+**Verification:** `npx tsc --noEmit` ✅ (0 errors), `npm run build` ✅ (exit 0), `npm run lint` ✅ (0 errors, warnings only).
+
+---
+
 ### Filter system rebuild (2026-03-20)
 
 - [x] **FLT-1** — Created `src/hooks/useDataStudioFilters.ts`: canonical owner of all Data Studio filter state (`filterValues`, `customDateRange`, `comparisonType`, `filterConfigs`, `filterPanelOpen`). Options derived in-memory from `rawDataRows` only — no DB or pivot fallback. Supports externally-controlled state to avoid circular dependency with `useSlideReportPage`.
@@ -402,6 +466,21 @@ Moved Filter and Breakdown configuration out of the "Report Settings" wizard and
 - [x] **FP-4** — `SlideViewPage` wired: `FiltersRow` and `FilterPanel` both receive the new props. `availableDimensions` sourced from `breakdownDimensions` (text-only). No duplicate state introduced.
 
 **Verification:** `npx tsc --noEmit` ✅ (0 errors), `npm run build` ✅ (exit 0, 18.89s).
+
+---
+
+### Date filter Apply fix (2026-03-20)
+
+Root cause: `DateRangeFilter` mixed two state models — calendar clicks stayed in `pendingRange` (draft), but preset clicks and compare changes called parent callbacks immediately, bypassing the Apply button. The trigger label read committed props while the popover body showed draft state, so selecting new dates didn't update the label until the parent state changed. Additionally, `applyView` in `useDataStudioFilters` restored `selected_year`/`selected_month` without clearing or reconstructing `customDateRange`, so a stale custom range could override the view's date in both the label and filtering. `dateRangeToSlideSelection` returned `all/all` for ranges with only `from` (no `to`), which over-broadened fetch scope during transitions.
+
+- [x] **DFA-1** — Refactored `DateRangeFilter.tsx`: all state (preset, custom range, compare toggle, compare type) now stays in local draft until Apply. `handlePresetClick` no longer calls `onDatePresetChange` immediately — it updates `pendingPreset` and derives `pendingRange` from `dateRangeFromPreset`. Compare toggle/type update `pendingCompareEnabled`/`pendingCompareType`. `handleApply` commits everything via a single `onApply` callback (or falls back to legacy individual callbacks for backward compat with `FiltersBar`/SharedReport).
+- [x] **DFA-2** — Simplified `FiltersRow.tsx`: replaced four individual date/compare callbacks with a single `onDateApply` prop. `FiltersRow` no longer contains date-to-selection conversion logic — that responsibility moved to the page-level handler.
+- [x] **DFA-3** — Added `handleDateApply` in `SlideViewPage.tsx` that commits via `dsFilters.setCustomDateRange` (canonical path which syncs `selectedYear`/`selectedMonth` via `dateRangeToSlideSelection`).
+- [x] **DFA-4** — Fixed `useDataStudioFilters.applyView`: now reconstructs `customDateRange` from the view's `selected_year`/`selected_month` using `slideSelectionToDateRange`. Master reset now clears `customDateRange` to current month instead of leaving it stale.
+- [x] **DFA-5** — Fixed `dateRangeToSlideSelection` in `monthUtils.ts`: a range with only `from` (no `to`) now maps to that single month instead of falling back to `all/all`.
+- [x] **DFA-6** — Added `src/lib/__tests__/monthUtils.test.ts`: 17 regression tests covering partial ranges, multi-month (June–Dec) ranges, cross-year ranges, preset roundtrips, and slide selection conversions.
+
+**Verification:** `npx tsc --noEmit` ✅ (0 errors), `npm run build` ✅ (exit 0, 10.38s), `vitest run monthUtils.test.ts` ✅ (17/17 pass). 2 pre-existing failures in `useFilteredSlideData.test.ts` (legacy pivot fallback tests, unrelated).
 
 ---
 
@@ -599,8 +678,24 @@ _None currently._
 
 **Verification:** `npx tsc --noEmit` ✅ 0 errors.
 
-Last verified: **2026-03-20** (post filter system rebuild FLT-1–FLT-4, merge conflicts resolved)
+---
+
+### Filter per-report zero-results fix (2026-03-20)
+
+- [x] **FILT-0** — Per-report dimension filters (e.g. Metasearch → Channel = "Google") always returned zero results. Root cause: `filterValues` stores selections keyed by **global dimension UUIDs** (from `filterConfigs`), but `filterRawDataRows` only received the per-channel `dimensionMap` (report-specific ID → name). Since the global UUID is absent from that map, the resolution logic fell through and kept the unresolvable UUID as the row key — causing every row to be excluded.
+- [x] **FILT-1** — Fix: added `configuredDimensionNames` param (global ID → human name, built from `breakdownDimensions`) to `UseFilteredSlideDataParams` and `UseSlideReportPageParams`. `useFilteredSlideData` now merges `configuredDimensionNames` into each channel's `dimensionMap` before calling `filterRawDataRows`, giving the resolution logic a combined map to look up global UUIDs by name and resolve them to report-specific row keys.
+- [x] **FILT-2** — Moved `breakdownDimensions` state and `configuredDimensionNames` memo above `useSlideReportPage` in `SlideViewPage.tsx` so the combined map is available when the hook is called. No functional changes to rendering or effects.
+
+**Verification:** `npx tsc --noEmit` ✅ (0 errors), `npm run build` ✅ (exit 0), monthUtils tests ✅ (17/17).
+
+---
+
+Last verified: **2026-03-20** (post unified view filters UVF-1–UVF-8)
 
 - `npx tsc --noEmit` ✅ (0 errors, main workspace)
+- `npm run build` ✅ (exit 0)
+- `vitest run slideViewHelpers.test.ts` ✅ (27/27 pass)
+- `vitest run monthUtils.test.ts` ✅ (17/17 pass)
 - All linter output is CodeScene/ESLint warnings only — no errors.
 - E2E reports: Data Studio (/) and shared reports; loading/empty states prevent blank page when account or report is missing
+- Saved view filters (e.g. Brady) now apply to KPI cards, charts, and breakdown tables consistently

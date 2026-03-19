@@ -277,7 +277,7 @@ export function KPIMetricsCards({
 
       // Helper to calculate metrics from rows
       // Formula metrics should be calculated, not summed from source data
-      const FORMULA_METRICS = ['CTR', 'ROAS', 'Conversion rate', 'Conversion Rate', 'CPC', 'Cost of sale', 'COS', 'CPM'];
+      const FORMULA_METRICS = ['CTR', 'ROAS', 'Conversion rate', 'Conversion Rate', 'CPC', 'AOV', 'Cost of sale', 'COS', 'CPM'];
       
       const calculateMetricsFromRows = (rows: any[]): Record<string, number> => {
         const metrics: Record<string, number> = {};
@@ -330,6 +330,9 @@ export function KPIMetricsCards({
         if (metrics['Cost'] && metrics['Clicks']) {
           metrics['CPC'] = metrics['Cost'] / metrics['Clicks'];
         }
+        if (metrics['Revenue'] && (metrics['Bookings'] || metrics['Conversions'])) {
+          metrics['AOV'] = metrics['Revenue'] / (metrics['Bookings'] || metrics['Conversions']);
+        }
         if (metrics['Revenue'] && metrics['Cost']) {
           metrics['ROAS'] = metrics['Revenue'] / metrics['Cost'];
         }
@@ -348,7 +351,7 @@ export function KPIMetricsCards({
       // Build display metrics
       const defaultKPIs = [
         "Impressions", "Clicks", "CTR", "Conversions", "Conversion Rate", 
-        "CPC", "Cost", "Revenue", "ROAS", "Cost of sale"
+        "CPC", "Cost", "AOV", "Revenue", "ROAS", "Cost of sale"
       ];
 
       const costMetrics = new Set(["Cost", "CPC", "CPM", "Cost of sale"]);
@@ -404,7 +407,7 @@ export function KPIMetricsCards({
     if (name === 'ctr' || name === 'conversion rate' || name === 'cost of sale' || name === 'impression share') {
       return `${value.toFixed(2)}%`;
     }
-    if (name === 'cpc' || name === 'cpm' || name === 'budget') {
+    if (name === 'cpc' || name === 'cpm' || name === 'budget' || name === 'aov') {
       return `$${value.toFixed(2)}`;
     }
     if (name === 'roas') {

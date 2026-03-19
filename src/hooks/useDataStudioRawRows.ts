@@ -99,7 +99,7 @@ async function fetchByDateRpc(
  * Splits into parallel requests of batchSize each.
  */
 async function fetchAllRowsParallel(reportId: string): Promise<CachedDataRow[]> {
-  const batchSize = 1000;
+  const batchSize = 5000;
 
   // First, get the total count
   const { count, error: countError } = await supabase

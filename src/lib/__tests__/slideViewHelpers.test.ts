@@ -1,5 +1,5 @@
 /**
- * Tests for centralized filter detection functions in slideViewHelpers
+ * Tests for centralized filter detection and row filtering in slideViewHelpers
  */
 
 import { describe, it, expect } from 'vitest';
@@ -7,6 +7,7 @@ import {
   hasActiveFiltersForChannel,
   hasAnyActiveFilters,
   getChannelsWithFilters,
+  filterRawDataRows,
 } from '../slideViewHelpers';
 
 describe('hasActiveFiltersForChannel', () => {
@@ -20,11 +21,11 @@ describe('hasActiveFiltersForChannel', () => {
     expect(result).toBe(false);
   });
 
-  it('should return true when empty array is selected (active filter that excludes everything)', () => {
+  it('should return false when empty array is selected (All/no filter mode)', () => {
     const filterValues = { hotel: [] };
     const availableValues = { hotel: ['Hotel A', 'Hotel B'] };
     const result = hasActiveFiltersForChannel(filterValues, availableValues);
-    expect(result).toBe(true);
+    expect(result).toBe(false);
   });
 
   it('should return false when all available values are selected (no filter)', () => {
@@ -150,7 +151,7 @@ describe('hasAnyActiveFilters', () => {
     expect(result).toBe(false);
   });
 
-  it('should return true when one channel has empty array filter', () => {
+  it('should return false when one channel has empty array filter (All/no filter mode)', () => {
     const filterValues = {
       metasearch: { hotel: [] },
       sem: {},
@@ -162,7 +163,7 @@ describe('hasAnyActiveFilters', () => {
       social: {},
     };
     const result = hasAnyActiveFilters(filterValues, filterDimensionValues);
-    expect(result).toBe(true);
+    expect(result).toBe(false);
   });
 });
 
@@ -227,7 +228,7 @@ describe('getChannelsWithFilters', () => {
     expect(result).toEqual(new Set(['sem']));
   });
 
-  it('should include channels with empty array filters', () => {
+  it('should not include channels with empty array filters (All/no filter mode)', () => {
     const filterValues = {
       metasearch: { hotel: [] },
       sem: {},
@@ -239,6 +240,99 @@ describe('getChannelsWithFilters', () => {
       social: {},
     };
     const result = getChannelsWithFilters(filterValues, filterDimensionValues);
-    expect(result).toEqual(new Set(['metasearch']));
+    expect(result).toEqual(new Set());
+  });
+});
+
+describe('filterRawDataRows', () => {
+  const makeRow = (vals: Record<string, unknown>) => ({ dimension_values: vals });
+
+  it('should filter by direct dimension ID key', () => {
+    const rows = [
+      makeRow({ 'dim-hotel': 'Brady', 'dim-cost': 100 }),
+      makeRow({ 'dim-hotel': 'Marriott', 'dim-cost': 200 }),
+    ];
+    const result = filterRawDataRows(rows as any, { 'dim-hotel': ['Brady'] });
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).dimension_values['dim-hotel']).toBe('Brady');
+  });
+
+  it('should resolve global/configured IDs via dimensionIdToName map', () => {
+    const rows = [
+      makeRow({ 'report-dim-hotel': 'Brady', 'report-dim-cost': 100 }),
+      makeRow({ 'report-dim-hotel': 'Marriott', 'report-dim-cost': 200 }),
+    ];
+    const dimensionIdToName: Record<string, string> = {
+      'report-dim-hotel': 'Hotel',
+      'global-dim-hotel': 'Hotel',
+    };
+    const result = filterRawDataRows(
+      rows as any,
+      { 'global-dim-hotel': ['Brady'] },
+      undefined,
+      dimensionIdToName
+    );
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).dimension_values['report-dim-hotel']).toBe('Brady');
+  });
+
+  it('should apply date range filter', () => {
+    const rows = [
+      makeRow({ 'dim-hotel': 'Brady', Date: '2025-01-15' }),
+      makeRow({ 'dim-hotel': 'Brady', Date: '2025-03-15' }),
+    ];
+    const dateRange = { start: new Date(2025, 0, 1), end: new Date(2025, 1, 28, 23, 59, 59) };
+    const result = filterRawDataRows(rows as any, {}, dateRange);
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).dimension_values.Date).toBe('2025-01-15');
+  });
+
+  it('should combine dimension filter + date range', () => {
+    const rows = [
+      makeRow({ 'dim-hotel': 'Brady', Date: '2025-01-15', 'dim-cost': 100 }),
+      makeRow({ 'dim-hotel': 'Marriott', Date: '2025-01-20', 'dim-cost': 200 }),
+      makeRow({ 'dim-hotel': 'Brady', Date: '2025-03-15', 'dim-cost': 300 }),
+    ];
+    const dateRange = { start: new Date(2025, 0, 1), end: new Date(2025, 1, 28, 23, 59, 59) };
+    const result = filterRawDataRows(
+      rows as any,
+      { 'dim-hotel': ['Brady'] },
+      dateRange
+    );
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).dimension_values['dim-cost']).toBe(100);
+  });
+
+  it('should pass rows through when filter values are empty', () => {
+    const rows = [
+      makeRow({ 'dim-hotel': 'Brady' }),
+      makeRow({ 'dim-hotel': 'Marriott' }),
+    ];
+    const result = filterRawDataRows(rows as any, {});
+    expect(result).toHaveLength(2);
+  });
+
+  it('should pass through rows when filter has empty array (All/no filter mode)', () => {
+    const rows = [
+      makeRow({ 'dim-hotel': 'Brady' }),
+      makeRow({ 'dim-hotel': 'Marriott' }),
+    ];
+    const result = filterRawDataRows(rows as any, { 'dim-hotel': [] });
+    expect(result).toHaveLength(2);
+  });
+
+  it('should handle multiple dimension filters (AND logic)', () => {
+    const rows = [
+      makeRow({ 'dim-hotel': 'Brady', 'dim-channel': 'Google' }),
+      makeRow({ 'dim-hotel': 'Brady', 'dim-channel': 'Bing' }),
+      makeRow({ 'dim-hotel': 'Marriott', 'dim-channel': 'Google' }),
+    ];
+    const result = filterRawDataRows(
+      rows as any,
+      { 'dim-hotel': ['Brady'], 'dim-channel': ['Google'] }
+    );
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).dimension_values['dim-hotel']).toBe('Brady');
+    expect((result[0] as any).dimension_values['dim-channel']).toBe('Google');
   });
 });

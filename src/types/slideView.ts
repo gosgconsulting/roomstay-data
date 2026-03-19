@@ -19,6 +19,7 @@ export interface DerivedMetrics extends MetricData {
   ctr: number;
   conversionRate: number;
   cpc: number;
+  aov: number;
   roas: number;
   costOfSale: number;
 }
@@ -46,10 +47,24 @@ export interface MonthlyDataPoint {
 }
 
 export type ChartTimeRange =
+  | 'this_month'
   | 'this_year'
   | 'last_12_months'
   | 'last_6_months'
   | 'last_3_months';
+
+export type ChartMetric =
+  | 'revenue'
+  | 'impressions'
+  | 'clicks'
+  | 'cost'
+  | 'bookings'
+  | 'ctr'
+  | 'conversionRate'
+  | 'cpc'
+  | 'aov'
+  | 'roas'
+  | 'costOfSale';
 
 export type ComparisonType = 'none' | 'previous_period' | 'previous_year';
 

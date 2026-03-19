@@ -3,9 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { Settings2, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Settings2, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
-import { calculateDerivedMetrics, calculatePercentChange, formatNumber, getEffectiveTotals, hasAnyChannelData } from "@/lib/slideViewHelpers";
+import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
+import type { ChartMetric, ChartTimeRange } from "@/types/slideView";
+import { CHART_METRIC_OPTIONS, formatChartMetricValue, getChartMetricLabel } from "@/lib/chartMetric";
 
 interface OverviewTabProps {
   slideReportId: string | null;
@@ -14,10 +16,12 @@ interface OverviewTabProps {
   isLoadingData: boolean;
   isLoadingMonthlyData: boolean;
   currentTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
-  overviewChartData: Array<{ label: string; total: number }>;
-  comparisonChartData?: Array<{ label: string; total: number }> | null;
-  chartTimeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
-  setChartTimeRange: (range: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months') => void;
+  overviewChartData: Array<{ label: string; value: number }>;
+  comparisonChartData?: Array<{ label: string; value: number }> | null;
+  chartTimeRange: ChartTimeRange;
+  setChartTimeRange: (range: ChartTimeRange) => void;
+  chartMetric: ChartMetric;
+  setChartMetric: (metric: ChartMetric) => void;
   selectedYear: string;
   selectedMonth: string;
   isReadOnlyMode: boolean;
@@ -67,6 +71,8 @@ export function OverviewTab({
   comparisonChartData,
   chartTimeRange,
   setChartTimeRange,
+  chartMetric,
+  setChartMetric,
   selectedYear,
   selectedMonth,
   isReadOnlyMode,
@@ -85,7 +91,7 @@ export function OverviewTab({
   // Merge comparison data into chart data
   const mergedChartData = overviewChartData.map((point, i) => ({
     ...point,
-    comparisonTotal: comparisonChartData?.[i]?.total ?? undefined,
+    comparisonValue: comparisonChartData?.[i]?.value ?? undefined,
   }));
 
   const showComparison = comparisonType && comparisonType !== 'none';
@@ -114,38 +120,7 @@ export function OverviewTab({
       {(isSlideReportsLoading || (slideReportId && isLoadingData)) ? (
         renderKPICardsSkeleton()
       ) : slideReportId ? (
-        renderKPICards(
-          Object.keys(currentTotals).length > 0
-            ? (() => {
-                const getEffective = (ch: string) => currentTotals[ch] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-                const metasearchData = getEffective('metasearch');
-                const semData = getEffective('sem');
-                const socialData = getEffective('social');
-                const totals = {
-                  impressions: (metasearchData.impressions || 0) + (semData.impressions || 0) + (socialData.impressions || 0),
-                  clicks: (metasearchData.clicks || 0) + (semData.clicks || 0) + (socialData.clicks || 0),
-                  cost: (metasearchData.cost || 0) + (semData.cost || 0) + (socialData.cost || 0),
-                  revenue: (metasearchData.revenue || 0) + (semData.revenue || 0) + (socialData.revenue || 0),
-                  bookings: (metasearchData.bookings || 0) + (semData.bookings || 0) + (socialData.bookings || 0),
-                };
-                const derived = calculateDerivedMetrics(totals);
-                const overviewCompMetrics = getOverviewComparisonMetrics();
-                return [
-                  { label: "IMPRESSIONS", key: "impressions", value: derived.impressions, icon: Eye, color: "text-pink-600", comparison: overviewCompMetrics?.impressions },
-                  { label: "CLICKS", key: "clicks", value: derived.clicks, icon: MousePointer, color: "text-purple-600", comparison: overviewCompMetrics?.clicks },
-                  { label: "CTR", key: "ctr", value: derived.ctr, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.ctr },
-                  { label: "BOOKINGS", key: "bookings", value: derived.bookings, icon: ShoppingCart, color: "text-orange-600", comparison: overviewCompMetrics?.bookings },
-                  { label: "CONVERSION RATE", key: "conversionRate", value: derived.conversionRate, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.conversionRate },
-                  { label: "CPC", key: "cpc", value: derived.cpc, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cpc },
-                  { label: "COST", key: "cost", value: derived.cost, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cost },
-                  { label: "REVENUE", key: "revenue", value: derived.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency", comparison: overviewCompMetrics?.revenue },
-                  { label: "ROAS", key: "roas", value: derived.roas, icon: TrendingUp, color: "text-success", format: "roas", comparison: overviewCompMetrics?.roas },
-                  { label: "COST OF SALE", key: "costOfSale", value: derived.costOfSale, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.costOfSale },
-                ];
-              })()
-            : KPI_CARDS,
-          getOverviewComparisonMetrics()
-        )
+        renderKPICards(KPI_CARDS, getOverviewComparisonMetrics())
       ) : null}
 
       {/* Monthly Results Chart — show when report loaded; data from dimension_data */}
@@ -154,18 +129,33 @@ export function OverviewTab({
       ) : (
         <Card>
           <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-base font-medium">Revenue</CardTitle>
-            <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as typeof chartTimeRange)} disabled={isReadOnlyMode}>
-              <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-popover z-50">
-                <SelectItem value="this_year">This Year</SelectItem>
-                <SelectItem value="last_12_months">Last 12 Months</SelectItem>
-                <SelectItem value="last_6_months">Last 6 Months</SelectItem>
-                <SelectItem value="last_3_months">Last 3 Months</SelectItem>
-              </SelectContent>
-            </Select>
+            <CardTitle className="text-base font-medium">{getChartMetricLabel(chartMetric)}</CardTitle>
+            <div className="flex items-center gap-2">
+              <Select value={chartMetric} onValueChange={(v) => setChartMetric(v as ChartMetric)} disabled={isReadOnlyMode}>
+                <SelectTrigger className="w-[180px] h-8 text-sm bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  {CHART_METRIC_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as ChartTimeRange)} disabled={isReadOnlyMode}>
+                <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  <SelectItem value="this_month">This Month</SelectItem>
+                  <SelectItem value="this_year">This Year</SelectItem>
+                  <SelectItem value="last_12_months">Last 12 Months</SelectItem>
+                  <SelectItem value="last_6_months">Last 6 Months</SelectItem>
+                  <SelectItem value="last_3_months">Last 3 Months</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="h-[250px]">
@@ -183,7 +173,7 @@ export function OverviewTab({
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
                   <XAxis dataKey="label" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
-                  <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" tickFormatter={(v) => `${v}`} />
+                  <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
                   <Tooltip 
                     contentStyle={{ 
                       backgroundColor: 'hsl(var(--background))', 
@@ -191,14 +181,14 @@ export function OverviewTab({
                       borderRadius: '6px'
                     }}
                     formatter={(value: any, name: string) => [
-                      formatNumber(value as number, 'currency'),
-                      name === 'comparisonTotal' ? compLabel : 'Revenue'
+                      formatChartMetricValue(value as number, chartMetric),
+                      name === 'comparisonValue' ? compLabel : getChartMetricLabel(chartMetric)
                     ]}
                   />
                   {showComparison && comparisonChartData && (
                     <Area 
                       type="monotone" 
-                      dataKey="comparisonTotal" 
+                      dataKey="comparisonValue" 
                       stroke="#94a3b8" 
                       strokeWidth={1.5}
                       strokeDasharray="5 3"
@@ -208,11 +198,11 @@ export function OverviewTab({
                   )}
                   <Area 
                     type="monotone" 
-                    dataKey="total" 
+                    dataKey="value" 
                     stroke="#8b5cf6" 
                     strokeWidth={2}
                     fill="url(#revenueGradient)"
-                    name="Revenue"
+                    name={getChartMetricLabel(chartMetric)}
                   />
                 </AreaChart>
               </ResponsiveContainer>

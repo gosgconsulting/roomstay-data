@@ -124,15 +124,18 @@ Google Sheets / CSV URL
 - **Entry point:** `/` renders `SlideViewPage` directly — Data Studio is the app homepage.
 - **Orchestrator hook:** `src/hooks/useSlideReportPage.ts` — composes sub-hooks for report identity, raw rows, filtered data, views, budgets, and mutations.
 - **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads `dimension_data` directly. No long-lived cache (refetch on mount, gcTime 0) so KPIs always reflect current DB state.
-- **Filtered data:** `src/hooks/useFilteredSlideData.ts` — pure client-side filtering and aggregation.
+- **Filtered data:** `src/hooks/useFilteredSlideData.ts` — pure client-side filtering and aggregation. Single source of truth for KPI totals, monthly chart data, and filtered raw rows.
+- **Filter state:** `src/hooks/useDataStudioFilters.ts` — canonical owner of `filterValues`, `customDateRange`, `comparisonType`, `filterConfigs`. Restores view filters via `applyView`. All consumers (KPI cards, charts, breakdown tables) read from the same `filterValues` and use a shared `configuredDimensionNames` map for global-to-report dimension ID resolution.
+- **Filter flow:** saved view → `applyView` → `filterValues` → `useFilteredSlideData` (KPI totals + monthly data) + `processOverviewChartData`/`processChannelChartData` (chart fallbacks) + `BreakdownTableSection` (breakdown tables). All paths resolve filter IDs via `filterRawDataRows(..., combinedDimNames)`.
 - **Performance table:** `src/components/PerformanceTable/` + `src/hooks/performanceTable/`.
 - **View settings:** stored in `views` table (canonical, replaces legacy `report_views` + `slide_report_views`).
 - **Layout:** `flex h-screen overflow-hidden` root → `ReportSidebar` (left nav: tabs + Actions/Manage/Tools sections) + main column (`flex-col flex-1`) → `SlideViewHeader` (topbar: back, report name, Data Sources, Dimensions, Share, Refresh Data) + scrollable tab content.
 - **Filters:** `FiltersRow` component (date range + channel filters); uses `DateRangeFilter` from `src/components/filters/`.
+- **Chart controls:** Overview and channel charts share two dropdowns in the chart header: a KPI metric selector (Revenue, Impressions, Clicks, Cost, Bookings, CTR, Conversion Rate, CPC, AOV, ROAS, Cost of Sale) and a time-range selector (`This Month`, `This Year`, `Last 12/6/3 Months`). Default range is `This Year`. `This Month` renders daily points.
 
 ### 4. KPI / Metrics System
 
-- **KPI derivation:** `src/lib/metricsCalculations.ts` — ROAS, CPC, cost-of-sale, etc.
+- **KPI derivation:** `src/lib/metricsCalculations.ts` — ROAS, CPC, AOV (revenue / bookings), cost-of-sale, etc.
 - **Default KPIs:** `getAccountDefaultKPIs()` returns exact KPI names matched case-insensitively from available dimensions.
 - **KPI repair:** `resyncReportViews()` normalizes and repairs `kpi_order` to stay consistent with `visible_kpis`.
 
@@ -301,6 +304,13 @@ Google Sheets / CSV URL
 
 - **Apply** = persist (where applicable) + close modal/sheet.
 - **Cancel** = revert local state + close modal/sheet.
+
+### Date filter (Data Studio)
+
+- `DateRangeFilter` keeps all selections (preset, custom range, compare toggle/type) in **draft state** until the user presses **Apply**. No parent state changes until Apply.
+- On Apply, `FiltersRow` calls a single `onDateApply` callback that commits the full payload to `useDataStudioFilters`, which updates `customDateRange`, `selectedYear`, `selectedMonth`, and `comparisonType` atomically.
+- The trigger button label always reflects the **committed** `dateRange`/`datePreset`, not the in-popover draft.
+- Saved views restore `customDateRange` from `selected_year`/`selected_month` so the label, filtering, and fetch scope stay aligned.
 
 ### Verify → Migrate → Delete protocol
 

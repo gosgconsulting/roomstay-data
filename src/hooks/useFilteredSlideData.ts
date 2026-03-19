@@ -179,6 +179,12 @@ export interface UseFilteredSlideDataParams {
   slideType?: string;
   /** When set, KPI totals from breakdowns use this dimension first so KPI matches the table (SEM/Social). */
   groupByDimensionId?: string | null;
+  /**
+   * Global dimension-ID → human-name map built from breakdownDimensions.
+   * Merged with per-channel dimensionMap so filterRawDataRows can resolve
+   * global filter config UUIDs to report-specific row keys via name matching.
+   */
+  configuredDimensionNames?: Record<string, string>;
 }
 
 export interface FilteredSlideData {
@@ -220,6 +226,7 @@ export function useFilteredSlideData({
   selectedTab,
   slideType,
   groupByDimensionId,
+  configuredDimensionNames,
 }: UseFilteredSlideDataParams): FilteredSlideData {
   // Build date range for filtering.
   // When customDateRange is set, use exact from/to dates (supports sub-month ranges like 1-5 days).
@@ -285,12 +292,15 @@ export function useFilteredSlideData({
       const hasChannelFilters = channelsWithFilters.has(channel);
       const rawDataRows: RawDataRow[] = (channelData as any).rawDataRows || [];
       const dimensionMap: Record<string, string> = (channelData as any).dimensionMap || {};
+      const combinedDimNames = configuredDimensionNames
+        ? { ...dimensionMap, ...configuredDimensionNames }
+        : dimensionMap;
 
       if (hasChannelFilters) {
         // ── FILTERED PATH ──────────────────────────────────────────────────────
         if (rawDataRows.length > 0) {
           // Filter rows by dimension values + date range, then aggregate
-          const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange, dimensionMap);
+          const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, dateRange, combinedDimNames);
           filteredRawRows[channel] = filteredRows;
           channelTotals[channel] = aggregateFromRawRows(filteredRows, dimensionMap, channel, monthlyDataMap);
         } else {
@@ -357,6 +367,7 @@ export function useFilteredSlideData({
     channelsWithFilters,
     monthKeyForBreakdowns,
     groupByDimensionId,
+    configuredDimensionNames,
   ]);
 
   // Helper method to get filtered rows for a channel

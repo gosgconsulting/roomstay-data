@@ -11,9 +11,10 @@ import {
 } from './slideViewHelpers';
 import { parseNumericValue } from '@/lib/parseNumericValue';
 import type { SlideReportPivotData } from '@/types/slideReports';
-import type { RawDataRow, MonthlyDataPoint } from '@/types/slideView';
+import type { ChartMetric, MonthlyDataPoint } from '@/types/slideView';
 
 export type ChartTimeRange =
+  | 'this_month'
   | 'this_year'
   | 'last_12_months'
   | 'last_6_months'
@@ -32,7 +33,9 @@ export function generateMonthsInTimeRange(
   let startDate: Date;
   const endDate = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  if (timeRange === 'this_year') {
+  if (timeRange === 'this_month') {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (timeRange === 'this_year') {
     startDate = new Date(now.getFullYear(), 0, 1);
   } else if (timeRange === 'last_12_months') {
     startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
@@ -67,7 +70,11 @@ export function applyChartTimeRangeFilter<T extends { year: number; month: strin
 ): T[] {
   const now = anchorDate ?? new Date();
 
-  if (timeRange === 'this_year') {
+  if (timeRange === 'this_month') {
+    return data.filter(
+      (m) => m.year === now.getFullYear() && m.month === MONTH_NAMES[now.getMonth()]
+    );
+  } else if (timeRange === 'this_year') {
     return data.filter((m) => m.year === now.getFullYear());
   } else if (timeRange === 'last_12_months') {
     const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
@@ -100,7 +107,8 @@ export function processOverviewChartData(
   filterValues: Record<string, Record<string, string[]>>,
   channelsWithFilters: Set<string>,
   chartTimeRange: ChartTimeRange,
-  anchorDate?: Date
+  anchorDate?: Date,
+  configuredDimensionNames?: Record<string, string>
 ): Array<{ label: string; month: string; year: number; total: number }> {
   if (!pivotData?.channels) {
     return [];
@@ -140,18 +148,20 @@ export function processOverviewChartData(
         const channelFilterValues = filterValues[channel] || {};
         const hasChannelFilters = channelsWithFilters.has(channel);
         const rawDataRows = (channelData as any).rawDataRows || [];
+        const dimensionMap = (channelData as any).dimensionMap || {};
+        const combinedDimNames = configuredDimensionNames
+          ? { ...dimensionMap, ...configuredDimensionNames }
+          : dimensionMap;
 
         if (hasChannelFilters && rawDataRows.length > 0) {
-          // Filter rows for this specific month and channel filters
           const monthFilteredRows = filterRawDataRows(
             rawDataRows,
             channelFilterValues,
-            { start: monthStart, end: monthEnd }
+            { start: monthStart, end: monthEnd },
+            combinedDimNames
           );
 
           if (monthFilteredRows.length > 0) {
-            // Build dynamic metric mapping
-            const dimensionMap = (channelData as any).dimensionMap || {};
             const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
             const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
 
@@ -242,7 +252,8 @@ export function processChannelChartData(
   filterValues: Record<string, Record<string, string[]>>,
   channelsWithFilters: Set<string>,
   chartTimeRange: ChartTimeRange,
-  anchorDate?: Date
+  anchorDate?: Date,
+  configuredDimensionNames?: Record<string, string>
 ): Array<{ month: string; revenue: number }> {
   if (!pivotData?.channels?.[channel]) {
     return [];
@@ -267,27 +278,28 @@ export function processChannelChartData(
     const channelFilterValues = filterValues[channel] || {};
     const hasChannelFilters = channelsWithFilters.has(channel);
     const rawDataRows = (channelData as any).rawDataRows || [];
+    const dimensionMap = (channelData as any).dimensionMap || {};
+    const combinedDimNames = configuredDimensionNames
+      ? { ...dimensionMap, ...configuredDimensionNames }
+      : dimensionMap;
 
     monthsInRange.forEach(({ year, month }) => {
       const key = `${year}-${month}`;
       monthlyMap.set(key, { year, month, revenue: 0 });
 
-      // Get month date range
       const monthIndex = MONTH_NAMES.indexOf(month);
       const monthStart = new Date(year, monthIndex, 1);
       const monthEnd = new Date(year, monthIndex + 1, 0, 23, 59, 59);
 
       if (hasChannelFilters && rawDataRows.length > 0) {
-        // Filter rows for this specific month and channel filters
         const monthFilteredRows = filterRawDataRows(
           rawDataRows,
           channelFilterValues,
-          { start: monthStart, end: monthEnd }
+          { start: monthStart, end: monthEnd },
+          combinedDimNames
         );
 
         if (monthFilteredRows.length > 0) {
-          // Build dynamic metric mapping
-          const dimensionMap = (channelData as any).dimensionMap || {};
           const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
           const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
 
@@ -358,8 +370,9 @@ export function processChannelChartData(
 export function buildOverviewChartDataFromMonthlyData(
   monthlyData: MonthlyDataPoint[],
   chartTimeRange: ChartTimeRange,
+  metric: ChartMetric = 'revenue',
   anchorDate?: Date
-): Array<{ label: string; month: string; year: number; total: number }> {
+): Array<{ label: string; value: number }> {
   const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
   if (!monthsInRange.length) return [];
 
@@ -376,12 +389,10 @@ export function buildOverviewChartDataFromMonthlyData(
   return monthsInRange.map(({ year, month }) => {
     const key = `${year}-${month}`;
     const data = dataByKey.get(key) ?? { metasearch: 0, sem: 0, social: 0 };
-    const total = data.metasearch + data.sem + data.social;
+    const totalRevenue = data.metasearch + data.sem + data.social;
     return {
       label: `${month.slice(0, 3)} ${year.toString().slice(-2)}`,
-      month,
-      year,
-      total,
+      value: metric === 'revenue' ? totalRevenue : 0,
     };
   });
 }
@@ -393,10 +404,15 @@ export function buildOverviewChartDataFromMonthlyData(
 export function buildChannelChartDataFromMonthlyData(
   monthlyData: MonthlyDataPoint[],
   chartTimeRange: ChartTimeRange,
+  metric: ChartMetric = 'revenue',
   anchorDate?: Date
-): Record<'metasearch' | 'sem' | 'social', Array<{ month: string; revenue: number }>> {
+): Record<'metasearch' | 'sem' | 'social', Array<{ label: string; value: number }>> {
   const channels: ('metasearch' | 'sem' | 'social')[] = ['metasearch', 'sem', 'social'];
-  const result = { metasearch: [] as Array<{ month: string; revenue: number }>, sem: [], social: [] };
+  const result = {
+    metasearch: [] as Array<{ label: string; value: number }>,
+    sem: [] as Array<{ label: string; value: number }>,
+    social: [] as Array<{ label: string; value: number }>,
+  };
 
   const monthsInRange = generateMonthsInTimeRange(chartTimeRange, anchorDate);
   if (!monthsInRange.length) return result;
@@ -412,8 +428,8 @@ export function buildChannelChartDataFromMonthlyData(
 
   for (const ch of channels) {
     result[ch] = monthsInRange.map(({ year, month }) => ({
-      month: `${month.slice(0, 3)} ${year.toString().slice(-2)}`,
-      revenue: dataByChannelAndKey.get(`${ch}-${year}-${month}`) ?? 0,
+      label: `${month.slice(0, 3)} ${year.toString().slice(-2)}`,
+      value: metric === 'revenue' ? (dataByChannelAndKey.get(`${ch}-${year}-${month}`) ?? 0) : 0,
     }));
   }
   return result;
@@ -424,23 +440,23 @@ export function buildChannelChartDataFromMonthlyData(
  * Used so the Overview tab Revenue chart can use slide_report_channel_month_data
  * with the same filterValues as the View (dimension filters).
  *
- * @param channelChartData - Per-channel arrays of { month, revenue } (same length and order)
- * @returns Array of { label, total } for AreaChart
+ * @param channelChartData - Per-channel arrays of { label, value } (same length and order)
+ * @returns Array of { label, value } for AreaChart
  */
 export function buildOverviewChartDataFromChannelChartData(
-  channelChartData: Record<'metasearch' | 'sem' | 'social', Array<{ month: string; revenue: number }>> | null
-): Array<{ label: string; total: number }> {
+  channelChartData: Record<'metasearch' | 'sem' | 'social', Array<{ label: string; value: number }>> | null
+): Array<{ label: string; value: number }> {
   if (!channelChartData) return [];
   const metasearch = channelChartData.metasearch ?? [];
   const sem = channelChartData.sem ?? [];
   const social = channelChartData.social ?? [];
   const len = Math.max(metasearch.length, sem.length, social.length);
   if (len === 0) return [];
-  const result: Array<{ label: string; total: number }> = [];
+  const result: Array<{ label: string; value: number }> = [];
   for (let i = 0; i < len; i++) {
-    const label = metasearch[i]?.month ?? sem[i]?.month ?? social[i]?.month ?? '';
-    const total = (metasearch[i]?.revenue ?? 0) + (sem[i]?.revenue ?? 0) + (social[i]?.revenue ?? 0);
-    result.push({ label, total });
+    const label = metasearch[i]?.label ?? sem[i]?.label ?? social[i]?.label ?? '';
+    const value = (metasearch[i]?.value ?? 0) + (sem[i]?.value ?? 0) + (social[i]?.value ?? 0);
+    result.push({ label, value });
   }
   return result;
 }

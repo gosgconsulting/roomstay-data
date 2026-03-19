@@ -25,6 +25,7 @@ export const calculateDerivedMetrics = (
   const bookings = Number(data.bookings) || 0;
 
   const cpc = clicks > 0 ? cost / clicks : 0;
+  const aov = bookings > 0 ? revenue / bookings : 0;
   const roas = cost > 0 ? revenue / cost : 0;
   const costOfSale = revenue > 0 ? (cost / revenue) * 100 : 0;
 
@@ -37,6 +38,7 @@ export const calculateDerivedMetrics = (
     ctr: clicks > 0 && impressions > 0 ? (clicks / impressions) * 100 : 0,
     conversionRate: clicks > 0 ? (bookings / clicks) * 100 : 0,
     cpc,
+    aov,
     roas,
     costOfSale,
   };
@@ -116,9 +118,9 @@ export const hasActiveFiltersForChannel = (
       continue;
     }
     
-    // If empty array, it's an active filter that filters out everything
+    // Empty array represents "All" in inline filter UX (no active filter).
     if (selectedValues.length === 0) {
-      return true; // Empty array is an active filter (shows zero data)
+      continue;
     }
 
     // If we have available values, check if all are selected (means "All" - no filter)
@@ -284,9 +286,9 @@ export const filterRawDataRows = (
 
     // Apply dimension filters (using resolved IDs)
     for (const [dimensionId, selectedValues] of Object.entries(resolvedFilterValues)) {
-      // If filter is explicitly set to empty array, filter out all rows (show zero data)
+      // Empty array represents "All" in inline filter UX, so skip filtering.
       if (selectedValues && selectedValues.length === 0) {
-        return false; // Explicitly empty = no matches = zero data
+        continue;
       }
       
       // If filter is not set (undefined/null), skip (show all)

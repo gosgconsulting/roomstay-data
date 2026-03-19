@@ -71,6 +71,12 @@ export interface UnifiedBreakdownTableProps {
   /** Comparison totals per channel for showing % change on total row */
   comparisonChannelTotals?: Record<string, any> | null;
   comparisonType?: string;
+  /**
+   * Global dimension-ID → human-name map (from breakdownDimensions).
+   * Merged with per-channel dimensionMap so filterRawDataRows can resolve
+   * global/configured filter UUIDs to report-specific row keys.
+   */
+  configuredDimensionNames?: Record<string, string>;
 }
 
 /**
@@ -98,10 +104,11 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
     selectedMonth,
     customDateRange,
     filterValues,
-    filterDimensionValues,
+    filterDimensionValues: _filterDimensionValues,
     displayCurrency,
     comparisonChannelTotals,
     comparisonType,
+    configuredDimensionNames,
   }) => {
     // Auto-select defaults when dimensions are available.
     // groupBy / breakdownBy may be a dimension ID (UUID) or a lowercase name hint (e.g. 'hotel', 'account').
@@ -168,16 +175,6 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       const groupByName = groupByDim?.name || groupBy;
       const groupByDimId = groupByDim?.id || groupBy;
 
-      const hasFilters =
-        selectedChannel &&
-        selectedChannel !== 'overview' &&
-        filterValues?.[selectedChannel]
-          ? hasActiveFiltersForChannel(
-              filterValues[selectedChannel],
-              filterDimensionValues?.[selectedChannel]
-            )
-          : false;
-
       const allBreakdowns: Record<
         string,
         { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }
@@ -193,17 +190,19 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
         if (!channelData) continue;
 
         const rawDataRows = (channelData as any).rawDataRows || [];
+        const dimensionMap = (channelData as any).dimensionMap || {};
+        const combinedDimNames = configuredDimensionNames
+          ? { ...dimensionMap, ...configuredDimensionNames }
+          : dimensionMap;
 
         if (rawDataRows.length > 0) {
-          const channelFilterValues =
-            hasFilters && channel === selectedChannel
-              ? filterValues?.[channel] || {}
-              : {};
+          const channelFilterValues = filterValues?.[channel] || {};
+          const hasChannelFilters = hasActiveFiltersForChannel(channelFilterValues);
+          const effectiveFilterValues = hasChannelFilters ? channelFilterValues : {};
 
-          const filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, breakdownDateRange ?? undefined);
+          const filteredRows = filterRawDataRows(rawDataRows, effectiveFilterValues, breakdownDateRange ?? undefined, combinedDimNames);
 
           const groupedRows: Record<string, any[]> = {};
-          const dimensionMap = (channelData as any).dimensionMap || {};
           filteredRows.forEach((row) => {
             const rowData = (row.dimension_values || row) as Record<string, unknown>;
             const groupValue =
@@ -230,7 +229,6 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
             allBreakdowns[groupValue].bookings += agg.bookings;
           });
         } else {
-          // Fallback: no rawDataRows — use pre-computed breakdown blobs (legacy pivot_data)
           let breakdownData: any[] = [];
 
           if (monthKey && (channelData as any).monthlyBreakdowns?.[monthKey]) {
@@ -286,9 +284,8 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       parsedMonths,
       monthKey,
       filterValues,
-      filterDimensionValues,
-      selectedYear,
       breakdownDateRange,
+      configuredDimensionNames,
     ]);
 
     const getExpandedBreakdownData = useMemo(() => {
@@ -311,16 +308,6 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
           ? [selectedChannel]
           : Object.keys(pivotData.channels);
 
-      const hasFilters =
-        selectedChannel &&
-        selectedChannel !== 'overview' &&
-        filterValues?.[selectedChannel]
-          ? hasActiveFiltersForChannel(
-              filterValues[selectedChannel],
-              filterDimensionValues?.[selectedChannel]
-            )
-          : false;
-
       const allBreakdowns: Record<
         string,
         { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }
@@ -331,15 +318,23 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
         if (!channelData) continue;
 
         const rawDataRows = (channelData as any).rawDataRows || [];
+        const dimensionMap = (channelData as any).dimensionMap || {};
+        const combinedDimNames = configuredDimensionNames
+          ? { ...dimensionMap, ...configuredDimensionNames }
+          : dimensionMap;
 
-        let filteredRows = rawDataRows;
-        if (hasFilters && channel === selectedChannel) {
-          filteredRows = filterRawDataRows(rawDataRows, filterValues?.[channel] || {}, breakdownDateRange ?? undefined);
+        const channelFilterValues = filterValues?.[channel] || {};
+        const hasChannelFilters = hasActiveFiltersForChannel(channelFilterValues);
+
+        let filteredRows: any[];
+        if (hasChannelFilters) {
+          filteredRows = filterRawDataRows(rawDataRows, channelFilterValues, breakdownDateRange ?? undefined, combinedDimNames);
         } else if (breakdownDateRange) {
           filteredRows = filterRawDataRows(rawDataRows, {}, breakdownDateRange);
+        } else {
+          filteredRows = rawDataRows;
         }
 
-        const dimensionMap = (channelData as any).dimensionMap || {};
         const rowsForExpandedRow = filteredRows.filter((row: any) => {
           const rowData = (row.dimension_values || row) as Record<string, unknown>;
           const rowGroupValue =
@@ -362,7 +357,6 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
           }
         });
 
-        // Use same metric key resolution as aggregateRowsToMetrics so Cost/Spend/Total cost etc. all map to cost
         const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap as Record<string, string>);
 
         Object.entries(groupedRows).forEach(([breakdownValue, groupRows]) => {
@@ -404,10 +398,9 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       parsedMonths,
       monthKey,
       filterValues,
-      filterDimensionValues,
-      selectedYear,
       groupBy,
       breakdownDateRange,
+      configuredDimensionNames,
     ]);
 
     const totals = groupedData.reduce(
@@ -529,6 +522,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                 <TableHead className="text-right">Conv. Rate</TableHead>
                 <TableHead className="text-right">CPC</TableHead>
                 <TableHead className="text-right">Cost</TableHead>
+                <TableHead className="text-right">AOV</TableHead>
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">ROAS</TableHead>
                 <TableHead className="text-right">Cost of Sale</TableHead>
@@ -561,6 +555,9 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                       {formatNumber(group.metrics.cpc, 'currency', displayCurrency, group.metrics.cpc < 0.01 ? 4 : 2)}
                     </TableCell>
                     <TableCell className="text-right">{formatNumber(group.metrics.cost, 'currency', displayCurrency)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatNumber(group.metrics.aov, 'currency', displayCurrency, group.metrics.aov < 1 ? 4 : 2)}
+                    </TableCell>
                     <TableCell className="text-right">{formatNumber(group.metrics.revenue, 'currency', displayCurrency)}</TableCell>
                     <TableCell className="text-right">{group.metrics.roas.toFixed(1)}x</TableCell>
                     <TableCell className="text-right">
@@ -587,6 +584,9 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                             {formatNumber(item.metrics.cpc, 'currency', displayCurrency, item.metrics.cpc < 0.01 ? 4 : 2)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.cost, 'currency', displayCurrency)}</TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatNumber(item.metrics.aov, 'currency', displayCurrency, item.metrics.aov < 1 ? 4 : 2)}
+                          </TableCell>
                           <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency', displayCurrency)}</TableCell>
                           <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
                           <TableCell className="text-right text-muted-foreground">
@@ -616,6 +616,9 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                   {formatNumber(totalMetrics.cpc, 'currency', displayCurrency, totalMetrics.cpc < 0.01 ? 4 : 2)}
                 </TableCell>
                 <TableCell className="text-right">{formatNumber(totalMetrics.cost, 'currency', displayCurrency)}</TableCell>
+                <TableCell className="text-right">
+                  {formatNumber(totalMetrics.aov, 'currency', displayCurrency, totalMetrics.aov < 1 ? 4 : 2)}
+                </TableCell>
                 <TableCell className="text-right">{formatNumber(totalMetrics.revenue, 'currency', displayCurrency)}</TableCell>
                 <TableCell className="text-right">{totalMetrics.roas.toFixed(1)}x</TableCell>
                 <TableCell className="text-right">

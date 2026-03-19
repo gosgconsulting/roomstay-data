@@ -4,8 +4,9 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { UnifiedBreakdownTable } from "@/components/slides/BreakdownTableSection";
 import type { ChartTimeRange } from "@/components/slides/MonthlyChartSection";
-import { formatNumber } from "@/lib/slideViewHelpers";
 import { MoreHorizontal } from "lucide-react";
+import type { ChartMetric } from "@/types/slideView";
+import { CHART_METRIC_OPTIONS, formatChartMetricValue, getChartMetricLabel } from "@/lib/chartMetric";
 
 interface Dimension {
   id: string;
@@ -25,10 +26,12 @@ interface ChannelTabProps {
   pivotData?: SlideReportPivotData | null;
   isLoadingData: boolean;
   currentTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
-  channelChartData: Record<string, Array<{ month: string; revenue: number }>>;
-  comparisonChannelChartData?: Record<string, Array<{ month: string; revenue: number }>> | null;
+  channelChartData: Record<string, Array<{ label: string; value: number }>>;
+  comparisonChannelChartData?: Record<string, Array<{ label: string; value: number }>> | null;
   chartTimeRange: ChartTimeRange;
   setChartTimeRange: (range: ChartTimeRange) => void;
+  chartMetric: ChartMetric;
+  setChartMetric: (metric: ChartMetric) => void;
   groupByDimension: string;
   breakdownByDimension: string;
   expandedRow: string | null;
@@ -50,6 +53,7 @@ interface ChannelTabProps {
   comparisonType?: string;
   displayCurrency?: 'AUD' | 'USD';
   onOpenBreakdownDimensionSettings?: (channel: 'metasearch' | 'sem' | 'social') => void;
+  configuredDimensionNames?: Record<string, string>;
 }
 
 export function ChannelTab({
@@ -64,6 +68,8 @@ export function ChannelTab({
   comparisonChannelChartData,
   chartTimeRange,
   setChartTimeRange,
+  chartMetric,
+  setChartMetric,
   groupByDimension,
   breakdownByDimension,
   expandedRow,
@@ -85,6 +91,7 @@ export function ChannelTab({
   comparisonType,
   displayCurrency,
   onOpenBreakdownDimensionSettings,
+  configuredDimensionNames,
 }: ChannelTabProps) {
   const gradientId = `${channel}Gradient`;
   const compGradientId = `${channel}CompGradient`;
@@ -94,7 +101,7 @@ export function ChannelTab({
   const compData = comparisonChannelChartData?.[channel];
   const mergedChartData = currentData.map((point, i) => ({
     ...point,
-    comparisonRevenue: compData?.[i]?.revenue ?? undefined,
+    comparisonValue: compData?.[i]?.value ?? undefined,
   }));
   const hasComparison = !!compData && compData.length > 0;
 
@@ -116,18 +123,33 @@ export function ChannelTab({
           {/* Monthly Revenue Chart */}
           <Card>
             <CardHeader className="pb-2 flex flex-row items-center justify-between">
-              <CardTitle className="text-base font-medium">Revenue</CardTitle>
-              <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as ChartTimeRange)}>
-                <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover z-50">
-                  <SelectItem value="this_year">This Year</SelectItem>
-                  <SelectItem value="last_12_months">Last 12 Months</SelectItem>
-                  <SelectItem value="last_6_months">Last 6 Months</SelectItem>
-                  <SelectItem value="last_3_months">Last 3 Months</SelectItem>
-                </SelectContent>
-              </Select>
+              <CardTitle className="text-base font-medium">{getChartMetricLabel(chartMetric)}</CardTitle>
+              <div className="flex items-center gap-2">
+                <Select value={chartMetric} onValueChange={(v) => setChartMetric(v as ChartMetric)}>
+                  <SelectTrigger className="w-[180px] h-8 text-sm bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover z-50">
+                    {CHART_METRIC_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={chartTimeRange} onValueChange={(v) => setChartTimeRange(v as ChartTimeRange)}>
+                  <SelectTrigger className="w-[150px] h-8 text-sm bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover z-50">
+                    <SelectItem value="this_month">This Month</SelectItem>
+                    <SelectItem value="this_year">This Year</SelectItem>
+                    <SelectItem value="last_12_months">Last 12 Months</SelectItem>
+                    <SelectItem value="last_6_months">Last 6 Months</SelectItem>
+                    <SelectItem value="last_3_months">Last 3 Months</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="h-[200px]">
@@ -144,19 +166,19 @@ export function ChannelTab({
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(value: number) => `${(value / 1000).toFixed(0)}`} />
+                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                     <Tooltip
                       formatter={(value: number, name: string) => [
-                        formatNumber(value, 'currency', displayCurrency),
-                        name === 'comparisonRevenue' ? 'Previous Period' : 'Revenue'
+                        formatChartMetricValue(value, chartMetric, displayCurrency),
+                        name === 'comparisonValue' ? 'Previous Period' : getChartMetricLabel(chartMetric)
                       ]}
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
                     />
                     {hasComparison && (
                       <Area
                         type="monotone"
-                        dataKey="comparisonRevenue"
+                        dataKey="comparisonValue"
                         stroke="#94a3b8"
                         strokeWidth={1.5}
                         strokeDasharray="5 3"
@@ -164,7 +186,7 @@ export function ChannelTab({
                         name="Previous Period"
                       />
                     )}
-                    <Area type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} fill={`url(#${gradientId})`} name="Revenue" />
+                    <Area type="monotone" dataKey="value" stroke="#8b5cf6" strokeWidth={2} fill={`url(#${gradientId})`} name={getChartMetricLabel(chartMetric)} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -236,6 +258,7 @@ export function ChannelTab({
                     availableDimensions={availableDimensionsList}
                     comparisonChannelTotals={comparisonTotals}
                     comparisonType={comparisonType}
+                    configuredDimensionNames={configuredDimensionNames}
                   />
                 );
               })()}

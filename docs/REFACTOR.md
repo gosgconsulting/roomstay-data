@@ -293,6 +293,80 @@
 **Verification**
 - DB constraints validated against existing accounts. Build and lint passing.
 
+### AOV (Average Order Value) KPI (2026-03-20)
+
+**Changes**
+- Added `aov` (Average Order Value = Revenue / Bookings) as a derived metric across the entire KPI pipeline.
+- `DerivedMetrics` type extended with `aov: number`.
+- `calculateDerivedMetrics` computes `aov = bookings > 0 ? revenue / bookings : 0`.
+- `useKPICards` and `useReportKPICards`: AOV card inserted before Revenue (format: currency with 2 decimals).
+- `KPIMetricsCards` (SharedReport path): AOV added to `FORMULA_METRICS`, `defaultKPIs`, `addDerivedMetrics`, and `formatDisplay`.
+- `BreakdownTableSection`: AOV column added before Revenue in header, data rows, expanded rows, and totals row.
+- `SlideViewPage.renderKPICards`: AOV formatted with 2 decimal places (same as CPC).
+- `OverviewTab`: removed inline/exception KPI array path and now always uses canonical `KPI_CARDS` (from `useKPICards`) passed by `SlideViewPage`, ensuring AOV is shown in the Overview main KPI section with the same shared pipeline.
+
+**Removed**
+- N/A.
+
+**Replaced By**
+- N/A.
+
+**Verification**
+- `npx tsc --noEmit` ✅ 0 errors.
+- `npm run build` ✅ exit 0.
+- `npm run lint` ✅ 0 errors (warnings only).
+
+### Unified View Filters (2026-03-20)
+
+**Changes**
+- Fixed view filters (e.g. Brady) not applying to breakdown tables and charts.
+- `BreakdownTableSection`: removed `selectedChannel !== 'overview'` guard that disabled dimension filters on the overview tab. Each channel's filters now apply independently regardless of which tab is selected.
+- `BreakdownTableSection`: all `filterRawDataRows` calls now receive a merged `dimensionIdToName` map (`dimensionMap + configuredDimensionNames`) so global/configured filter UUIDs resolve to report-specific row keys.
+- `chartDataCalculations.ts`: `processOverviewChartData` and `processChannelChartData` now accept and pass `configuredDimensionNames` to `filterRawDataRows`.
+- `useChartData.ts`: all chart hooks thread `configuredDimensionNames` to the chart processing functions.
+- `ChannelTab.tsx`: accepts and passes `configuredDimensionNames` to `UnifiedBreakdownTable`.
+- `SlideViewPage.tsx`: passes `configuredDimensionNames` to chart hooks and `ChannelTab`.
+- `handleApplyView` (master reset): chart time range, price-check chart range, and tab are now reset to defaults when switching to master view (prevents stale state from a previous view).
+
+**Removed**
+- `filterDimensionValues` no longer used inside `BreakdownTableSection` (prop kept for backward compat).
+- Redundant `dimensionMap` redeclaration inside chart filter blocks.
+
+**Replaced By**
+- Single `configuredDimensionNames` prop threaded from `SlideViewPage` through all consumers.
+
+**Verification**
+- `npx tsc --noEmit` ✅ 0 errors.
+- `npm run build` ✅ exit 0.
+- `vitest run slideViewHelpers.test.ts` ✅ 27/27 pass (7 new filterRawDataRows tests).
+- `vitest run monthUtils.test.ts` ✅ 17/17 pass.
+
+### Top filter options scoped to active view filters (2026-03-20)
+
+**Changes**
+- Fixed top inline filter options showing unfiltered values after applying a saved view (e.g. Brady).
+- `useDataStudioFilters.ts` option derivation now computes options from rows scoped by:
+  - active **other** filter dimensions in the same channel (self dimension excluded),
+  - active date scope (`customDateRange` or selected year/month),
+  - merged dimension-name resolution map (`dimensionMap + configuredDimensionNames`) for global-ID-to-row-key mapping.
+- This keeps top filter option lists aligned with already-filtered KPI/table outputs and avoids a parallel option-generation path.
+- Follow-up hardening: empty-array selections from inline “All” mode are normalized as no-filter during option derivation to prevent zero-data regressions.
+- Root-cause correction in canonical helpers: `slideViewHelpers.ts` now treats empty arrays as “All/no filter” (not “exclude all”) in both active-filter detection and row filtering. This aligns helper behavior with inline filter UX and prevents accidental zero datasets.
+
+**Removed**
+- Implicit "all raw rows" option derivation for top inline filters.
+
+**Replaced By**
+- Scoped option derivation using `filterRawDataRows(...)` in `useDataStudioFilters`.
+- Per-dimension scoped options from `filterRawDataRows(...)` with normalized filters (exclude empty arrays and self dimension).
+- Empty-array-as-exclude-all behavior in `hasActiveFiltersForChannel` / `filterRawDataRows`.
+
+**Verification**
+- `npx tsc --noEmit` ✅ 0 errors.
+- `npm run build` ✅ exit 0.
+- `vitest run src/lib/__tests__/slideViewHelpers.test.ts` ✅ 27/27 pass.
+- `ReadLints` on `src/hooks/useDataStudioFilters.ts` ✅ no errors.
+
 ### Filter System Rebuild (2026-03-20)
 
 **Changes**
