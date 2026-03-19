@@ -146,10 +146,10 @@ export function slideSelectionToDateRange(selectedYear: string, selectedMonth: s
  * - Otherwise, best-effort: map to the range's start year and 'all' months.
  */
 export function dateRangeToSlideSelection(range: DateRange | undefined): { year: string; month: string } {
-  if (!range?.from || !range.to) return { year: 'all', month: 'all' };
+  if (!range?.from) return { year: 'all', month: 'all' };
 
   const from = range.from;
-  const to = range.to;
+  const to = range.to ?? from;
 
   const fromYear = from.getFullYear();
   const toYear = to.getFullYear();

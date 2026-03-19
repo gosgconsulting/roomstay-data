@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Filter, Share2, RefreshCw, Loader2, ChevronDown, X, RotateCcw } from "lucide-react";
-import { slideSelectionToDateRange, dateRangeToSlideSelection, deriveSlideDatePreset, dateRangeFromPreset, derivePresetFromDateRange } from "@/lib/monthUtils";
+import { slideSelectionToDateRange, deriveSlideDatePreset, derivePresetFromDateRange } from "@/lib/monthUtils";
 import { DateRangeFilter } from "@/components/filters";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
@@ -196,13 +196,16 @@ interface FiltersRowProps {
   selectedTab: string;
   isReadOnlyMode: boolean;
   selectedYear: string;
-  setSelectedYear: (year: string) => void;
   selectedMonth: string;
-  setSelectedMonth: (month: string) => void;
   customDateRange?: DateRange | undefined;
-  setCustomDateRange?: (range: DateRange | undefined) => void;
   comparisonType: string;
-  setComparisonType: (type: string) => void;
+  /** Unified callback when the user presses Apply in the date popover. */
+  onDateApply: (payload: {
+    range: DateRange | undefined;
+    preset: string;
+    compareEnabled: boolean;
+    compareType: string;
+  }) => void;
   onOpenFilters: () => void;
   /** Number of active filter selections — shown as badge on the Filters button */
   activeFilterCount?: number;
@@ -230,13 +233,10 @@ export function FiltersRow({
   selectedTab,
   isReadOnlyMode,
   selectedYear,
-  setSelectedYear,
   selectedMonth,
-  setSelectedMonth,
   customDateRange,
-  setCustomDateRange,
   comparisonType,
-  setComparisonType,
+  onDateApply,
   onOpenFilters,
   activeFilterCount = 0,
   filterConfigs,
@@ -300,38 +300,9 @@ export function FiltersRow({
               datePreset={customDateRange ? derivePresetFromDateRange(customDateRange) : deriveSlideDatePreset(selectedYear, selectedMonth)}
               compareEnabled={comparisonType !== "none"}
               compareType={comparisonType}
-              onDatePresetChange={(preset) => {
+              onApply={(payload) => {
                 if (isReadOnlyMode) return;
-                if (preset === "all_time") {
-                  setCustomDateRange?.(undefined);
-                  setSelectedYear("all");
-                  setSelectedMonth("all");
-                  setComparisonType("none");
-                  return;
-                }
-                const presetRange = dateRangeFromPreset(preset);
-                if (presetRange) {
-                  setCustomDateRange?.(presetRange);
-                  const next = dateRangeToSlideSelection(presetRange);
-                  setSelectedYear(next.year);
-                  setSelectedMonth(next.month);
-                  return;
-                }
-              }}
-              onDateRangeChange={(range) => {
-                if (isReadOnlyMode) return;
-                setCustomDateRange?.(range);
-                const next = dateRangeToSlideSelection(range);
-                setSelectedYear(next.year);
-                setSelectedMonth(next.month);
-              }}
-              onCompareEnabledChange={(enabled) => {
-                if (isReadOnlyMode) return;
-                setComparisonType(enabled ? "previous_period" : "none");
-              }}
-              onCompareTypeChange={(type) => {
-                if (isReadOnlyMode) return;
-                setComparisonType(type);
+                onDateApply(payload);
               }}
               presets={[
                 { id: "today", label: "Today" },

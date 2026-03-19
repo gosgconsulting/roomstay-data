@@ -18,7 +18,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
-import { dateRangeFromPreset, dateRangeToSlideSelection, derivePresetFromDateRange } from '@/lib/monthUtils';
+import { dateRangeFromPreset, dateRangeToSlideSelection, slideSelectionToDateRange } from '@/lib/monthUtils';
 import type { SlideReportConfiguration, SlideReportView } from '@/types/slideReports';
 
 type Channel = 'metasearch' | 'sem' | 'social';
@@ -372,9 +372,15 @@ export function useDataStudioFilters({
 
   const applyView = useCallback((view: SlideReportView | null) => {
     if (!view) {
-      // Reset to master (no saved filters)
+      // Reset to master — clear filters, comparison, and date back to current month
       setFilterValuesRaw(EMPTY_FILTER_VALUES);
       setComparisonTypeRaw('none');
+      const now = new Date();
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      setCustomDateRangeRaw({ from, to });
+      setSelectedYear(now.getFullYear().toString());
+      setSelectedMonth(MONTH_NAMES[now.getMonth()]);
       return;
     }
     const vf = view.filter_values || {};
@@ -388,6 +394,16 @@ export function useDataStudioFilters({
     if (view.selected_year) setSelectedYear(view.selected_year);
     if (view.selected_month) setSelectedMonth(view.selected_month);
     if (view.comparison_type) setComparisonTypeRaw(view.comparison_type);
+    // Reconstruct customDateRange from the view's year/month so the label, filtering,
+    // and query scope all agree. Without this, a stale customDateRange could override
+    // the year/month restored above.
+    if (view.selected_year) {
+      const restored = slideSelectionToDateRange(
+        view.selected_year,
+        view.selected_month || 'all'
+      );
+      setCustomDateRangeRaw(restored ?? undefined);
+    }
   }, [setSelectedYear, setSelectedMonth]);
 
   const setChannelFilterValue = useCallback((

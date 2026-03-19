@@ -340,6 +340,24 @@ export default function SlideViewPage() {
     dsFilters.setFilterConfigs(v as FilterConfigs);
   }, [dsFilters]);
 
+  // Unified handler for date popover Apply — single commit path for date + compare changes.
+  const handleDateApply = useCallback((payload: {
+    range: import("react-day-picker").DateRange | undefined;
+    preset: string;
+    compareEnabled: boolean;
+    compareType: string;
+  }) => {
+    if (payload.preset === 'all_time') {
+      dsFilters.setCustomDateRange(undefined);
+      setSelectedYear('all');
+      setSelectedMonth('all');
+      dsFilters.setComparisonType('none');
+    } else {
+      dsFilters.setCustomDateRange(payload.range);
+    }
+    dsFilters.setComparisonType(payload.compareEnabled ? payload.compareType : 'none');
+  }, [dsFilters, setSelectedYear, setSelectedMonth]);
+
   // Data Studio: show cached data immediately, then background-refresh from sources
   const isDataStudio = isDataStudioRoute || slideReport?.name === 'Data Studio';
   const [isDataStudioLoading, setIsDataStudioLoading] = useState(false);
@@ -2696,13 +2714,10 @@ export default function SlideViewPage() {
             selectedTab={selectedTab}
             isReadOnlyMode={isReadOnlyMode}
             selectedYear={selectedYear}
-            setSelectedYear={setSelectedYear}
             selectedMonth={selectedMonth}
-            setSelectedMonth={setSelectedMonth}
             customDateRange={customDateRange}
-            setCustomDateRange={setCustomDateRange}
             comparisonType={comparisonType}
-            setComparisonType={setComparisonType}
+            onDateApply={handleDateApply}
             onOpenFilters={() => dsFilters.setFilterPanelOpen(true)}
             activeFilterCount={dsFilters.activeFilterCount}
             filterConfigs={dsFilters.filterConfigs}
