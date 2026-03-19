@@ -218,14 +218,27 @@
 ## 7. Progress Tracker
 
 - [x] Phase 1 — Audit
-- [ ] Phase 2 — Canonical
-- [ ] Phase 3 — Migration
-- [ ] Phase 4 — Cleanup
-- [ ] Phase 5 — Stabilization
+- [x] Phase 2 — Canonical
+- [x] Phase 3 — Migration
+- [x] Phase 4 — Cleanup
+- [x] Phase 5 — Stabilization
 
 ---
 
 ## 8. Change Log
+
+### Refresh blank-page stabilization (2026-03-19)
+
+**Changes**
+- Removed stale `dynamicChannelTotals` reference from `useChannelMetrics` dependencies (leftover after state/path removal).
+- Removed stale dual totals callback path:
+  - `ChannelTab` no longer passes `onTotalsChange` with deleted `setBreakdownTotals`.
+  - `BreakdownTableSection` no longer runs the orphaned `onTotalsChange` effect.
+- Refresh flow now keeps Data Studio mounted after sync and cache refetch without channel-tab runtime crashes.
+
+**Verification**
+- `npm run build` ✅ exit 0
+- `npm run lint` ✅ 0 errors (warnings only)
 
 ### Phase 1 (2026-03-19)
 
@@ -279,6 +292,60 @@
 
 **Verification**
 - DB constraints validated against existing accounts. Build and lint passing.
+
+### Filter System Rebuild (2026-03-20)
+
+**Changes**
+- Deleted all fragmented Data Studio filter state from `SlideViewPage`:
+  - Removed `filterDimensionValues`, `pendingFilterValues`, `filterSearchTerms`, `openFilterPopovers`, `filterDimensionNames` state.
+  - Removed `loadFilterDimensionValues` and `loadFilterDimensionValuesAfterSave` async functions (~120 lines each).
+  - Removed two `useEffect` blocks for tab-switch and pivot-data filter option loading.
+  - Removed old `filterConfigs` `useState` and scattered `persistDimensionSettings` / `dimensionSettingsValue` fragments.
+- Created canonical `src/hooks/useDataStudioFilters.ts`:
+  - Single owner of filter state: `filterValues`, `customDateRange`, `comparisonType`, `filterConfigs`, `filterPanelOpen`.
+  - Options derived in-memory from `rawDataRows` only (no DB, no pivot fallback).
+  - Accepts externally-controlled state (`externalFilterValues` etc.) to avoid circular dependency with `useSlideReportPage`.
+  - Exposes `applyView`, `resetFilters`, `setChannelFilterValue`, `clearChannelFilter`, `persistFilterConfigs`.
+- Created canonical `src/components/slides/FilterPanel.tsx`:
+  - Sliding sheet with per-channel multi-select dimension dropdowns.
+  - Receives all state via props from `useDataStudioFilters` — no async loading.
+  - Active filter badge, clear-all, search within each dropdown.
+- Wired `FilterPanel` into `SlideViewPage` via `dsFilters.filterPanelOpen`.
+- Rewired `handleApplyView` to delegate to `dsFilters.applyView`.
+- `FiltersRow` now accepts `activeFilterCount` prop — shows badge + highlights button when active.
+- Updated `DimensionSettingsModal` integration to write through `dsFilters.persistFilterConfigs`.
+
+**Removed**
+- ~200 lines of dead/duplicate filter state and loading logic from `SlideViewPage`.
+- All async filter option loading (pivot_data + DB fallback paths).
+
+**Replaced By**
+- `useDataStudioFilters` (canonical hook).
+- `FilterPanel` (canonical UI).
+
+**Verification**
+- `npx tsc --noEmit` ✅ 0 errors (main workspace, post merge-conflict resolution).
+- Merge conflict in `SlideViewPage.tsx` resolved: kept `FilterPanel` wiring.
+- `FilterPanel.onToggleValue` prop type fixed: `string` → `string[]`.
+
+### Phase 4 Cleanup: Dead Hooks (2026-03-19)
+
+**Changes**
+- Identified and deleted fully orphaned hooks from the `src/hooks/` directory.
+
+**Removed**
+- `src/hooks/useDimensionSelector.ts`
+- `src/hooks/useMonthlyDataFiltering.ts`
+- `src/hooks/useDimensionOperations.ts`
+- `src/hooks/useDimensionGranularities.ts`
+- `src/hooks/useDimensionFilters.ts`
+- `src/hooks/useSlideViewFilters.ts`
+
+**Replaced By**
+- N/A.
+
+**Verification**
+- `npm run build` ✅ exit 0. `npm run lint` ✅ 0 errors.
 
 ---
 

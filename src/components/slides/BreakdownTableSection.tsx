@@ -26,10 +26,6 @@ import { calculateDerivedMetrics, formatNumber, filterRawDataRows, hasActiveFilt
 import { parseSelectedMonths, buildMultiMonthDateRange } from '@/lib/monthUtils';
 import type { SlideReportPivotData } from '@/types/slideReports';
 
-const GROSS_PROFIT_RATE = 0.15;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _calculateGrossProfit = (revenue: number, cost: number) => revenue * GROSS_PROFIT_RATE - cost;
-
 /** Get value from row by dimension ID or by matching dimension name in dimensionMap (row keys are dimension IDs) */
 function getDimensionValueFromRow(
   rowData: Record<string, unknown>,
@@ -70,13 +66,6 @@ export interface UnifiedBreakdownTableProps {
   customDateRange?: import('react-day-picker').DateRange | undefined;
   filterValues?: Record<string, Record<string, string[]>>;
   filterDimensionValues?: Record<string, Record<string, string[]>>;
-  onTotalsChange?: (totals: {
-    impressions: number;
-    clicks: number;
-    cost: number;
-    revenue: number;
-    bookings: number;
-  }) => void;
   /** Display currency for formatting (AUD/USD). */
   displayCurrency?: 'AUD' | 'USD';
   /** Comparison totals per channel for showing % change on total row */
@@ -110,7 +99,6 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
     customDateRange,
     filterValues,
     filterDimensionValues,
-    onTotalsChange,
     displayCurrency,
     comparisonChannelTotals,
     comparisonType,
@@ -433,13 +421,6 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
     );
     const totalMetrics = calculateDerivedMetrics(totals);
-
-    // Expose totals to parent for KPI cards synchronization
-    useEffect(() => {
-      if (onTotalsChange && selectedChannel) {
-        onTotalsChange(totals);
-      }
-    }, [totals, onTotalsChange, selectedChannel]);
 
     const groupByDim = availableDimensions.find((d) => d.id === groupBy);
     const breakdownByDim = availableDimensions.find((d) => d.id === breakdownBy);

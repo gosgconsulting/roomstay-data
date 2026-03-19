@@ -150,21 +150,18 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-        Date Range:
-      </label>
-      <Popover open={open} onOpenChange={handleOpenChange}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
+            size="sm"
             className={cn(
-              "w-[210px] justify-start text-left font-normal bg-background border-input gap-2",
+              "h-8 gap-1.5 text-sm font-normal bg-background border-input",
               !dateRange?.from && datePreset !== "all_time" && "text-muted-foreground"
             )}
           >
-            <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span className="truncate flex-1">{renderButtonLabel()}</span>
+            <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="truncate">{renderButtonLabel()}</span>
           </Button>
         </PopoverTrigger>
 
@@ -266,8 +263,7 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
             </Button>
           </div>
         </PopoverContent>
-      </Popover>
-    </div>
+    </Popover>
   );
 };
 

@@ -98,7 +98,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     groupByDimensionId,
     breakdownByDimensionId,
     selectedViewId,
-    dynamicChannelTotals,
     displayCurrency,
     audPerUsd,
   } = params;
@@ -284,7 +283,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     customDateRange,
     selectedTab,
     slideType,
-    dynamicChannelTotals,
     groupByDimensionId,
   });
 

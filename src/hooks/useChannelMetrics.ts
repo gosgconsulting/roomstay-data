@@ -48,8 +48,6 @@ interface UseChannelMetricsParams {
   filterDimensionValues: Record<string, Record<string, string[]>>;
   /** Type of slide report ('master-report', 'brady', etc.) */
   slideType: string;
-  /** Dynamic channel totals for fallback scenarios */
-  dynamicChannelTotals: Record<string, any>;
   /** Comparison type for metrics comparison */
   comparisonType: 'none' | 'previous_period' | 'previous_year';
 }
@@ -75,7 +73,6 @@ interface UseChannelMetricsParams {
  *   filterValues: { metasearch: { hotel: ['Hotel A'] } },
  *   filterDimensionValues: {},
  *   slideType: 'master-report',
- *   dynamicChannelTotals: {},
  *   comparisonType: 'previous_period'
  * });
  * ```
@@ -87,7 +84,6 @@ export function useChannelMetrics({
   filterValues,
   filterDimensionValues,
   slideType,
-  dynamicChannelTotals,
   comparisonType,
 }: UseChannelMetricsParams) {
   const ZERO_METRICS: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
@@ -136,9 +132,6 @@ export function useChannelMetrics({
   // Compute current channel totals from rawDataRows (primary path) with date + filter support.
   const currentTotals = useMemo((): ChannelMetrics => {
     if (!pivotData?.channels) {
-      if (slideType === 'master-report' && Object.keys(dynamicChannelTotals).length > 0) {
-        return dynamicChannelTotals as ChannelMetrics;
-      }
       return {
         metasearch: { ...ZERO_METRICS },
         sem: { ...ZERO_METRICS },
@@ -172,7 +165,6 @@ export function useChannelMetrics({
     filterValues,
     filterDimensionValues,
     slideType,
-    dynamicChannelTotals,
   ]);
 
   // Get comparison totals based on comparison type

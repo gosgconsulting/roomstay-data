@@ -30,6 +30,8 @@ export interface ColumnMapping {
   newDimensionType?: string;
   dateFormat?: string;
   dimensionType?: string;
+  /** Whether this dimension should appear as a breakdown/group-by option in Data Studio */
+  isBreakdown?: boolean;
 }
 
 export interface Dimension {

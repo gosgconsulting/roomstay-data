@@ -32,6 +32,16 @@ After coding:
 
 ## Active tasks
 
+### Refresh blank page hotfix (2026-03-19)
+
+- [x] **RB-1** — Fixed runtime crash in `useChannelMetrics`: removed stale `dynamicChannelTotals` dependency reference left after refactor.
+- [x] **RB-2** — Eliminated stale dual-totals callback path: removed `onTotalsChange`/`setBreakdownTotals` usage from `ChannelTab` and removed leftover `onTotalsChange` effect block from `BreakdownTableSection`.
+- [x] **RB-3** — End-to-end refresh path stabilized for Data Studio tabs (overview + channel breakdown rendering no longer references deleted state callbacks).
+
+**Verification:** `npm run build` ✅ (exit 0), `npm run lint` ✅ (0 errors, warnings only).
+
+---
+
 ### Project doc planner — Next steps implemented (2026-03-19)
 
 - [x] **NS-2** — debug.ts → `src/lib/utils/retry.ts` + `src/lib/utils/dimensionFilter.ts`; deleted debug.ts.
@@ -351,6 +361,50 @@ Full plan, brief fixes, and new-table/migration notes: **docs/REFACTOR_UNIFY_PLA
 
 ---
 
+### Dead code removal — hooks (2026-03-19)
+
+- [x] **DC-4** — Deleted unused hooks: `useDimensionSelector.ts`, `useMonthlyDataFiltering.ts`, `useDimensionOperations.ts`, `useDimensionGranularities.ts`, `useDimensionFilters.ts`, `useSlideViewFilters.ts` (all completely orphaned, no imports).
+
+**Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors).
+
+---
+
+### Filter system rebuild (2026-03-20)
+
+- [x] **FLT-1** — Created `src/hooks/useDataStudioFilters.ts`: canonical owner of all Data Studio filter state (`filterValues`, `customDateRange`, `comparisonType`, `filterConfigs`, `filterPanelOpen`). Options derived in-memory from `rawDataRows` only — no DB or pivot fallback. Supports externally-controlled state to avoid circular dependency with `useSlideReportPage`.
+- [x] **FLT-2** — Created `src/components/slides/FilterPanel.tsx`: sliding Sheet UI for filter dropdowns. Per-channel multi-select with search, active count badge, clear-all. No async loading — receives options via props.
+- [x] **FLT-3** — Rewired `SlideViewPage`: removed ~200 lines of fragmented filter state and loading logic (`filterDimensionValues`, `pendingFilterValues`, `filterSearchTerms`, `openFilterPopovers`, `filterDimensionNames`, `loadFilterDimensionValues`, `loadFilterDimensionValuesAfterSave`, two loading `useEffect` blocks). Wired `dsFilters` as canonical state; `handleApplyView` delegates to `dsFilters.applyView`; `FilterPanel` rendered in JSX.
+- [x] **FLT-4** — Updated `FiltersRow`: accepts `activeFilterCount` prop, shows badge + highlights Filters button when active. Removed unused dead imports.
+
+**Verification:** `npx tsc --noEmit` ✅ (0 errors).
+
+---
+
+### Column mapping — Filter & Breakdown inline (2026-03-20)
+
+Moved Filter and Breakdown configuration out of the "Report Settings" wizard and into the column mapping modal directly on Data Sources.
+
+- [x] **CM-1** — `ColumnMapping` type extended with `isFilter?: boolean` and `isBreakdown?: boolean` in `src/lib/data-sources/types.ts`.
+- [x] **CM-2** — `ColumnMappingStep.tsx` redesigned: added **Filter** and **Breakdown** checkbox columns to the mapping table. Only text-type dimensions can be checked. Dimension type badge shown inline. Summary badges at top show active filter/breakdown count.
+- [x] **CM-3** — `EditMappingModal.tsx` rewritten: loads `slide_reports.configuration` on open, enriches existing `column_mappings` with `isFilter`/`isBreakdown` from `filterConfigs`/`breakdownConfigs`. On save, writes both `data_sources.column_mappings` AND updates `slide_reports.configuration.filterConfigs` + `breakdownConfigs` to reflect the checkbox state. Improved header UX with description and settings note.
+- [x] **CM-4** — `EditSourceModal` (Report Settings wizard) reduced from 5 steps to 3: removed Breakdown (step 4) and Filters (step 5). Info note on step 3 points users to the column mapping modal. `useEditSourceModal.handleNext` now saves on step 3. `SlideViewPage.handleNext` / `handleBack` simplified accordingly.
+- [x] **CM-5** — `DataSourcesPage` actions updated: Settings icon opens `EditMappingModal` (column mappings with filter/breakdown inline). Ghost button style, cleaner action row.
+
+**Verification:** `npx tsc --noEmit` ✅ (0 errors), `npm run build` ✅ (exit 0, 13.93s).
+
+---
+
+### Filter panel redesign — inline dropdowns + dimension toggle (2026-03-20)
+
+- [x] **FP-1** — `FilterPanel.tsx` redesigned: left-side channel tabs (Metasearch / SEM / Social) with active-count badges; right panel split into two zones: **Filter dimensions** (checkbox list to activate/deactivate which dimensions appear as filter dropdowns) and **Apply filters** (value multi-select dropdowns for active dims). Replacing the old flat single-column Sheet.
+- [x] **FP-2** — `FilterPanel` accepts two new props: `availableDimensions` (text dims per channel from `breakdownDimensions`) and `onToggleDimension` (calls existing `handleFilterDimensionToggle`). Toggling a checkbox updates `slide_reports.configuration.filterConfigs` immediately via `persistFilterConfigs`.
+- [x] **FP-3** — `FiltersRow.tsx` redesigned: active filter dropdowns now render **inline next to the date range pill** (separated by a divider). New props: `filterConfigs`, `filterOptions`, `filterValues`, `dimensionNames`, `onToggleFilterValue`, `onClearFilter`. Dropdowns only appear when a dimension has available options derived from raw data rows.
+- [x] **FP-4** — `SlideViewPage` wired: `FiltersRow` and `FilterPanel` both receive the new props. `availableDimensions` sourced from `breakdownDimensions` (text-only). No duplicate state introduced.
+
+**Verification:** `npx tsc --noEmit` ✅ (0 errors), `npm run build` ✅ (exit 0, 18.89s).
+
+---
+
 ### Next steps
 
 - [x] **NS-1** — Audit `run-refresh-workflow`: removed legacy `refresh-slide-report` branch; workflow now only resyncs data sources (no slide_report_* cache refresh). See REFACTOR.md Remaining work.
@@ -439,6 +493,7 @@ Full cleanup of the codebase to a pure Looker Studio-style reporting dashboard �
 - [x] **DC-1** — Deleted `SlidesPage.tsx` (not in router; zero imports).
 - [ ] **DC-2** — **Not a dead page:** `ForecastingPage.tsx` is used by `ForecastingDashboard` (keep).
 - [x] **DC-3** — Deleted `ReportDashboard.tsx` (not in router; zero imports).
+- [x] **DC-4** — Deleted unused hooks: `useDimensionSelector.ts`, `useMonthlyDataFiltering.ts`, `useDimensionOperations.ts`, `useDimensionGranularities.ts`, `useDimensionFilters.ts`, `useSlideViewFilters.ts`.
 
 ---
 
@@ -537,8 +592,15 @@ _None currently._
 
 ## Verification baseline
 
-Last verified: **2026-03-19** (post Next steps NS-2–NS-5)
+### Filter panel bug fixes (2026-03-20)
 
-- `npm run build` ✅ (exit 0)
-- `npm run lint` ✅ (0 errors, warnings only)
+- [x] **FIX-1** — "Filter settings saved" toast always popped on page load and after any save. Root cause: `setFilterConfigs` alias in `SlideViewPage` was calling `dsFilters.persistFilterConfigs` (which triggers a DB write + toast), so the sync-from-slideReport `useEffect` at line 905 was triggering a spurious DB write every time the report config loaded. Also, `persistDimensionSettings` was calling both `dsFilters.persistFilterConfigs` AND its own `updateSlideReport` — causing double writes and double toasts. Fixed: `setFilterConfigs` alias now calls `dsFilters.setFilterConfigs` (local state only). `persistDimensionSettings` now calls `dsFilters.setFilterConfigs` and handles its own single DB write.
+- [x] **FIX-2** — Filter dropdown buttons showed raw UUIDs instead of dimension names. Root cause: `filterDimensionNames` only mapped report-specific row IDs → names, but `filterDimensionIds` in config may store global IDs not present as keys in the dimMap. Fixed: `filterDimensionNames` memo in `useDataStudioFilters` now also resolves configured filter dimension IDs to names via `resolveFilterDimKey` (same ID-matching logic used for `filterOptions`).
+
+**Verification:** `npx tsc --noEmit` ✅ 0 errors.
+
+Last verified: **2026-03-20** (post filter system rebuild FLT-1–FLT-4, merge conflicts resolved)
+
+- `npx tsc --noEmit` ✅ (0 errors, main workspace)
+- All linter output is CodeScene/ESLint warnings only — no errors.
 - E2E reports: Data Studio (/) and shared reports; loading/empty states prevent blank page when account or report is missing

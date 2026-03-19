@@ -432,7 +432,7 @@ export const buildMetricNameToIdsMap = (
     for (const [standardName, variations] of Object.entries(metricVariations)) {
       if (
         variations.some(
-          (v) => normalizedName.includes(v) || v.includes(normalizedName)
+          (v) => normalizedName === v
         )
       ) {
         if (!nameToIds[standardName]) {
@@ -619,4 +619,33 @@ export const ensureMinimumChartData = <T extends { year: number; month: string }
   
   // Take last minMonths available (or all if less than minMonths)
   return allUpToRecent.slice(-minMonths);
+};
+/**
+ * Check if a metrics object has any non-zero data
+ */
+export const hasAnyData = (metrics: MetricData | undefined | null): boolean => {
+  if (!metrics) return false;
+  return metrics.impressions > 0 || metrics.clicks > 0 || metrics.cost > 0 || metrics.revenue > 0 || metrics.bookings > 0;
+};
+
+/**
+ * Get the effective totals for a channel, preferring currentTotals but falling back to breakdownTotals if needed
+ */
+export const getEffectiveTotals = (
+  channel: string,
+  currentTotals: Record<string, MetricData>,
+  breakdownTotals: Record<string, MetricData>
+): MetricData => {
+  const ct = currentTotals[channel];
+  const bt = breakdownTotals[channel];
+  const ctHasData = hasAnyData(ct);
+  const btHasData = hasAnyData(bt);
+  return ctHasData ? ct : (btHasData ? bt : ct);
+};
+/**
+ * Check if any channel in a totals record has non-zero data
+ */
+export const hasAnyChannelData = (totals: Record<string, MetricData>): boolean => {
+  if (!totals) return false;
+  return Object.values(totals).some(hasAnyData);
 };

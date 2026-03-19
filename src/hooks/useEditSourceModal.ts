@@ -15,7 +15,8 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 /**
- * Modal step type (1-5 step wizard)
+ * Modal step type (1-3 step wizard: channels → value dimensions → data source)
+ * Filter and breakdown dimensions are now configured directly in the column mapping modal.
  */
 export type ModalStep = 1 | 2 | 3 | 4 | 5;
 
@@ -104,7 +105,8 @@ export function useEditSourceModal(
   );
 
   const handleNext = useCallback(() => {
-    if (modalStep < 5) {
+    // Cap at step 3 — steps 4 and 5 (filters/breakdown) are now in the column mapping modal
+    if (modalStep < 3) {
       setModalStep((modalStep + 1) as ModalStep);
     }
   }, [modalStep]);

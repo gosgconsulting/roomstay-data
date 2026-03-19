@@ -5,9 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Settings2, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
-import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
-
-const GROSS_PROFIT_RATE = 0.15;
+import { calculateDerivedMetrics, calculatePercentChange, formatNumber, getEffectiveTotals, hasAnyChannelData } from "@/lib/slideViewHelpers";
 
 interface OverviewTabProps {
   slideReportId: string | null;
@@ -16,7 +14,6 @@ interface OverviewTabProps {
   isLoadingData: boolean;
   isLoadingMonthlyData: boolean;
   currentTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
-  breakdownTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   overviewChartData: Array<{ label: string; total: number }>;
   comparisonChartData?: Array<{ label: string; total: number }> | null;
   chartTimeRange: 'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months';
@@ -46,16 +43,6 @@ interface OverviewTabProps {
   comparisonType?: string;
 }
 
-const hasAnyData = (totals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>): boolean => {
-  return Object.values(totals).some(channel => 
-    channel.impressions > 0 || 
-    channel.clicks > 0 || 
-    channel.cost > 0 || 
-    channel.revenue > 0 || 
-    channel.bookings > 0
-  );
-};
-
 function PercentChangeBadge({ current, previous, isCostMetric = false }: { current: number; previous: number; isCostMetric?: boolean }) {
   const pct = calculatePercentChange(current, previous);
   if (pct === null) return null;
@@ -76,7 +63,6 @@ export function OverviewTab({
   isLoadingData,
   isLoadingMonthlyData,
   currentTotals,
-  breakdownTotals,
   overviewChartData,
   comparisonChartData,
   chartTimeRange,
@@ -131,11 +117,7 @@ export function OverviewTab({
         renderKPICards(
           Object.keys(currentTotals).length > 0
             ? (() => {
-                const getEffective = (ch: string) => {
-                  const bt = breakdownTotals[ch];
-                  const ct = currentTotals[ch] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-                  return (bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0)) ? bt : ct;
-                };
+                const getEffective = (ch: string) => currentTotals[ch] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
                 const metasearchData = getEffective('metasearch');
                 const semData = getEffective('sem');
                 const socialData = getEffective('social');
@@ -270,12 +252,7 @@ export function OverviewTab({
                     const channels = ['metasearch', 'sem', 'social'];
                     const rows = channels.map(channel => {
                       const channelKey = channel as 'metasearch' | 'sem' | 'social';
-                      const ct = filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-                      const bt = breakdownTotals[channelKey];
-                      // Prefer breakdownTotals (aggregated from table rows) — same pattern as ChannelTab
-                      const data = (bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0))
-                        ? bt
-                        : ct;
+                      const data = filteredData.channelTotals[channelKey] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
                       const derived = calculateDerivedMetrics(data);
                       const compData = showComparison && comparisonTotals?.[channelKey];
                       const hasCompData = compData && ((compData.impressions || 0) > 0 || (compData.clicks || 0) > 0 || (compData.cost || 0) > 0 || (compData.revenue || 0) > 0 || (compData.bookings || 0) > 0);

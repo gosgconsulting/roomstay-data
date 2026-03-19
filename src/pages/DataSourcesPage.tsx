@@ -12,13 +12,12 @@ import {
 } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Plus, ArrowLeft, FileSpreadsheet, RefreshCw, Trash2, Eye, Settings, Pencil, Check, X } from "lucide-react";
+import { Plus, ArrowLeft, FileSpreadsheet, RefreshCw, Trash2, Eye, Settings2, Pencil, Check, X } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { DataSourceSelectionModal } from "@/components/DataSourceSelectionModal";
 import { UnifiedDataSourceModal } from "@/components/UnifiedDataSourceModal";
 import { ViewDataModal } from "@/components/ViewDataModal";
 import { EditMappingModal } from "@/components/EditMappingModal";
-import { EditDataSourceModal } from "@/components/EditDataSourceModal";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -71,7 +70,6 @@ export default function DataSourcesPage() {
   const [editingDataSource, setEditingDataSource] = useState<DataSource | null>(null);
   const [showViewDataModal, setShowViewDataModal] = useState(false);
   const [showEditMappingModal, setShowEditMappingModal] = useState(false);
-  const [showEditDataSourceModal, setShowEditDataSourceModal] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingDataSource, setDeletingDataSource] = useState<DataSource | null>(null);
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
@@ -491,46 +489,49 @@ export default function DataSourcesPage() {
                               : 'Never'}
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1.5">
                               <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                 onClick={() => {
                                   setViewingDataSource(dataSource);
                                   setShowViewDataModal(true);
                                 }}
-                                title="View Data"
+                                title="View data"
                               >
                                 <Eye className="h-4 w-4" />
                               </Button>
                               <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                 onClick={() => {
                                   setEditingDataSource(dataSource);
                                   setShowEditMappingModal(true);
                                 }}
-                                title="Edit Mapping"
+                                title="Edit column mappings"
                               >
-                                <Settings className="h-4 w-4" />
+                                <Settings2 className="h-4 w-4" />
                               </Button>
                               <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
                                 onClick={() => handleSync(dataSource)}
                                 disabled={isSyncing !== null}
-                                title="Sync Data"
+                                title="Sync data"
                               >
                                 <RefreshCw className={`h-4 w-4 ${isSyncing === dataSource.id ? 'animate-spin' : ''}`} />
                               </Button>
                               <Button
-                                variant="outline"
+                                variant="ghost"
                                 size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                 onClick={() => {
                                   setDeletingDataSource(dataSource);
                                   setDeleteConfirmOpen(true);
                                 }}
-                                className="text-destructive hover:text-destructive"
                                 title="Delete"
                               >
                                 <Trash2 className="h-4 w-4" />

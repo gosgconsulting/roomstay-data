@@ -82,9 +82,14 @@ async function fetchByDateRpc(
     p_date_dim_id: dateDimId,
     p_year: year,
     p_month: month,
-    p_max_rows: 200000,
+    p_max_rows: 500000,
   });
   if (error) throw error;
+  
+  if (data && data.length >= 500000) {
+    console.warn(`[fetchByDateRpc] Warning: Returned row count (${data.length}) hit the hard cap of 500,000 for report ${reportId}. Data may be truncated.`);
+  }
+
   // RPC returns SETOF jsonb — each element is a dimension_values object
   return (data || []).map((dv: Record<string, any>) => ({ ...dv }));
 }

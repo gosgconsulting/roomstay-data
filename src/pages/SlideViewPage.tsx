@@ -41,7 +41,9 @@ import { EditSourceModal } from "@/components/slides/EditSourceModal/EditSourceM
 import { ShareModal } from "@/components/ShareModal";
 import { ReportSidebar } from "@/components/slides/ReportSidebar";
 import { FiltersRow } from "@/components/slides/FiltersRow";
+import { FilterPanel } from "@/components/slides/FilterPanel";
 import { DimensionSettingsModal, type DimensionSettingsMode, type DimensionSettingsModalValue } from "@/components/slides/DimensionSettingsModal";
+import { useDataStudioFilters, type FilterConfigs } from "@/hooks/useDataStudioFilters";
 import { ComparisonBanner } from "@/components/slides/ComparisonBanner";
 
 import { OverviewTab } from "@/components/slides/OverviewTab";
@@ -124,10 +126,18 @@ export default function SlideViewPage() {
 
   const [selectedYear, setSelectedYear] = useState(currentYearStr); // Default to current year
   const [selectedMonth, setSelectedMonth] = useState(currentMonthName); // Default to current month
-  // Exact date range override — when set, filtering uses precise from/to dates instead of month boundaries
+  // These are declared here so useSlideReportPage (called below) can receive them.
+  // useDataStudioFilters receives them as controlled state so it becomes the single manager.
   const [customDateRange, setCustomDateRange] = useState<import("react-day-picker").DateRange | undefined>(undefined);
-  const [selectedTab, setSelectedTab] = useState("overview");
   const [comparisonType, setComparisonType] = useState("none");
+  const [filterValues, setFilterValues] = useState<Record<string, Record<string, string[]>>>({
+    metasearch: {},
+    sem: {},
+    social: {},
+    'price-check': {},
+    booking: {},
+  });
+  const [selectedTab, setSelectedTab] = useState("overview");
   const [chartTimeRange, setChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
   const [priceCheckChartTimeRange, setPriceCheckChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
   // Per-channel breakdown table dimensions.
@@ -143,25 +153,10 @@ export default function SlideViewPage() {
     setGroupByDimensionRaw(prev => ({ ...prev, [channel]: value }));
   const setBreakdownByDimension = (channel: string, value: string) =>
     setBreakdownByDimensionRaw(prev => ({ ...prev, [channel]: value }));
-  const [selectedViewId, setSelectedViewId] = useState<string | null>(null); // Selected view ID (null = Master, 'unsaved' = Unsaved)
-  // Filter state (declared early for useSlideReportPage)
-  const [filterValues, setFilterValues] = useState({
-    metasearch: {},
-    sem: {},
-    social: {},
-    'price-check': {},
-    'booking': {},
-  } as Record<string, Record<string, string[]>>);
-  const [filterDimensionValues, setFilterDimensionValues] = useState({
-    metasearch: {},
-    sem: {},
-    social: {},
-  } as Record<string, Record<string, string[]>>);
-  const [filterValuesLoading, setFilterValuesLoading] = useState({
-    metasearch: {},
-    sem: {},
-    social: {},
-  } as Record<string, Record<string, boolean>>);
+  const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
+  // filterValues, customDateRange, comparisonType are now owned by useDataStudioFilters (below).
+  // filterDimensionValues is derived from rawDataRows inside useDataStudioFilters.
+  const filterDimensionValues: Record<string, Record<string, string[]>> = { metasearch: {}, sem: {}, social: {} };
   const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = useState(false);
   const [isSaveOrUpdateViewDialogOpen, setIsSaveOrUpdateViewDialogOpen] = useState(false);
   const isApplyingViewRef = useRef(false); // Track when we're applying a view to avoid triggering "Unsaved"
@@ -261,6 +256,89 @@ export default function SlideViewPage() {
     deleteView,
   } = reportPage;
   const queryClient = useQueryClient();
+
+  // ── Canonical Data Studio filter state ───────────────────────────────────────
+  // Derive initial filter config from the loaded slide report.
+  const initialFilterConfigs: FilterConfigs = useMemo(() => {
+    const cfg = slideReport?.configuration;
+    return {
+      metasearch: { filterDimensionIds: cfg?.filterConfigs?.metasearch?.filterDimensionIds ?? [] },
+      sem: { filterDimensionIds: cfg?.filterConfigs?.sem?.filterDimensionIds ?? [] },
+      social: { filterDimensionIds: cfg?.filterConfigs?.social?.filterDimensionIds ?? [] },
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideReport?.configuration?.filterConfigs?.metasearch?.filterDimensionIds?.join(','),
+      slideReport?.configuration?.filterConfigs?.sem?.filterDimensionIds?.join(','),
+      slideReport?.configuration?.filterConfigs?.social?.filterDimensionIds?.join(',')]);
+
+  const persistFilterConfigs = useCallback(async (next: FilterConfigs) => {
+    if (!slideReportId || !user) return;
+    const prevConfig = (slideReport?.configuration || {}) as any;
+    const configuration = {
+      ...prevConfig,
+      filterConfigs: {
+        ...(prevConfig.filterConfigs || {}),
+        metasearch: { filterDimensionIds: next.metasearch.filterDimensionIds },
+        sem: { filterDimensionIds: next.sem.filterDimensionIds },
+        social: { filterDimensionIds: next.social.filterDimensionIds },
+      },
+    };
+    try {
+      await updateSlideReport.mutateAsync({ id: slideReportId, configuration } as any);
+      toast({ title: 'Filter settings saved' });
+    } catch {
+      toast({ title: 'Failed to save filter settings', variant: 'destructive' });
+    }
+  }, [slideReportId, slideReport?.configuration, updateSlideReport, user]);
+
+  // breakdownDimensions must be declared here (before dsFilters) so configuredDimensionNames
+  // can be derived from it and passed into the filter hook for global-ID → name resolution.
+  const [breakdownDimensions, setBreakdownDimensions] = useState<Record<string, Dimension[]>>({
+    metasearch: [],
+    sem: [],
+    social: [],
+  });
+
+  // Build a flat globalDimensionId → name map from breakdownDimensions.
+  // Allows useDataStudioFilters to resolve configured filter IDs (global UUIDs) to the
+  // report-specific row keys used in rawDataRows.
+  const configuredDimensionNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const dims of Object.values(breakdownDimensions)) {
+      for (const d of dims) {
+        if (d.id && d.name) map[d.id] = d.name;
+      }
+    }
+    return map;
+  }, [breakdownDimensions]);
+
+  const dsFilters = useDataStudioFilters({
+    effectivePivotData: effectivePivotData as any,
+    initialFilterConfigs,
+    onPersistFilterConfigs: persistFilterConfigs,
+    views,
+    isReadOnly: isReadOnlyMode,
+    // Pass externally-declared state so useSlideReportPage keeps working.
+    externalFilterValues: filterValues,
+    setExternalFilterValues: setFilterValues as any,
+    externalCustomDateRange: customDateRange,
+    setExternalCustomDateRange: setCustomDateRange,
+    externalComparisonType: comparisonType,
+    setExternalComparisonType: setComparisonType,
+    selectedYear,
+    setSelectedYear,
+    selectedMonth,
+    setSelectedMonth,
+    configuredDimensionNames,
+  });
+
+  // Expose dsFilters.filterConfigs as a local alias.
+  // setFilterConfigs only updates local state — does NOT persist to DB.
+  // Use dsFilters.persistFilterConfigs() to both update state AND write to DB.
+  const filterConfigs = dsFilters.filterConfigs;
+  const setFilterConfigs = useCallback((v: Record<string, { filterDimensionIds: string[] }>) => {
+    dsFilters.setFilterConfigs(v as FilterConfigs);
+  }, [dsFilters]);
 
   // Data Studio: show cached data immediately, then background-refresh from sources
   const isDataStudio = isDataStudioRoute || slideReport?.name === 'Data Studio';
@@ -874,223 +952,9 @@ export default function SlideViewPage() {
     }
   }, [slideReport, slideReportId, availableChannels]);
 
-  // Load filter dimension values and names from pivot_data (pre-computed) instead of loading from database
-  useEffect(() => {
-    const loadFilterValuesFromPivotData = async () => {
-      const pivotData = effectivePivotData;
-      const config = slideReport?.configuration as SlideReportConfiguration | null;
+  // Filter option loading is now handled by useDataStudioFilters (derived from rawDataRows in memory).
 
-      if (!pivotData?.channels || !config?.filterConfigs || availableChannels.length === 0) {
-        return;
-      }
-
-      // Filter to only include channels that have reports
-      const validChannels = (config.selectedChannels || []).filter(channel =>
-        availableChannels.includes(channel)
-      );
-
-      const updatedFilterDimensionValues: Record<string, Record<string, string[]>> = {
-        metasearch: {},
-        sem: {},
-        social: {},
-      };
-      const updatedFilterDimensionNames: Record<string, Record<string, string>> = {
-        metasearch: {},
-        sem: {},
-        social: {},
-      };
-
-      let hasValues = false;
-
-      for (const channel of validChannels) {
-        const channelData = pivotData.channels[channel];
-        const filterConfig = config.filterConfigs?.[channel];
-
-        if (!channelData || !filterConfig?.filterDimensionIds?.length) continue;
-
-        // Check if we have pre-computed filter values in pivot_data
-        const filterUniqueValues = (channelData as any).filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
-
-        if (filterUniqueValues) {
-          // Use pre-computed values from pivot_data (fast path - no DB query needed)
-          for (const filterDimId of filterConfig.filterDimensionIds) {
-            const filterData = filterUniqueValues[filterDimId];
-            if (filterData) {
-              updatedFilterDimensionValues[channel][filterDimId] = filterData.values;
-              updatedFilterDimensionNames[channel][filterDimId] = filterData.name;
-              hasValues = true;
-            }
-          }
-        } else {
-          // Fallback: Load from database (for old reports without pre-computed values)
-          for (const filterDimId of filterConfig.filterDimensionIds) {
-            const values = await loadFilterDimensionValues(channel, filterDimId);
-            if (values.length > 0) {
-              updatedFilterDimensionValues[channel][filterDimId] = values;
-              hasValues = true;
-            }
-          }
-
-          // Fetch dimension names for fallback path
-          const uniqueIds = [...new Set(filterConfig.filterDimensionIds)];
-          if (uniqueIds.length > 0) {
-            const { data: dimensionInfo } = await supabase
-              .from('dimensions')
-              .select('id, name')
-              .in('id', uniqueIds);
-
-            if (dimensionInfo) {
-              for (const dim of dimensionInfo) {
-                updatedFilterDimensionNames[channel][dim.id] = dim.name;
-              }
-            }
-          }
-        }
-      }
-
-      if (hasValues) {
-        setFilterDimensionValues(prev => ({ ...prev, ...updatedFilterDimensionValues }));
-      }
-      if (Object.values(updatedFilterDimensionNames).some(ch => Object.keys(ch).length > 0)) {
-        setFilterDimensionNames(prev => ({ ...prev, ...updatedFilterDimensionNames }));
-      }
-    };
-
-    loadFilterValuesFromPivotData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectivePivotData, slideReport?.configuration?.filterConfigs]);
-
-  // Load filter dimension values when switching to a channel tab that has filters
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadValuesForCurrentTab = async () => {
-      if (selectedTab === 'overview' || selectedTab === 'budget') return;
-      if (cancelled) return;
-
-      const currentChannel = selectedTab as 'metasearch' | 'sem' | 'social';
-      const savedFilterConfigs = slideReport?.configuration?.filterConfigs?.[currentChannel];
-      const localFilterConfig = filterConfigs?.[currentChannel];
-      const filterDimIds = savedFilterConfigs?.filterDimensionIds || localFilterConfig?.filterDimensionIds || [];
-
-      if (filterDimIds.length === 0) return;
-
-      // Check if values are already loaded
-      const hasAllValues = filterDimIds.every(id =>
-        filterDimensionValues[currentChannel]?.[id]?.length > 0
-      );
-
-      if (hasAllValues) {
-        return;
-      }
-
-      // First, try to get values from pivot_data (pre-computed; uses channel data from tables when available)
-      const channelData = effectivePivotData?.channels?.[currentChannel];
-      const filterUniqueValues = (channelData as any)?.filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
-
-      const newValues: Record<string, string[]> = {};
-      const newNames: Record<string, string> = {};
-      const missingDimIds: string[] = [];
-
-      // Also check rawDataRows as a fast fallback (in-memory, no DB query)
-      const rawDataRows = (channelData as any)?.rawDataRows as any[] | undefined;
-
-      for (const filterDimId of filterDimIds) {
-        if (filterDimensionValues[currentChannel]?.[filterDimId]?.length > 0) continue;
-
-        // FASTEST: Check pre-computed filterUniqueValues from pivot_data first
-        if (filterUniqueValues?.[filterDimId]) {
-          newValues[filterDimId] = filterUniqueValues[filterDimId].values;
-          newNames[filterDimId] = filterUniqueValues[filterDimId].name;
-        } else if (rawDataRows && rawDataRows.length > 0) {
-          // FAST: Extract from rawDataRows (already in memory)
-          const uniqueValues = new Set<string>();
-          for (const row of rawDataRows) {
-            const rowData = row.dimension_values || row;
-            const value = rowData[filterDimId];
-            if (value !== undefined && value !== null && String(value).trim() !== '') {
-              uniqueValues.add(String(value).trim());
-            }
-          }
-          const sortedValues = Array.from(uniqueValues).sort();
-          if (sortedValues.length > 0) {
-            newValues[filterDimId] = sortedValues;
-            // Try to get dimension name from dimensionMap or dimensions list
-            const dimName = (channelData as any)?.dimensionMap?.[filterDimId]
-              || dimensions[currentChannel]?.find(d => d.id === filterDimId)?.name
-              || filterDimId;
-            newNames[filterDimId] = dimName;
-          } else {
-            missingDimIds.push(filterDimId);
-          }
-        } else {
-          missingDimIds.push(filterDimId);
-        }
-      }
-
-      // SLOW: Fallback to database only if needed (load in parallel for speed)
-      if (missingDimIds.length > 0 && !cancelled) {
-        // Set loading state
-        setFilterValuesLoading(prev => {
-          const updated = { ...prev };
-          if (!updated[currentChannel]) updated[currentChannel] = {};
-          missingDimIds.forEach(id => {
-            updated[currentChannel][id] = true;
-          });
-          return updated;
-        });
-
-        const loadPromises = missingDimIds.map(filterDimId =>
-          loadFilterDimensionValues(currentChannel, filterDimId).then(values => {
-            if (cancelled) return;
-            if (values.length > 0) {
-              newValues[filterDimId] = values;
-            }
-            // Clear loading state for this dimension
-            if (!cancelled) {
-              setFilterValuesLoading(prev => ({
-                ...prev,
-                [currentChannel]: {
-                  ...prev[currentChannel],
-                  [filterDimId]: false,
-                },
-              }));
-            }
-          })
-        );
-
-        await Promise.all(loadPromises);
-      }
-
-      if (cancelled) return;
-
-      if (Object.keys(newValues).length > 0) {
-        setFilterDimensionValues(prev => ({
-          ...prev,
-          [currentChannel]: {
-            ...prev[currentChannel],
-            ...newValues,
-          },
-        }));
-      }
-      if (Object.keys(newNames).length > 0) {
-        setFilterDimensionNames(prev => ({
-          ...prev,
-          [currentChannel]: {
-            ...prev[currentChannel],
-            ...newNames,
-          },
-        }));
-      }
-    };
-
-    loadValuesForCurrentTab();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTab, effectivePivotData, slideReport?.configuration?.filterConfigs]);
+  // Tab-switch filter option loading is now handled by useDataStudioFilters (rawDataRows in memory).
 
   // Open modal if ?edit=true in URL
   useEffect(() => {
@@ -1178,42 +1042,36 @@ export default function SlideViewPage() {
     social: { breakdownDimensionIds: [] },
   });
 
-  // Filter configuration state
+  // Filter configuration state — initially empty, populated once slideReport loads (see effect below)
   interface FilterConfig {
     filterDimensionIds: string[];
   }
-  const [filterConfigs, setFilterConfigs] = useState<Record<string, FilterConfig>>({
-    metasearch: { filterDimensionIds: [] },
-    sem: { filterDimensionIds: [] },
-    social: { filterDimensionIds: [] },
-  });
 
   const [dimensionSettingsOpen, setDimensionSettingsOpen] = useState(false);
   const [dimensionSettingsMode, setDimensionSettingsMode] = useState<DimensionSettingsMode>("filters");
   const [dimensionSettingsInitialChannel, setDimensionSettingsInitialChannel] = useState<"metasearch" | "sem" | "social">("metasearch");
 
-  const dimensionSettingsValue: DimensionSettingsModalValue = useMemo(() => {
-    return {
-      filtersByChannel: {
-        metasearch: filterConfigs.metasearch?.filterDimensionIds || [],
-        sem: filterConfigs.sem?.filterDimensionIds || [],
-        social: filterConfigs.social?.filterDimensionIds || [],
-      },
-      breakdownsByChannel: {
-        metasearch: breakdownConfigs.metasearch?.breakdownDimensionIds || [],
-        sem: breakdownConfigs.sem?.breakdownDimensionIds || [],
-        social: breakdownConfigs.social?.breakdownDimensionIds || [],
-      },
-    };
-  }, [breakdownConfigs, filterConfigs]);
+  const dimensionSettingsValue: DimensionSettingsModalValue = useMemo(() => ({
+    filtersByChannel: {
+      metasearch: filterConfigs.metasearch?.filterDimensionIds || [],
+      sem: filterConfigs.sem?.filterDimensionIds || [],
+      social: filterConfigs.social?.filterDimensionIds || [],
+    },
+    breakdownsByChannel: {
+      metasearch: breakdownConfigs.metasearch?.breakdownDimensionIds || [],
+      sem: breakdownConfigs.sem?.breakdownDimensionIds || [],
+      social: breakdownConfigs.social?.breakdownDimensionIds || [],
+    },
+  }), [filterConfigs, breakdownConfigs]);
 
   const persistDimensionSettings = useCallback(async (next: DimensionSettingsModalValue) => {
-    setFilterConfigs((prev) => ({
-      ...prev,
+    const nextFilterConfigs: import('@/hooks/useDataStudioFilters').FilterConfigs = {
       metasearch: { filterDimensionIds: next.filtersByChannel.metasearch || [] },
       sem: { filterDimensionIds: next.filtersByChannel.sem || [] },
       social: { filterDimensionIds: next.filtersByChannel.social || [] },
-    }));
+    };
+    // Update local state only — this function handles its own DB write below.
+    dsFilters.setFilterConfigs(nextFilterConfigs);
 
     setBreakdownConfigs((prev) => ({
       ...prev,
@@ -1223,15 +1081,14 @@ export default function SlideViewPage() {
     }));
 
     if (!slideReportId || !user) return;
-
     const prevConfig = (slideReport?.configuration || {}) as any;
     const configuration = {
       ...prevConfig,
       filterConfigs: {
         ...(prevConfig.filterConfigs || {}),
-        metasearch: { filterDimensionIds: next.filtersByChannel.metasearch || [] },
-        sem: { filterDimensionIds: next.filtersByChannel.sem || [] },
-        social: { filterDimensionIds: next.filtersByChannel.social || [] },
+        ...Object.fromEntries(
+          Object.entries(nextFilterConfigs).map(([k, v]) => [k, v])
+        ),
       },
       breakdownConfigs: {
         ...(prevConfig.breakdownConfigs || {}),
@@ -1240,46 +1097,13 @@ export default function SlideViewPage() {
         social: { breakdownDimensionIds: next.breakdownsByChannel.social || [] },
       },
     };
-
     try {
-      await updateSlideReport.mutateAsync({
-        id: slideReportId,
-        configuration,
-      } as any);
-      toast({
-        title: "Settings saved",
-        description: "Breakdown and filter dimension settings have been saved.",
-      });
-    } catch (e) {
-      console.error("Failed to persist dimension settings", e);
-      toast({
-        title: "Failed to save",
-        description: "Could not save dimension settings. Please try again.",
-        variant: "destructive",
-      });
+      await updateSlideReport.mutateAsync({ id: slideReportId, configuration } as any);
+      toast({ title: 'Settings saved', description: 'Breakdown and filter dimension settings have been saved.' });
+    } catch {
+      toast({ title: 'Failed to save', description: 'Could not save dimension settings.', variant: 'destructive' });
     }
-  }, [slideReport?.configuration, slideReportId, updateSlideReport, user]);
-
-
-  // Pending filter values (before Apply is clicked)
-  const [pendingFilterValues, setPendingFilterValues] = useState<Record<string, Record<string, string[]>>>({
-    metasearch: {},
-    sem: {},
-    social: {},
-  });
-
-  // Search terms for filter dropdowns
-  const [filterSearchTerms, setFilterSearchTerms] = useState<Record<string, string>>({});
-
-  // Track which filter popovers are open (channel-dimensionId -> boolean)
-  const [openFilterPopovers, setOpenFilterPopovers] = useState<Record<string, boolean>>({});
-
-  // Filter dimension names lookup (for rendering) - channel -> dimensionId -> name
-  const [filterDimensionNames, setFilterDimensionNames] = useState<Record<string, Record<string, string>>>({
-    metasearch: {},
-    sem: {},
-    social: {},
-  });
+  }, [slideReportId, slideReport?.configuration, updateSlideReport, user, dsFilters, setBreakdownConfigs]);
 
   // Dimension and value loading state
   interface Dimension {
@@ -1325,11 +1149,6 @@ export default function SlideViewPage() {
   // True only after user explicitly clicks "Start Refresh" in the modal — gates the refresh useEffect.
   const [refreshPending, setRefreshPending] = useState(false);
 
-  const [breakdownDimensions, setBreakdownDimensions] = useState<Record<string, Dimension[]>>({
-    metasearch: [],
-    sem: [],
-    social: [],
-  });
   const [loadingBreakdownDimensions, setLoadingBreakdownDimensions] = useState<Record<string, boolean>>({
     metasearch: false,
     sem: false,
@@ -1469,9 +1288,9 @@ export default function SlideViewPage() {
     }
   }, [isEditSourceOpen]);
 
-  // Initialize active channel tab when entering step 3, 4, or 5 (Data Source, Breakdown, Filters)
+  // Initialize active channel tab when entering step 3 (Data Source)
   useEffect(() => {
-    if ((modalStep === 3 || modalStep === 4 || modalStep === 5) && selectedChannels.length > 0 && !activeChannelTab) {
+    if (modalStep === 3 && selectedChannels.length > 0 && !activeChannelTab) {
       setActiveChannelTab(selectedChannels[0]);
     }
   }, [modalStep, selectedChannels, activeChannelTab]);
@@ -1906,11 +1725,11 @@ export default function SlideViewPage() {
     loadValuesForDimensionRef.current = loadValuesForDimension;
   }, [loadValuesForDimension]);
 
-  // Load dimensions when entering step 2, 3, 4, or 5 (after Channels step)
+  // Load dimensions when entering step 2 or 3 (after Channels step)
   // Most loading is now done via preloadAllChannelData on step 1->2 transition
   // This effect is only needed as a fallback for edge cases
   useEffect(() => {
-    if ((modalStep === 2 || modalStep === 3 || modalStep === 4 || modalStep === 5) && isEditSourceOpen) {
+    if ((modalStep === 2 || modalStep === 3) && isEditSourceOpen) {
       selectedChannels.forEach(channel => {
         // Only load dimensions if not already loaded (preload should have already done this)
         if (dimensions[channel].length === 0 && !loadingDimensions[channel]) {
@@ -2068,203 +1887,33 @@ export default function SlideViewPage() {
     });
   };
 
-  // Handle filter dimension toggle
+  // Handle filter dimension toggle (updates filterConfigs; options are derived from rawDataRows automatically)
   const handleFilterDimensionToggle = async (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
     const currentConfig = filterConfigs?.[channel];
     const isSelected = currentConfig?.filterDimensionIds?.includes(dimensionId) || false;
 
-    setFilterConfigs(prev => {
-      const current = prev?.[channel] || { filterDimensionIds: [] };
-      const currentIds = current.filterDimensionIds || [];
-      const newFilterDimensionIds = isSelected
-        ? currentIds.filter(id => id !== dimensionId)
-        : [...currentIds, dimensionId];
+    const next = {
+      ...filterConfigs,
+      [channel]: {
+        filterDimensionIds: isSelected
+          ? (currentConfig?.filterDimensionIds ?? []).filter(id => id !== dimensionId)
+          : [...(currentConfig?.filterDimensionIds ?? []), dimensionId],
+      },
+    } as import('@/hooks/useDataStudioFilters').FilterConfigs;
+    dsFilters.persistFilterConfigs(next);
 
-      return {
-        ...prev,
-        [channel]: {
-          filterDimensionIds: newFilterDimensionIds,
-        },
-      };
-    });
-
-    if (!isSelected) {
-      // Dimension was just added, load its values using the helper function
-      const values = await loadFilterDimensionValues(channel, dimensionId);
-      // Store values for this specific dimension only
-      setFilterDimensionValues(prev => ({
-        ...prev,
-        [channel]: {
-          ...prev[channel],
-          [dimensionId]: values, // Only values for this dimensionId
-        },
-      }));
-    } else {
-      // Dimension was removed, clear its values and selected filter
-      setFilterDimensionValues(prev => {
-        const updated = { ...prev[channel] };
-        delete updated[dimensionId];
-        return {
-          ...prev,
-          [channel]: updated,
-        };
-      });
+    if (isSelected) {
+      // Dimension removed — clear its selected filter values
+      dsFilters.clearChannelFilter(channel, dimensionId);
       setFilterValues(prev => {
         const updated = { ...prev[channel] };
         delete updated[dimensionId];
-        return {
-          ...prev,
-          [channel]: updated,
-        };
+        return { ...prev, [channel]: updated };
       });
     }
   };
 
-  // Data loading cache to prevent redundant queries
-  const filterValuesCache = useDataLoadingCache<string[]>({ ttl: 10 * 60 * 1000 }); // 10 minutes cache
-
-  // Helper function to load filter dimension values for a specific dimension
-  // Optimized to use fastest available data source: rawDataRows > filterUniqueValues > database
-  // Now with caching to improve performance
-  const loadFilterDimensionValues = useCallback(async (channel: 'metasearch' | 'sem' | 'social', filterDimId: string): Promise<string[]> => {
-    // Check cache first
-    const cacheKey = `${channel}-${filterDimId}`;
-    const cached = filterValuesCache.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-    const reportId = getReportIdForChannel(channel);
-    if (!reportId) {
-      console.warn(`[loadFilterDimensionValues] No report ID for channel: ${channel}`);
-      return [];
-    }
-
-    try {
-      // FASTEST PATH: Use rawDataRows if available (already in memory, no DB query needed)
-      const channelData = effectivePivotData?.channels?.[channel];
-      const rawDataRows = (channelData as any)?.rawDataRows as any[] | undefined;
-
-      if (rawDataRows && rawDataRows.length > 0) {
-        const uniqueValues = new Set<string>();
-
-        // Resolve the actual key to look up in raw rows.
-        // Filter configs may reference global dimension IDs (e.g. "755f27d1" for Channel)
-        // while raw rows are keyed by report-specific dimension IDs (e.g. "970c0d99").
-        // Fall back to matching by dimension name via the dimensionMap.
-        let lookupKey = filterDimId;
-        const dimensionMap = (channelData as any)?.dimensionMap as Record<string, string> | undefined;
-
-        // Check if the filterDimId directly exists in any row
-        const sampleRow = rawDataRows[0];
-        const sampleData = sampleRow?.dimension_values || sampleRow;
-        if (sampleData && !(filterDimId in sampleData) && dimensionMap) {
-          // filterDimId not found — resolve by name
-          // First get the name of the requested dimension
-          const requestedDimName = dimensionMap[filterDimId];
-          if (requestedDimName) {
-            // Find the report-specific dimension ID that has the same name
-            for (const [dimId, dimName] of Object.entries(dimensionMap)) {
-              if (dimName === requestedDimName && dimId in sampleData) {
-                lookupKey = dimId;
-                break;
-              }
-            }
-          } else {
-            // filterDimId is not in dimensionMap (it's a global dim) — look up its name from DB
-            // and match against dimensionMap values
-            const { data: dimRecord } = await supabase
-              .from('dimensions')
-              .select('name')
-              .eq('id', filterDimId)
-              .maybeSingle();
-            if (dimRecord?.name) {
-              for (const [dimId, dimName] of Object.entries(dimensionMap)) {
-                if (dimName === dimRecord.name && dimId in sampleData) {
-                  lookupKey = dimId;
-                  break;
-                }
-              }
-            }
-          }
-        }
-
-        for (const row of rawDataRows) {
-          const rowData = row.dimension_values || row;
-          const value = rowData[lookupKey];
-          if (value !== undefined && value !== null && String(value).trim() !== '') {
-            uniqueValues.add(String(value).trim());
-          }
-        }
-
-        const sortedValues = Array.from(uniqueValues).sort();
-        if (sortedValues.length > 0) {
-          filterValuesCache.set(cacheKey, sortedValues);
-          return sortedValues;
-        }
-      }
-
-      // FAST PATH: Use pre-computed filterUniqueValues from pivot_data
-      const filterUniqueValues = (channelData as any)?.filterUniqueValues as Record<string, { name: string; values: string[] }> | undefined;
-      if (filterUniqueValues?.[filterDimId]) {
-        return filterUniqueValues[filterDimId].values;
-      }
-
-      // SLOW PATH: Fallback to database query (only if above methods unavailable)
-      // Fetch all rows using pagination to ensure no values are missing
-      const allDimData: any[] = [];
-      const batchSize = 1000;
-      let offset = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data: batchData, error } = await supabase
-          .from('dimension_data')
-          .select('dimension_values')
-          .eq('report_id', reportId)
-          .range(offset, offset + batchSize - 1);
-
-        if (error) {
-          console.error(`[loadFilterDimensionValues] Error loading dimension_data batch for ${channel}/${filterDimId}:`, error);
-          return [];
-        }
-
-        if (batchData && batchData.length > 0) {
-          allDimData.push(...batchData);
-          offset += batchSize;
-          hasMore = batchData.length === batchSize;
-        } else {
-          hasMore = false;
-        }
-      }
-
-      if (allDimData.length === 0) {
-        return [];
-      }
-
-      // Extract unique values only for this specific filter dimension ID
-      const uniqueValues = new Set<string>();
-      for (const row of allDimData) {
-        const rowValues = row.dimension_values as Record<string, any>;
-        // Only extract values for this specific filter dimension ID
-        if (rowValues && rowValues[filterDimId] !== undefined && rowValues[filterDimId] !== null) {
-          const value = String(rowValues[filterDimId]).trim();
-          if (value !== '') {
-            uniqueValues.add(value);
-          }
-        }
-      }
-
-      const sortedValues = Array.from(uniqueValues).sort();
-
-      // Cache the result
-      filterValuesCache.set(cacheKey, sortedValues);
-
-      return sortedValues;
-    } catch (error) {
-      console.error(`[loadFilterDimensionValues] Error loading filter values for ${channel}/${filterDimId}:`, error);
-      return [];
-    }
-  }, [effectivePivotData, filterValuesCache, getReportIdForChannel]);
+  // loadFilterDimensionValues removed — filter options are derived in-memory by useDataStudioFilters.
 
   // Filtered values based on search query
   const filteredValues = useMemo(() => {
@@ -2397,28 +2046,7 @@ export default function SlideViewPage() {
     setSelectedValueDimensionIds([]);
   };
 
-  // Background loader for filter dimension values after saving configuration
-  const loadFilterDimensionValuesAfterSave = useCallback(
-    async (
-      channels: ('metasearch' | 'sem' | 'social')[],
-      configs: Record<string, FilterConfig>
-    ) => {
-      for (const channel of channels) {
-        const ids = configs?.[channel]?.filterDimensionIds ?? [];
-        for (const id of ids) {
-          const values = await loadFilterDimensionValues(channel, id);
-          setFilterDimensionValues(prev => ({
-            ...prev,
-            [channel]: {
-              ...prev[channel],
-              [id]: values
-            }
-          }));
-        }
-      }
-    },
-    [loadFilterDimensionValues]
-  );
+  // loadFilterDimensionValuesAfterSave removed — useDataStudioFilters derives options automatically.
 
   // Navigation handlers
   const handleNext = async () => {
@@ -2438,18 +2066,9 @@ export default function SlideViewPage() {
     }
 
     if (modalStep === 3) {
-      setModalStep(4);
-      return;
-    }
-
-    if (modalStep === 4) {
-      setModalStep(5);
-      return;
-    }
-
-    if (modalStep === 5) {
-      // Save and close
+      // Save and close — filters/breakdowns are now configured in column mapping modal
       handleSave();
+      return;
     }
   };
 
@@ -2458,10 +2077,6 @@ export default function SlideViewPage() {
       setModalStep(1);
     } else if (modalStep === 3) {
       setModalStep(2);
-    } else if (modalStep === 4) {
-      setModalStep(3);
-    } else if (modalStep === 5) {
-      setModalStep(4);
     }
   };
 
@@ -2578,8 +2193,7 @@ export default function SlideViewPage() {
         description: "Your report settings have been saved. Click 'Refresh Data' to fetch updated data.",
       });
 
-      // Load filter dimension values in background after save (don't block)
-      loadFilterDimensionValuesAfterSave(selectedChannels, filterConfigs);
+      // Filter options are derived automatically by useDataStudioFilters from rawDataRows.
 
     } catch (error) {
       console.error('Error saving slide report configuration:', error);
@@ -2666,76 +2280,32 @@ export default function SlideViewPage() {
   const handleApplyView = useCallback((viewId: string | null) => {
     if (!slideReportId) return;
 
-    const emptyFilters: Record<string, Record<string, string[]>> = {
-      metasearch: {},
-      sem: {},
-      social: {},
-      'price-check': {},
-      booking: {},
-    };
-
     isApplyingViewRef.current = true;
 
-    // Reset to Master (no saved view)
-    if (viewId === null) {
-      setSelectedViewId(null);
-      setFilterValues(emptyFilters);
-      setPendingFilterValues({ metasearch: {}, sem: {}, social: {} });
-      setComparisonType('none');
-
-      // Remove viewId from URL if present
-      const newParams = new URLSearchParams(searchParams);
-      newParams.delete('viewId');
-      setSearchParams(newParams, { replace: true });
-
-      setTimeout(() => {
-        isApplyingViewRef.current = false;
-      }, 0);
-      return;
-    }
-
-    // Apply a saved view
-    const view = views.find(v => v.id === viewId);
-    if (!view) {
-      console.warn('[handleApplyView] View not found:', viewId);
-      isApplyingViewRef.current = false;
-      return;
-    }
-
+    const view = viewId ? views.find(v => v.id === viewId) ?? null : null;
     setSelectedViewId(viewId);
 
-    // Apply filter values from the saved view
-    const viewFilters = view.filter_values || {};
-    setFilterValues({
-      metasearch: viewFilters.metasearch || {},
-      sem: viewFilters.sem || {},
-      social: viewFilters.social || {},
-      'price-check': viewFilters['price-check'] || {},
-      booking: viewFilters.booking || {},
-    });
-    setPendingFilterValues({
-      metasearch: viewFilters.metasearch || {},
-      sem: viewFilters.sem || {},
-      social: viewFilters.social || {},
-    });
+    // Delegate filter value + date restore to the canonical hook
+    dsFilters.applyView(view);
 
-    // Apply year/month/comparison settings
-    if (view.selected_year) setSelectedYear(view.selected_year);
-    if (view.selected_month) setSelectedMonth(view.selected_month);
-    if (view.comparison_type) setComparisonType(view.comparison_type);
-    if (view.chart_time_range) setChartTimeRange(view.chart_time_range);
-    if (view.price_check_chart_time_range) setPriceCheckChartTimeRange(view.price_check_chart_time_range);
-    if (view.tab) setSelectedTab(view.tab);
+    // Chart-level settings not owned by dsFilters
+    if (view?.chart_time_range) setChartTimeRange(view.chart_time_range);
+    if (view?.price_check_chart_time_range) setPriceCheckChartTimeRange(view.price_check_chart_time_range);
+    if (view?.tab) setSelectedTab(view.tab);
 
     // Update URL with viewId
     const newParams = new URLSearchParams(searchParams);
-    newParams.set('viewId', viewId);
+    if (viewId) {
+      newParams.set('viewId', viewId);
+    } else {
+      newParams.delete('viewId');
+    }
     setSearchParams(newParams, { replace: true });
 
     setTimeout(() => {
       isApplyingViewRef.current = false;
     }, 0);
-  }, [slideReportId, searchParams, views]);
+  }, [slideReportId, searchParams, views, dsFilters]);
 
   // ========== Refresh Data Modal handler ==========
   const handleRefreshDataWithModal = useCallback(() => {
@@ -3081,6 +2651,14 @@ export default function SlideViewPage() {
         onDimensions={() => navigate(accountId ? `/tools/dimensions/${accountId}` : '/tools/dimensions')}
         onForecast={() => navigate('/tools/forecasting')}
         onPriceWidget={() => navigate('/tools/price-widget')}
+        selectedViewId={selectedViewId}
+        setSelectedViewId={setSelectedViewId}
+        availableViews={availableViews}
+        handleApplyView={handleApplyView}
+        handleDeleteView={handleDeleteView}
+        setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
+        setIsSaveOrUpdateViewDialogOpen={setIsSaveOrUpdateViewDialogOpen}
+        isReadOnlyMode={isReadOnlyMode}
       />
 
       {/* Main column: topbar + content */}
@@ -3116,14 +2694,7 @@ export default function SlideViewPage() {
         <div className="px-6 py-2 border-b">
           <FiltersRow
             selectedTab={selectedTab}
-            selectedViewId={selectedViewId}
-            setSelectedViewId={setSelectedViewId}
             isReadOnlyMode={isReadOnlyMode}
-            availableViews={availableViews}
-            handleApplyView={handleApplyView}
-            handleDeleteView={handleDeleteView}
-            setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
-            setIsSaveOrUpdateViewDialogOpen={setIsSaveOrUpdateViewDialogOpen}
             selectedYear={selectedYear}
             setSelectedYear={setSelectedYear}
             selectedMonth={selectedMonth}
@@ -3132,17 +2703,38 @@ export default function SlideViewPage() {
             setCustomDateRange={setCustomDateRange}
             comparisonType={comparisonType}
             setComparisonType={setComparisonType}
-            onOpenFilters={() => {
-              setDimensionSettingsMode("filters");
-              setDimensionSettingsInitialChannel(selectedTab === "overview" || selectedTab === "budget" ? "metasearch" : (selectedTab as "metasearch" | "sem" | "social"));
-              setDimensionSettingsOpen(true);
-            }}
+            onOpenFilters={() => dsFilters.setFilterPanelOpen(true)}
+            activeFilterCount={dsFilters.activeFilterCount}
+            filterConfigs={dsFilters.filterConfigs}
+            filterOptions={dsFilters.filterOptions}
+            filterValues={filterValues}
+            dimensionNames={dsFilters.filterDimensionNames}
+            onToggleFilterValue={dsFilters.setChannelFilterValue}
+            onClearFilter={dsFilters.clearChannelFilter}
+            onResetAllFilters={dsFilters.resetFilters}
             onShare={() => setIsShareModalOpen(true)}
             onRefreshData={handleRefreshDataWithModal}
             isRefreshInProgress={isRefreshModalOpen}
             showRefreshButton={!slideReport?.configuration?.isChildReport}
           />
         </div>
+
+        {/* Filter Panel — slides in from the right when "Filters" is clicked */}
+        <FilterPanel
+          open={dsFilters.filterPanelOpen}
+          onOpenChange={dsFilters.setFilterPanelOpen}
+          selectedTab={selectedTab}
+          filterConfigs={dsFilters.filterConfigs}
+          dimensionNames={dsFilters.filterDimensionNames}
+          activeFilterCount={dsFilters.activeFilterCount}
+          availableDimensions={{
+            metasearch: (breakdownDimensions.metasearch || []).filter((d) => d.type === 'text'),
+            sem: (breakdownDimensions.sem || []).filter((d) => d.type === 'text'),
+            social: (breakdownDimensions.social || []).filter((d) => d.type === 'text'),
+          }}
+          onToggleDimension={handleFilterDimensionToggle}
+          isReadOnly={isReadOnlyMode}
+        />
 
         {/* Comparison Banner */}
         {comparisonType !== 'none' && (

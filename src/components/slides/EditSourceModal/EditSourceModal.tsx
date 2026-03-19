@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sparkles, X, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Sparkles, X, ChevronLeft, ChevronRight, Loader2, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChannelTabsList, DimensionValuesList } from "./index";
 import { ModalStep } from "@/hooks/useEditSourceModal";
@@ -118,8 +118,6 @@ export function EditSourceModal({
                 {modalStep === 1 && "Select Channels"}
                 {modalStep === 2 && "Value Dimensions"}
                 {modalStep === 3 && "Data Source"}
-                {modalStep === 4 && "Breakdown Dimensions"}
-                {modalStep === 5 && "Filters"}
               </DialogTitle>
             </div>
             <Button
@@ -131,8 +129,8 @@ export function EditSourceModal({
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground mt-2">
-            Tip: &quot;Breakdown by&quot; tables render on the specific report tab, not on Overview/Budget. After saving, select the report tab to view the breakdown.
+          <p className="text-sm text-muted-foreground mt-1">
+            Step {Math.min(modalStep, 3)} of 3 — Configure channels, metrics, and data source.
           </p>
         </DialogHeader>
 
@@ -336,203 +334,34 @@ export function EditSourceModal({
             </div>
           )}
 
-          {/* Step 4: Breakdown Dimensions */}
-          {modalStep === 4 && (
-            <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
-              {/* Left: Channel tabs */}
-              <div className="w-48 border-r pr-4">
-                <ScrollArea className="h-full">
-                  <div className="space-y-1">
-                    {selectedChannels.map(channel => {
-                      const breakdownCount = breakdownConfigs[channel]?.breakdownDimensionIds?.length || 0;
-                      return (
-                        <button
-                          key={channel}
-                          className={cn(
-                            "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
-                            activeChannelTab === channel
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-muted"
-                          )}
-                          onClick={() => setActiveChannelTab(channel)}
-                        >
-                          <span className="truncate capitalize">{channel}</span>
-                          {breakdownCount > 0 && (
-                            <span className="text-xs opacity-70">{breakdownCount}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              </div>
-
-              {/* Right: Breakdown dimension selector */}
-              <div className="flex-1 flex flex-col gap-4">
-                {activeChannelTab && (
-                  <>
-                    <div className="bg-muted/30 rounded-lg p-4 mb-2">
-                      <p className="text-sm text-muted-foreground">
-                        Select dimensions to break down this report's data. Each selected dimension will create a separate breakdown table.
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium mb-2 block">
-                        Breakdown Dimensions
-                      </Label>
-                      {loadingBreakdownDimensions[activeChannelTab] ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                          <Loader2 className="h-6 w-6 animate-spin mb-2" />
-                          <p className="text-sm">Loading dimensions...</p>
-                        </div>
-                      ) : (
-                        <div className="flex-1 border rounded-md overflow-y-auto" style={{ maxHeight: '250px' }}>
-                          <div className="p-2 space-y-1">
-                            {breakdownDimensions[activeChannelTab]?.length > 0 ? (
-                              breakdownDimensions[activeChannelTab].map(dim => {
-                                const isSelected = breakdownConfigs[activeChannelTab]?.breakdownDimensionIds?.includes(dim.id) || false;
-                                return (
-                                  <div
-                                    key={dim.id}
-                                    className={cn(
-                                      "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                      isSelected
-                                        ? "bg-primary/10"
-                                        : "hover:bg-muted/50"
-                                    )}
-                                    onClick={() => handleBreakdownToggle(activeChannelTab, dim.id)}
-                                  >
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={() => handleBreakdownToggle(activeChannelTab, dim.id)}
-                                    />
-                                    <span className="text-sm">{dim.name}</span>
-                                  </div>
-                                );
-                              })
-                            ) : (
-                              <p className="text-center text-muted-foreground py-4">
-                                No breakdown dimensions available
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Step 5: Filters */}
-          {modalStep === 5 && (
-            <div className="flex gap-4 min-h-[350px] max-h-[400px] pb-4">
-              {/* Left: Channel tabs */}
-              <div className="w-48 border-r pr-4">
-                <ScrollArea className="h-full">
-                  <div className="space-y-1">
-                    {selectedChannels.map(channel => {
-                      const filterCount = filterConfigs[channel]?.filterDimensionIds?.length || 0;
-                      return (
-                        <button
-                          key={channel}
-                          className={cn(
-                            "w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center justify-between",
-                            activeChannelTab === channel
-                              ? "bg-primary text-primary-foreground"
-                              : "hover:bg-muted"
-                          )}
-                          onClick={() => setActiveChannelTab(channel)}
-                        >
-                          <span className="truncate capitalize">{channel}</span>
-                          {filterCount > 0 && (
-                            <span className="text-xs opacity-70">{filterCount}</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-              </div>
-
-              {/* Right: Filter dimension selector */}
-              <div className="flex-1 flex flex-col gap-4">
-                {activeChannelTab && (
-                  <>
-                    <div className="bg-muted/30 rounded-lg p-4 mb-2">
-                      <p className="text-sm text-muted-foreground">
-                        Select dimensions to use as filters for this report. Each selected dimension will create a filter dropdown that appears before the date dropdowns on the slides page.
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium mb-2 block">
-                        Filter Dimensions
-                      </Label>
-                      {loadingDimensions[activeChannelTab] ? (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Loading dimensions...
-                        </div>
-                      ) : (
-                        <ScrollArea className="h-[250px] border rounded-md">
-                          <div className="p-2 space-y-1">
-                            {dimensions[activeChannelTab]?.length > 0 ? (
-                              dimensions[activeChannelTab].map(dim => {
-                                const isSelected = filterConfigs[activeChannelTab]?.filterDimensionIds?.includes(dim.id) || false;
-                                return (
-                                  <div
-                                    key={dim.id}
-                                    className={cn(
-                                      "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                                      isSelected
-                                        ? "bg-primary/10"
-                                        : "hover:bg-muted/50"
-                                    )}
-                                    onClick={() => handleFilterDimensionToggle(activeChannelTab, dim.id)}
-                                  >
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={() => handleFilterDimensionToggle(activeChannelTab, dim.id)}
-                                    />
-                                    <span className="text-sm">{dim.name}</span>
-                                  </div>
-                                );
-                              })
-                            ) : (
-                              <p className="text-center text-muted-foreground py-4">
-                                No dimensions available
-                              </p>
-                            )}
-                          </div>
-                        </ScrollArea>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
         </ScrollArea>
 
         {/* Footer Navigation */}
-        <div className="flex-shrink-0 flex items-center justify-between pt-4 border-t">
-          <Button
-            variant="outline"
-            onClick={modalStep === 1 ? () => handleModalClose(false) : handleBack}
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            {modalStep === 1 ? "Cancel" : "Back"}
-          </Button>
-          <Button
-            onClick={handleNext}
-            disabled={modalStep === 1 && selectedChannels.length === 0 && !selectedDimensions.metasearch && !selectedDimensions.sem && !selectedDimensions.social}
-          >
-            {modalStep === 5 ? "Save" : "Next"}
-            {modalStep !== 5 && <ChevronRight className="h-4 w-4 ml-1" />}
-          </Button>
+        <div className="flex-shrink-0 border-t pt-4 space-y-3">
+          {modalStep === 3 && (
+            <div className="flex items-start gap-2 px-1 py-2 rounded-md bg-muted/40 text-xs text-muted-foreground">
+              <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+              <span>
+                <strong>Breakdowns</strong> can be configured in Data Sources → Column Mappings where available. Report <strong>filters</strong> are managed in Data Studio.
+              </span>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <Button
+              variant="outline"
+              onClick={modalStep === 1 ? () => handleModalClose(false) : handleBack}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              {modalStep === 1 ? "Cancel" : "Back"}
+            </Button>
+            <Button
+              onClick={handleNext}
+              disabled={modalStep === 1 && selectedChannels.length === 0 && !selectedDimensions.metasearch && !selectedDimensions.sem && !selectedDimensions.social}
+            >
+              {modalStep === 3 ? "Save" : "Next"}
+              {modalStep !== 3 && <ChevronRight className="h-4 w-4 ml-1" />}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

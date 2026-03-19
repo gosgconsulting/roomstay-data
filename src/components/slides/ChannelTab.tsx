@@ -24,7 +24,6 @@ interface ChannelTabProps {
   slideReport?: SlideReport | null;
   pivotData?: SlideReportPivotData | null;
   isLoadingData: boolean;
-  breakdownTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   currentTotals: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   channelChartData: Record<string, Array<{ month: string; revenue: number }>>;
   comparisonChannelChartData?: Record<string, Array<{ month: string; revenue: number }>> | null;
@@ -47,7 +46,6 @@ interface ChannelTabProps {
   renderKPICardsSkeleton: () => JSX.Element;
   getReportKPICards: (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => any[];
   getChannelComparisonMetrics: (channel: 'metasearch' | 'sem' | 'social') => any;
-  setBreakdownTotals: (updater: (prev: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>) => Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>) => void;
   comparisonTotals?: Record<string, any> | null;
   comparisonType?: string;
   displayCurrency?: 'AUD' | 'USD';
@@ -61,7 +59,6 @@ export function ChannelTab({
   slideReport,
   pivotData: pivotDataProp,
   isLoadingData,
-  breakdownTotals,
   currentTotals,
   channelChartData,
   comparisonChannelChartData,
@@ -84,7 +81,6 @@ export function ChannelTab({
   renderKPICardsSkeleton,
   getReportKPICards,
   getChannelComparisonMetrics,
-  setBreakdownTotals,
   comparisonTotals,
   comparisonType,
   displayCurrency,
@@ -110,13 +106,7 @@ export function ChannelTab({
       ) : (
         <>
           {(() => {
-            // Primary source: currentTotals from useFilteredSlideData (canonical, computed from rawDataRows).
-            // Secondary: breakdownTotals from the breakdown table (only when currentTotals is empty).
-            const ct = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
-            const bt = breakdownTotals[channel];
-            const ctHasData = ct.impressions > 0 || ct.clicks > 0 || ct.cost > 0 || ct.revenue > 0 || ct.bookings > 0;
-            const btHasData = bt && (bt.impressions > 0 || bt.clicks > 0 || bt.cost > 0 || bt.revenue > 0 || bt.bookings > 0);
-            const effectiveTotals = ctHasData ? ct : (btHasData ? bt : ct);
+            const effectiveTotals = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
             return renderKPICards(
               getReportKPICards(effectiveTotals),
               getChannelComparisonMetrics(channel)
@@ -242,7 +232,6 @@ export function ChannelTab({
                     customDateRange={customDateRange}
                     filterValues={filterValues}
                     filterDimensionValues={filterDimensionValues}
-                    onTotalsChange={(totals) => setBreakdownTotals(prev => ({ ...prev, [channel]: totals }))}
                     displayCurrency={displayCurrency}
                     availableDimensions={availableDimensionsList}
                     comparisonChannelTotals={comparisonTotals}

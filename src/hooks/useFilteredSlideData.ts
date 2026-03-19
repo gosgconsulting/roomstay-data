@@ -52,6 +52,16 @@ function aggregateFromRawRows(
   const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
   const metrics: MetricData = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
 
+  // Find date dimension ID for bucket logic
+  let dateDimId: string | null = null;
+  for (const [id, name] of Object.entries(dimensionMap)) {
+    const lowerName = name?.toLowerCase().trim();
+    if (lowerName === 'date' || lowerName === 'day') {
+      dateDimId = id;
+      break;
+    }
+  }
+
   const getMetricValue = (rowData: any, keys: string[]): number => {
     for (const key of keys) {
       const value = rowData[key];
@@ -70,16 +80,7 @@ function aggregateFromRawRows(
     metrics.bookings += getMetricValue(rowData, getMetricKeys('bookings', nameToIdsMap));
 
     // Bucket revenue into monthly chart data
-    let dateValue: any =
-      rowData.Date || rowData.date || rowData.Day || rowData.day;
-    if (!dateValue) {
-      for (const [, val] of Object.entries(rowData as Record<string, unknown>)) {
-        if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
-          dateValue = val;
-          break;
-        }
-      }
-    }
+    const dateValue = dateDimId ? rowData[dateDimId] : undefined;
     if (dateValue) {
       const rowDate = new Date(dateValue);
       if (!isNaN(rowDate.getTime())) {
@@ -176,7 +177,6 @@ export interface UseFilteredSlideDataParams {
   customDateRange?: import("react-day-picker").DateRange | undefined;
   selectedTab?: string;
   slideType?: string;
-  dynamicChannelTotals?: Record<string, MetricData>;
   /** When set, KPI totals from breakdowns use this dimension first so KPI matches the table (SEM/Social). */
   groupByDimensionId?: string | null;
 }
@@ -219,7 +219,6 @@ export function useFilteredSlideData({
   customDateRange,
   selectedTab,
   slideType,
-  dynamicChannelTotals,
   groupByDimensionId,
 }: UseFilteredSlideDataParams): FilteredSlideData {
   // Build date range for filtering.
@@ -374,27 +373,10 @@ export function useFilteredSlideData({
     [filteredData.channelTotals]
   );
 
-  // Fallback to dynamic data if available and no pivot data
-  const finalChannelTotals = useMemo(() => {
-    if (
-      !pivotData?.channels &&
-      slideType === 'master-report' &&
-      dynamicChannelTotals &&
-      Object.keys(dynamicChannelTotals).length > 0
-    ) {
-      return dynamicChannelTotals as {
-        metasearch: MetricData;
-        sem: MetricData;
-        social: MetricData;
-      };
-    }
-    return filteredData.channelTotals;
-  }, [pivotData, slideType, dynamicChannelTotals, filteredData.channelTotals]);
-
   return {
     hasFilters,
     channelsWithFilters,
-    channelTotals: finalChannelTotals,
+    channelTotals: filteredData.channelTotals,
     monthlyData: filteredData.monthlyData,
     filteredRawRows: filteredData.filteredRawRows,
     dateRange,

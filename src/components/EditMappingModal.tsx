@@ -11,8 +11,6 @@ import { FileSpreadsheet } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ColumnMappingStep, ColumnMappingStepRef } from "./ColumnMappingStep";
-import { resyncColumnMappings } from "@/lib/resync-dimensions";
-import { resyncReportViews } from "@/lib/resync-report-views";
 import { useDataSourceHeaders } from "@/hooks/useDataSourceHeaders";
 import { useUser } from "@/lib/auth";
 
@@ -48,29 +46,59 @@ export const EditMappingModal = ({
   const user = userData?.user || null;
   const [isLoading, setIsLoading] = useState(false);
   const [accountId, setAccountId] = useState<string | undefined>(propAccountId);
+  const [enrichedMappings, setEnrichedMappings] = useState<any[] | null>(null);
   const mappingStepRef = useRef<ColumnMappingStepRef>(null);
 
-  // Use react-query to fetch headers
   const {
     data: headersData,
     isLoading: isFetchingHeaders,
     error: headersError,
-    refetch: refetchHeaders,
   } = useDataSourceHeaders(dataSource, open && !!dataSource);
 
   const headers = headersData?.headers || [];
   const sampleDataRows = headersData?.sampleDataRows || [];
 
+  // Reset on close
   useEffect(() => {
-    if (open && dataSource) {
-      fetchAccountId();
-      // Only resync if mappings are actually broken - removed aggressive auto-resync
-      // resyncMappingsIfNeeded();
+    if (!open) {
+      setEnrichedMappings(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Resolve accountId for dimension loading in ColumnMappingStep
+  useEffect(() => {
+    if (!open || !dataSource) return;
+
+    const resolve = async () => {
+      let resolvedAccountId = propAccountId;
+
+      if (!resolvedAccountId && dataSource.report_id) {
+        const { data: reportData } = await supabase
+          .from('reports')
+          .select('account_id')
+          .eq('id', dataSource.report_id)
+          .maybeSingle();
+        resolvedAccountId = reportData?.account_id || undefined;
+      }
+
+      setAccountId(resolvedAccountId);
+    };
+
+    resolve();
   }, [open, dataSource, propAccountId]);
 
-  // Show error toast when headers fetch fails
+  useEffect(() => {
+    if (!open) return;
+
+    const existingMappings: any[] = Array.isArray(dataSource?.column_mappings)
+      ? dataSource!.column_mappings
+      : [];
+
+    const cleaned = existingMappings.map(({ isFilter: _removed, ...m }) => m);
+
+    setEnrichedMappings(cleaned);
+  }, [open, dataSource]);
+
   useEffect(() => {
     if (headersError && open) {
       const errorMessage =
@@ -83,180 +111,75 @@ export const EditMappingModal = ({
     }
   }, [headersError, open]);
 
-  // Resync column mappings with account-scoped dimensions
-  const resyncMappingsIfNeeded = async () => {
-    if (!dataSource || !dataSource.id) return;
-    
-    try {
-      // Get account ID
-      let actualAccountId = propAccountId;
-      if (!actualAccountId && dataSource.report_id) {
-        const { data: reportData } = await supabase
-          .from('reports')
-          .select('account_id')
-          .eq('id', dataSource.report_id)
-          .maybeSingle();
-        actualAccountId = reportData?.account_id || undefined;
-      }
-
-      if (!actualAccountId) {
-        console.log('[RESYNC] No account ID available, skipping resync');
-        return;
-      }
-
-      console.log('[RESYNC] Resyncing column mappings for data source:', dataSource.name);
-      await resyncColumnMappings(dataSource.id, actualAccountId);
-      
-      // Also resync report views if report_id exists
-      if (dataSource.report_id) {
-        console.log('[RESYNC] Resyncing report views for report:', dataSource.report_id);
-        try {
-          await resyncReportViews(dataSource.report_id, actualAccountId);
-        } catch (error) {
-          console.error('[RESYNC] Error resyncing report views:', error);
-          // Don't block the UI if report views resync fails
-        }
-      }
-      
-      // Reload headers to get updated mappings
-      await refetchHeaders();
-    } catch (error) {
-      console.error('[RESYNC] Error resyncing mappings:', error);
-      // Don't show error to user, just log it - the edit modal will still work
-    }
-  };
-
-  // Fetch accountId from report if not provided
-  const fetchAccountId = async () => {
-    if (propAccountId) {
-      setAccountId(propAccountId);
-      return;
-    }
-
-    if (!dataSource?.report_id) {
-      setAccountId(undefined);
-      return;
-    }
-
-    try {
-      const { data: reportData, error } = await supabase
-        .from('reports')
-        .select('account_id')
-        .eq('id', dataSource.report_id)
-        .maybeSingle();
-
-      if (error) throw error;
-      setAccountId(reportData?.account_id || undefined);
-    } catch (error) {
-      console.error('Error fetching account ID:', error);
-      setAccountId(undefined);
-    }
-  };
-
-
   const handleSaveMappings = async (mappings: any[]) => {
     if (!dataSource) return;
 
-    console.log('[EDIT-MAPPING] Starting save process for:', dataSource.name);
-
     setIsLoading(true);
-    
+
     try {
       if (!user) throw new Error("User not authenticated");
 
-      // Get report_id from data_source
       const { data: dsData, error: dsError } = await supabase
         .from('data_sources')
         .select('report_id')
         .eq('id', dataSource.id)
         .maybeSingle();
-      
+
       if (dsError) throw dsError;
       const reportId = dsData?.report_id;
 
-      console.log('[EDIT-MAPPING] Found report ID:', reportId);
-
       // Create any new dimensions first
       const updatedMappings = [...mappings];
-      
+
       for (let i = 0; i < updatedMappings.length; i++) {
         const mapping = updatedMappings[i];
         if (mapping.dimensionId === 'create_new' && mapping.newDimensionName) {
-          console.log('[EDIT-MAPPING] Creating new dimension:', {
-            name: mapping.newDimensionName,
-            type: mapping.newDimensionType
-          });
-          
-          // Create new dimension
           const dimensionData = {
             user_id: user.id,
             report_id: reportId,
             data_source_id: dataSource.id,
             name: mapping.newDimensionName,
             type: mapping.newDimensionType || 'text',
-            scope: 'custom', // Mark as custom dimension
+            scope: 'custom',
           };
-          
-          console.log('[EDIT-MAPPING] Creating dimension with data:', dimensionData);
-          
+
           const { data: newDim, error: dimError } = await supabase
             .from('dimensions')
             .insert(dimensionData)
             .select()
             .maybeSingle();
-          
+
           if (dimError) throw dimError;
-          
-          console.log('[EDIT-MAPPING] Created new dimension:', newDim);
-          
-          // Update the mapping with the new dimension ID and name
+
           if (newDim) {
-            const updatedMapping = {
+            updatedMappings[i] = {
               ...mapping,
               dimensionId: newDim.id,
               dimensionName: newDim.name,
-              // Clear temporary fields
               newDimensionName: undefined,
               newDimensionType: undefined,
             };
-            
-            console.log('[EDIT-MAPPING] Updated mapping for column:', mapping.column, updatedMapping);
-            updatedMappings[i] = updatedMapping;
           }
         }
       }
 
-      // Mark all mappings as user-modified to prevent auto-resync from overwriting them
-      const userModifiedMappings = updatedMappings.map(mapping => ({
+      const userModifiedMappings = updatedMappings.map(({ isFilter: _removed, ...mapping }) => ({
         ...mapping,
-        user_modified: true
+        user_modified: true,
       }));
 
-      // Update data source with new mappings
-      console.log('[EDIT-MAPPING] Updating data source with mappings:', {
-        dataSourceId: dataSource.id,
-        updatedMappings: userModifiedMappings
-      });
-      
       const { error: updateError } = await supabase
         .from('data_sources')
-        .update({
-          column_mappings: userModifiedMappings,
-        })
+        .update({ column_mappings: userModifiedMappings })
         .eq('id', dataSource.id);
 
-      if (updateError) {
-        console.error('[EDIT-MAPPING] Database update error:', updateError);
-        throw updateError;
-      }
-
-      console.log('[EDIT-MAPPING] Successfully updated data source mappings');
+      if (updateError) throw updateError;
 
       toast({
-        title: "Mappings updated",
-        description: `Successfully updated ${dataSource.name}. Use the Sync button to refresh the data with new mappings.`,
+        title: "Mappings saved",
+        description: `${dataSource.name} column mappings updated. Use Sync to refresh data.`,
       });
-      
+
       onSuccess();
       onOpenChange(false);
     } catch (error) {
@@ -272,56 +195,65 @@ export const EditMappingModal = ({
     }
   };
 
+  const isReady = !isFetchingHeaders && headers.length > 0 && enrichedMappings !== null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
-        <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4">
-          <DialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="h-5 w-5 text-primary" />
-            Edit Column Mappings
-          </DialogTitle>
-          <DialogDescription>
-            Update the column mappings for {dataSource?.name || 'this data source'}
-          </DialogDescription>
+      <DialogContent className="sm:max-w-[980px] max-h-[92vh] flex flex-col p-0 overflow-hidden">
+        <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+              <FileSpreadsheet className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <DialogTitle className="text-base font-semibold">
+                Column Mappings
+              </DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                {dataSource?.name} — map each column to a dimension and control visibility.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 min-h-0">
-          {isFetchingHeaders ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Loading headers...
+        <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+          {isFetchingHeaders || enrichedMappings === null ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary mx-auto mb-3" />
+              <p className="text-sm">Loading column data…</p>
             </div>
           ) : headers.length > 0 ? (
-            <div className="pb-4">
-              <ColumnMappingStep
-                ref={mappingStepRef}
-                headers={headers}
-                sampleDataRows={sampleDataRows}
-                onSave={handleSaveMappings}
-                onBack={() => onOpenChange(false)}
-                isLoading={isLoading}
-                existingMappings={dataSource?.column_mappings || []}
-                accountId={accountId}
-                reportId={dataSource?.report_id || undefined}
-                hideButtons={true}
-              />
-            </div>
+            <ColumnMappingStep
+              ref={mappingStepRef}
+              headers={headers}
+              sampleDataRows={sampleDataRows}
+              onSave={handleSaveMappings}
+              onBack={() => onOpenChange(false)}
+              isLoading={isLoading}
+              existingMappings={enrichedMappings}
+              accountId={accountId}
+              reportId={dataSource?.report_id || undefined}
+              hideButtons={true}
+            />
           ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              No headers found
+            <div className="text-center py-12 text-muted-foreground">
+              <FileSpreadsheet className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">No columns found in this data source.</p>
             </div>
           )}
         </div>
 
-        {!isFetchingHeaders && headers.length > 0 && (
-          <div className="flex justify-between items-center px-6 py-4 flex-shrink-0 border-t bg-background">
+        {isReady && (
+          <div className="flex justify-between items-center px-6 py-4 flex-shrink-0 border-t bg-background gap-3">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Back
+              Cancel
             </Button>
-            <Button 
-              onClick={() => mappingStepRef.current?.save()} 
+            <Button
+              onClick={() => mappingStepRef.current?.save()}
               disabled={isLoading}
+              className="min-w-[120px]"
             >
-              {isLoading ? "Saving..." : "Save Mappings"}
+              {isLoading ? "Saving…" : "Save Mappings"}
             </Button>
           </div>
         )}

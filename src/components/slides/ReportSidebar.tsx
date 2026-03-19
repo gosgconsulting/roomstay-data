@@ -10,7 +10,16 @@ import {
   Database,
   Layers,
   LineChart,
+  BookmarkPlus,
+  Trash2,
 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+
+interface View {
+  id: string | null;
+  name: string;
+}
 
 interface Tab {
   value: string;
@@ -36,6 +45,15 @@ interface ReportSidebarProps {
   onForecast: () => void;
   onPriceWidget: () => void;
   reportName?: string;
+  /** View selector (above Reports) */
+  selectedViewId: string | null;
+  setSelectedViewId: (viewId: string | null) => void;
+  availableViews: View[];
+  handleApplyView: (viewId: string | null) => void;
+  handleDeleteView: (viewId: string) => void;
+  setIsSaveViewDialogOpen: (open: boolean) => void;
+  setIsSaveOrUpdateViewDialogOpen: (open: boolean) => void;
+  isReadOnlyMode: boolean;
 }
 
 export function ReportSidebar({
@@ -46,6 +64,14 @@ export function ReportSidebar({
   onForecast,
   onPriceWidget,
   reportName,
+  selectedViewId,
+  setSelectedViewId,
+  availableViews,
+  handleApplyView,
+  handleDeleteView,
+  setIsSaveViewDialogOpen,
+  setIsSaveOrUpdateViewDialogOpen,
+  isReadOnlyMode,
 }: ReportSidebarProps) {
   return (
     <aside className="flex flex-col w-56 shrink-0 border-r bg-card h-screen sticky top-0 overflow-y-auto">
@@ -58,6 +84,68 @@ export function ReportSidebar({
           <span className="font-semibold text-sm truncate leading-tight">
             {reportName || "Data Studio"}
           </span>
+        </div>
+      </div>
+
+      {/* View: [dropdown] save icon — above Reports */}
+      <div className="px-2 py-3 border-b space-y-2">
+        <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          View
+        </p>
+        <div className="flex items-center gap-1.5 px-1">
+          <Select
+            value={selectedViewId === null ? "master" : selectedViewId || "master"}
+            onValueChange={(value) => {
+              if (isReadOnlyMode) return;
+              const newViewId = value === "master" ? null : value === "unsaved" ? "unsaved" : value;
+              setSelectedViewId(newViewId);
+              if (newViewId !== "unsaved") {
+                handleApplyView(newViewId);
+              }
+            }}
+            disabled={isReadOnlyMode}
+          >
+            <SelectTrigger className="h-8 flex-1 min-w-0 text-xs bg-background">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableViews.map((view) => (
+                <SelectItem key={view.id === null ? "master" : view.id} value={view.id === null ? "master" : view.id}>
+                  {view.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!isReadOnlyMode && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={() => {
+                  if (selectedViewId && selectedViewId !== "unsaved") {
+                    setIsSaveOrUpdateViewDialogOpen(true);
+                  } else {
+                    setIsSaveViewDialogOpen(true);
+                  }
+                }}
+                title="Save current filters as a view"
+              >
+                <BookmarkPlus className="h-4 w-4" />
+              </Button>
+              {selectedViewId && selectedViewId !== "unsaved" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
+                  onClick={() => handleDeleteView(selectedViewId)}
+                  title="Delete this view"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
+            </>
+          )}
         </div>
       </div>
 
