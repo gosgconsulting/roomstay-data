@@ -212,7 +212,6 @@ export default function SlideViewPage() {
   // Dynamic data state (fetched from database)
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [dynamicMonthlyData, setDynamicMonthlyData] = useState<any[]>([]);
-  const [dynamicChannelTotals, setDynamicChannelTotals] = useState<Record<string, any>>({});
   const [dynamicYearlyTotals, setDynamicYearlyTotals] = useState<Record<number, Record<string, any>>>({});
 
 
@@ -235,7 +234,6 @@ export default function SlideViewPage() {
     groupByDimensionId: groupByDimension[selectedTab] || groupByDimension['metasearch'],
     breakdownByDimensionId: breakdownByDimension[selectedTab] || breakdownByDimension['metasearch'],
     selectedViewId,
-    dynamicChannelTotals,
     displayCurrency: undefined,
     audPerUsd,
   });
@@ -734,23 +732,11 @@ export default function SlideViewPage() {
     filterValues,
     filterDimensionValues,
     slideType,
-    dynamicChannelTotals,
     comparisonType: comparisonType as 'none' | 'previous_period' | 'previous_year',
   });
 
   // Get current totals - uses unified filteredData hook (single source of truth)
   const currentTotals = filteredData.channelTotals;
-
-  // Helper function to check if any channel has non-zero data
-  const hasAnyData = (totals: typeof currentTotals): boolean => {
-    return Object.values(totals).some(channel =>
-      channel.impressions > 0 ||
-      channel.clicks > 0 ||
-      channel.cost > 0 ||
-      channel.revenue > 0 ||
-      channel.bookings > 0
-    );
-  };
 
   // Comparison totals come exclusively from useChannelMetrics (rawDataRows-based, date-filtered).
   const comparisonTotals = hookComparisonTotals ?? null;
@@ -823,17 +809,8 @@ export default function SlideViewPage() {
         setDynamicMonthlyData(monthlyRevenue);
       }
 
-      // Load channel totals from current metrics
+      // Load yearly totals
       if (pivotData.channels) {
-        const channelTotals: Record<string, any> = {};
-        for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-          channelTotals[channel] = (channelData as any).current;
-        }
-        if (Object.keys(channelTotals).length > 0) {
-          setDynamicChannelTotals(channelTotals);
-        }
-
-        // Load yearly totals
         const yearlyTotals: Record<number, Record<string, any>> = {};
         for (const year of [2024, 2025, 2026]) {
           yearlyTotals[year] = {};
@@ -1343,7 +1320,7 @@ export default function SlideViewPage() {
     5: 'pending',
   });
   const [refreshError, setRefreshError] = useState<string | null>(null);
-  const [activeRefreshMode, setActiveRefreshMode] = useState<'full' | 'recent'>('recent');
+  const [activeRefreshMode, setActiveRefreshMode] = useState<'full' | 'recent'>('full');
   const [refreshRowsProcessed, setRefreshRowsProcessed] = useState<number | null>(null);
   // True only after user explicitly clicks "Start Refresh" in the modal — gates the refresh useEffect.
   const [refreshPending, setRefreshPending] = useState(false);
@@ -1446,7 +1423,6 @@ export default function SlideViewPage() {
   // Breakdown table state is declared earlier (groupByDimension, breakdownByDimension) so useFilteredSlideData can use it for KPI.
 
   // Store breakdown totals from Breakdown Analysis table for KPI synchronization
-  const [breakdownTotals, setBreakdownTotals] = useState<Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>>({});
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const handleDimensionToggle = useCallback((dimension: 'metasearch' | 'sem' | 'social') => {
@@ -2019,7 +1995,6 @@ export default function SlideViewPage() {
         });
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [breakdownConfigs, breakdownDimensions]);
 
   // Handle dimension change
@@ -2853,11 +2828,10 @@ export default function SlideViewPage() {
             console.warn('[RefreshData] Failed to update last_refreshed_at:', updateErr);
           }
 
-          // Reload report: refetch canonical report data so cache has fresh dimension_data before showing complete (avoids stale Cost/KPIs). Use exact query key so the active report's data is refetched.
-          const rawRowsQueryKey = ['data-studio-raw-rows', slideReportId, selectedYear];
+          // Reload report: refetch canonical report data so cache has fresh dimension_data before showing complete (avoids stale Cost/KPIs).
           try {
-            await queryClient.refetchQueries({ queryKey: rawRowsQueryKey });
-            queryClient.invalidateQueries({ queryKey: rawRowsQueryKey });
+            await queryClient.refetchQueries({ queryKey: ['data-studio-raw-rows'] });
+            queryClient.invalidateQueries({ queryKey: ['data-studio-raw-rows'] });
           } catch (refetchErr) {
             console.warn('[RefreshData] Report refetch failed (data may still be stale):', refetchErr);
           }
@@ -3103,9 +3077,6 @@ export default function SlideViewPage() {
         selectedTab={selectedTab}
         onTabChange={setSelectedTab}
         reportName={slideReport?.name}
-        onRefreshData={handleRefreshDataWithModal}
-        isRefreshInProgress={isRefreshModalOpen}
-        onShare={() => setIsShareModalOpen(true)}
         onDataSources={() => navigate(accountId ? `/tools/data-sources/${accountId}` : '/tools/data-sources')}
         onDimensions={() => navigate(accountId ? `/tools/dimensions/${accountId}` : '/tools/dimensions')}
         onForecast={() => navigate('/tools/forecasting')}
@@ -3153,15 +3124,6 @@ export default function SlideViewPage() {
             handleDeleteView={handleDeleteView}
             setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
             setIsSaveOrUpdateViewDialogOpen={setIsSaveOrUpdateViewDialogOpen}
-            filterValues={filterValues}
-            setFilterValues={setFilterValues}
-            filterDimensionValues={filterDimensionValues}
-            setFilterDimensionValues={setFilterDimensionValues}
-            filterDimensionNames={filterDimensionNames}
-            setFilterDimensionNames={setFilterDimensionNames}
-            dimensions={dimensions}
-            filterConfigs={filterConfigs}
-            slideReport={slideReport}
             selectedYear={selectedYear}
             setSelectedYear={setSelectedYear}
             selectedMonth={selectedMonth}
@@ -3170,20 +3132,15 @@ export default function SlideViewPage() {
             setCustomDateRange={setCustomDateRange}
             comparisonType={comparisonType}
             setComparisonType={setComparisonType}
-            pendingFilterValues={pendingFilterValues}
-            setPendingFilterValues={setPendingFilterValues}
-            filterSearchTerms={filterSearchTerms}
-            setFilterSearchTerms={setFilterSearchTerms}
-            openFilterPopovers={openFilterPopovers}
-            setOpenFilterPopovers={setOpenFilterPopovers}
-            filterValuesLoading={filterValuesLoading}
-            setFilterValuesLoading={setFilterValuesLoading}
-            loadFilterDimensionValues={loadFilterDimensionValues}
-            onOpenFilterSettings={(channel) => {
+            onOpenFilters={() => {
               setDimensionSettingsMode("filters");
-              setDimensionSettingsInitialChannel(channel);
+              setDimensionSettingsInitialChannel(selectedTab === "overview" || selectedTab === "budget" ? "metasearch" : (selectedTab as "metasearch" | "sem" | "social"));
               setDimensionSettingsOpen(true);
             }}
+            onShare={() => setIsShareModalOpen(true)}
+            onRefreshData={handleRefreshDataWithModal}
+            isRefreshInProgress={isRefreshModalOpen}
+            showRefreshButton={!slideReport?.configuration?.isChildReport}
           />
         </div>
 
@@ -3203,7 +3160,6 @@ export default function SlideViewPage() {
               isLoadingData={isLoadingSlideContent}
               isLoadingMonthlyData={isLoadingMonthlyData}
               currentTotals={currentTotals}
-              breakdownTotals={breakdownTotals}
               overviewChartData={effectiveOverviewChartData}
               comparisonChartData={comparisonOverviewChartData}
               chartTimeRange={chartTimeRange}
@@ -3235,7 +3191,6 @@ export default function SlideViewPage() {
                 slideReport={slideReport}
                 pivotData={effectivePivotData}
                 isLoadingData={isLoadingSlideContent}
-                breakdownTotals={breakdownTotals}
                 currentTotals={currentTotals}
                 channelChartData={effectiveChannelChartData}
                 comparisonChannelChartData={comparisonEffectiveChannelChartData}
@@ -3268,7 +3223,6 @@ export default function SlideViewPage() {
                 renderKPICardsSkeleton={renderKPICardsSkeleton}
                 getReportKPICards={getReportKPICards}
                 getChannelComparisonMetrics={getChannelComparisonMetrics}
-                setBreakdownTotals={setBreakdownTotals}
                 comparisonTotals={comparisonTotals}
                 comparisonType={comparisonType}
                 displayCurrency={undefined}

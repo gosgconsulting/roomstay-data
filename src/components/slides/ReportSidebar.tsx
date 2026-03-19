@@ -10,9 +10,6 @@ import {
   Database,
   Layers,
   LineChart,
-  Share2,
-  RefreshCw,
-  Loader2,
 } from "lucide-react";
 
 interface Tab {
@@ -34,9 +31,6 @@ const TABS: Tab[] = [
 interface ReportSidebarProps {
   selectedTab: string;
   onTabChange: (tab: string) => void;
-  onRefreshData: () => void;
-  isRefreshInProgress: boolean;
-  onShare: () => void;
   onDataSources: () => void;
   onDimensions: () => void;
   onForecast: () => void;
@@ -47,9 +41,6 @@ interface ReportSidebarProps {
 export function ReportSidebar({
   selectedTab,
   onTabChange,
-  onRefreshData,
-  isRefreshInProgress,
-  onShare,
   onDataSources,
   onDimensions,
   onForecast,
@@ -95,34 +86,6 @@ export function ReportSidebar({
       {/* Bottom actions */}
       <div className="px-2 py-3 border-t space-y-0.5">
         <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          Actions
-        </p>
-        <button
-          onClick={onRefreshData}
-          disabled={isRefreshInProgress}
-          className={cn(
-            "w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors text-left",
-            isRefreshInProgress
-              ? "opacity-60 cursor-not-allowed text-muted-foreground"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
-          )}
-        >
-          {isRefreshInProgress ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-          Refresh Data
-        </button>
-        <button
-          onClick={onShare}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-left"
-        >
-          <Share2 className="h-4 w-4" />
-          Share
-        </button>
-
-        <p className="mt-3 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
           Manage
         </p>
         <button
