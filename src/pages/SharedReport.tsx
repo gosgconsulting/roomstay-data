@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Lock, Eye, EyeOff } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
@@ -412,7 +413,8 @@ export default function SharedReport() {
 
   // Render the full report dashboard
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background relative">
+      <ThemeToggle className="fixed top-4 right-4 z-50" />
       {/* Loading toast for data loading - HIDDEN: Individual components show their own loading states */}
       {/* <LoadingToast 
         isVisible={isDataLoading} 

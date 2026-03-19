@@ -4,7 +4,7 @@
 
 /*
   Roomstay design system — single source of truth.
-  All colors are HSL. Light-only product (dark block mirrors light).
+  All colors are HSL. Light default; dark mode via .dark class (theme toggle).
 
   Brand palette:
     Primary (CTA)  : #FF0068  — hot pink, primary actions only
@@ -82,24 +82,24 @@
     --sidebar-ring: 335.5 100% 50%;
   }
 
-  /* Dark mode intentionally mirrors light — product is light-only. */
+  /* Dark mode: same hierarchy, dark surfaces and light text. */
   .dark {
-    --background: 0 0% 100%;
-    --foreground: 265.7 24.1% 11.4%;
-    --card: 220 17.6% 96.7%;
-    --card-foreground: 265.7 24.1% 11.4%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 265.7 24.1% 11.4%;
+    --background: 265 22% 8%;
+    --foreground: 220 14% 96%;
+    --card: 265 20% 12%;
+    --card-foreground: 220 14% 96%;
+    --popover: 265 20% 12%;
+    --popover-foreground: 220 14% 96%;
     --primary: 335.5 100% 50%;
     --primary-foreground: 0 0% 100%;
     --primary-light: 334.1 100% 55.1%;
-    --primary-lighter: 335.5 100% 92%;
-    --secondary: 220 17.6% 96.7%;
-    --secondary-foreground: 0 0% 22.7%;
-    --muted: 220 17.6% 96.7%;
-    --muted-foreground: 0 0% 42%;
-    --accent: 220 17.6% 93%;
-    --accent-foreground: 265.7 24.1% 11.4%;
+    --primary-lighter: 335.5 100% 25%;
+    --secondary: 265 18% 16%;
+    --secondary-foreground: 220 14% 96%;
+    --muted: 265 18% 16%;
+    --muted-foreground: 220 10% 58%;
+    --accent: 265 18% 20%;
+    --accent-foreground: 220 14% 96%;
     --success: 160.1 84.1% 39.4%;
     --success-foreground: 0 0% 100%;
     --warning: 37.7 92.1% 50.2%;
@@ -108,8 +108,8 @@
     --info-foreground: 265.7 24.1% 11.4%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
-    --border: 216 12.2% 88%;
-    --input: 216 12.2% 88%;
+    --border: 265 18% 22%;
+    --input: 265 18% 22%;
     --ring: 335.5 100% 50%;
     --chart-1: 335.5 100% 50%;
     --chart-2: 320 100% 50%;
@@ -118,13 +118,13 @@
     --chart-5: 260.3 100% 61.2%;
     --chart-gradient-start: 335.5 100% 50%;
     --chart-gradient-end: 260.3 100% 61.2%;
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 0 0% 22.7%;
+    --sidebar-background: 265 22% 8%;
+    --sidebar-foreground: 220 14% 96%;
     --sidebar-primary: 335.5 100% 50%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 220 17.6% 93%;
-    --sidebar-accent-foreground: 265.7 24.1% 11.4%;
-    --sidebar-border: 216 12.2% 88%;
+    --sidebar-accent: 265 18% 20%;
+    --sidebar-accent-foreground: 220 14% 96%;
+    --sidebar-border: 265 18% 22%;
     --sidebar-ring: 335.5 100% 50%;
   }
 }

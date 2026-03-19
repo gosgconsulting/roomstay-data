@@ -387,7 +387,7 @@ export function BudgetTab({
                         `${channelConfig?.percentRevenue.toFixed(2) || 0}%`
                       )}
                     </TableCell>
-                    <TableCell className={`text-right font-medium ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <TableCell className={`text-right font-medium ${profit >= 0 ? 'text-success' : 'text-destructive'}`}>
                       {formatNumber(profit, 'currency')}
                     </TableCell>
                   </>
@@ -402,7 +402,7 @@ export function BudgetTab({
                   </>
                 ) : (
                   <>
-                    <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <TableCell className={`text-right font-medium ${variance >= 0 ? 'text-success' : 'text-destructive'}`}>
                       {variance >= 0 ? '+' : ''}{formatNumber(variance, 'currency')}
                     </TableCell>
                     <TableCell className="text-right">{formatNumber(revenueRow, 'currency')}</TableCell>

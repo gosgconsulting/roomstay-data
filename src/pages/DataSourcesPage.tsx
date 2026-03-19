@@ -431,7 +431,7 @@ export default function DataSourcesPage() {
                                   className="h-7 w-7"
                                   onClick={() => handleSaveName(dataSource.id)}
                                 >
-                                  <Check className="h-4 w-4 text-green-600" />
+                                  <Check className="h-4 w-4 text-success" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -442,7 +442,7 @@ export default function DataSourcesPage() {
                                     setEditingNameValue("");
                                   }}
                                 >
-                                  <X className="h-4 w-4 text-red-600" />
+                                  <X className="h-4 w-4 text-destructive" />
                                 </Button>
                               </div>
                             ) : (

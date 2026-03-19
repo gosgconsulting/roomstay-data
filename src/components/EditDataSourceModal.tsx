@@ -21,13 +21,12 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ColumnMappingStep } from "./ColumnMappingStep";
 import { useUser } from "@/lib/auth";
-import { 
-  syncDataSource, 
-  extractSpreadsheetId, 
+import { syncDataSource, type SyncOptions } from "@/lib/sync-utils";
+import {
+  extractSpreadsheetId,
   fetchGoogleSheetsData,
   type DataSource as SyncDataSource,
-  type SyncOptions 
-} from "@/lib/sync-utils";
+} from "@/lib/data-sources";
 import { useCacheStatus } from "@/hooks/useCacheStatus";
 
 interface DataSource {

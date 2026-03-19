@@ -1,11 +1,7 @@
 /**
- * Optimized hook for instant data loading using database-cached dimension_data
- * This provides instant loading instead of fetching from Google Sheets/CSV each time
- * 
- * Features:
- * - Long staleTime (10 min) to prevent re-fetches
- * - placeholderData to show previous data instantly while loading new
- * - Shared query key so all components share the same cache
+ * Fetches dimension_data from Supabase for a report (used by PerformanceTable, KPIChart, FiltersBar).
+ * Cache is disabled (staleTime/gcTime 0, refetch on mount) so Data Studio always shows fresh data
+ * and KPIs (e.g. metasearch cost) are not stuck on stale cached values.
  */
 
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
@@ -113,12 +109,12 @@ export function useCachedSourceData(
       };
     },
     enabled: enabled && !!reportId,
-    staleTime: forceRefresh ? 0 : 10 * 60 * 1000, // 10 minutes (increased from 5)
-    gcTime: 60 * 60 * 1000, // 1 hour in garbage collection
-    refetchOnWindowFocus: false,
-    refetchOnMount: false, // Don't refetch when component mounts (use cached data)
-    refetchOnReconnect: false,
-    placeholderData: keepPreviousData, // Show previous data instantly while loading
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    placeholderData: keepPreviousData,
   });
 }
 

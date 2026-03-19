@@ -267,10 +267,10 @@ export function useDataStudioRawRows(
       return { rawRows: result, dimensionMaps };
     },
     enabled: enabled && !!slideReport?.id && Object.keys(reportIds).length > 0,
-    staleTime: 0, // Always refetch when invalidated — data changes after sync
-    gcTime: 30 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
+    staleTime: 0,
+    gcTime: 0, // Do not retain stale raw rows — avoids wrong KPIs (e.g. metasearch cost) from old cache
+    refetchOnMount: true, // Always fetch fresh data when Data Studio mounts
+    refetchOnWindowFocus: true, // Refetch when user returns to tab so totals stay correct
+    refetchOnReconnect: true,
   });
 }

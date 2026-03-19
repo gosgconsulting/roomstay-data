@@ -88,7 +88,7 @@ export function TableHeader({
                 className={cn(
                   "px-3 py-1 text-sm font-medium rounded transition-colors capitalize",
                   activeDateTab === tab
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-background text-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >

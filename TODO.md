@@ -32,6 +32,79 @@ After coding:
 
 ## Active tasks
 
+### Project doc planner — Next steps implemented (2026-03-19)
+
+- [x] **NS-2** — debug.ts → `src/lib/utils/retry.ts` + `src/lib/utils/dimensionFilter.ts`; deleted debug.ts.
+- [x] **NS-3** — ForecastingPage verified in use (ForecastingDashboard).
+- [x] **NS-4** — resync-dimensions logic moved to `resync-all-dimensions/resyncReportDataSources.ts`; resync-dimensions.ts re-exports.
+- [x] **NS-5** — useDataSourceHeaders, ViewDataModal, EditDataSourceModal now use `@/lib/data-sources` for extractSpreadsheetId, fetchGoogleSheetsData, DataSource.
+
+**Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors).
+
+---
+
+### Refactor Phase 1 + Cleanup (2026-03-19)
+
+Per `docs/REFACTOR.md` and refactor skill:
+
+- [x] **RF-1** — Phase 1 Audit: populated REFACTOR.md §2 (routes, systems, duplicate mapping, issues) and §3 (target architecture).
+- [x] **RF-2** — Removed dead code: `src/components/slides/FilterControls.tsx`, `src/components/DataStudioDropdowns.tsx` (no imports; Verify → Delete).
+- [x] **RF-3** — Progress: Phase 1 marked complete; Phase 4 cleanup (two files) executed; build + lint pass.
+
+**Next:** Phase 2 (Canonical Definition) or further Phase 4 cleanup as needed. See `docs/REFACTOR.md` Progress Tracker.
+
+---
+
+### Dark mode toggle (2026-03-19)
+
+- [x] **DM-1** — Added `ThemeProvider` and `useTheme` in `src/lib/theme.tsx`; theme persisted to `localStorage` (`roomstay-theme`), applied via `document.documentElement.classList` (`dark`).
+- [x] **DM-2** — Real dark mode CSS variables in `src/index.css` (`.dark`: dark backgrounds, light text, same hierarchy).
+- [x] **DM-3** — Inline script in `index.html` to apply saved theme before React hydrate (no flash).
+- [x] **DM-4** — `ThemeToggle` component (Sun/Moon icon, tooltip); added to SlideViewHeader, Auth, Integrations, NotFound, SharedReport.
+- [x] **DM-5** — README: theme policy updated for light/dark toggle.
+
+**Verification:** Run `npm run build` and `npm run lint`.
+
+---
+
+### Design system refactor (2026-03-19)
+
+Refactored UI to follow `docs/DESIGN_SYSTEM_RULES.md`: tokens only, no decorative shadows.
+
+- [x] **DSR-1** — Replaced hardcoded colors with design tokens: `text-green-600`/`text-red-600` → `text-success`/`text-destructive` (OverviewTab, BudgetTab, TableBody, TableRow, DataSourcesPage, DimensionSelectorGroup, BreakdownTableSection, useKPICards, RefreshStepIndicator).
+- [x] **DSR-2** — Replaced `bg-white`/`border-gray-*`/`bg-gray-*`/`text-gray-*` with `bg-card`/`bg-popover`/`bg-muted`/`border-border`/`text-muted-foreground` (DimensionModal dropdown, Integrations, NotFound, KPISettingsModal).
+- [x] **DSR-3** — SlideDataBrowser channel pills: `bg-primary/10 text-primary`, `bg-success/10 text-success`, `bg-muted text-muted-foreground`.
+- [x] **DSR-4** — Removed decorative shadows from cards and layout (PerformanceTable Card, KPIChart Cards, LoadingToast, SlideViewPage fixed bar, TableHeader date tab).
+- [x] **DSR-5** — README: design rules now reference `docs/DESIGN_SYSTEM_RULES.md` as visual source of truth.
+
+**Verification:** Run `npm run build` and `npm run lint` after changes.
+
+---
+
+### Hard refresh and metasearch cost (direct Supabase fix) (2026-03-19)
+
+When metasearch Cost shows only part of the total (e.g. 343 instead of ~1.3k):
+
+- [x] **HR-1** — **Recommended:** Run a **Full Refresh** from the app (Data Studio → Refresh Data → Full Refresh → Start Refresh). This clears `dimension_data` and re-syncs from sources so Cost is written with the correct account-scoped dimension ID. See `docs/HARD_REFRESH_AND_METASEARCH_COST.md`.
+- [x] **HR-2** — **Optional (direct DB):** Added `supabase/scripts/fix_metasearch_cost_dimension_data.sql` to normalize Cost in `dimension_data`. Run via Supabase MCP (`execute_sql`), Dashboard SQL Editor, or `npm run fix:metasearch-cost` when linked. See `docs/HARD_REFRESH_AND_METASEARCH_COST.md` and `docs/MCP_SUPABASE.md`.
+
+**Verification:** After full refresh or running the SQL script, reload Data Studio; metasearch Cost should show the full total. (Frontend already builds the dimension map from all rows — MS-1/MS-2 — so once data uses the correct Cost key(s), aggregation is correct.)
+
+### Supabase MCP (linked project) (2026-03-19)
+
+- [x] **MCP-1** — Added `docs/MCP_SUPABASE.md`: how to use the Supabase MCP when the project is linked (execute SQL, deploy Edge Functions, list tables/migrations, advisors, branches). Option B (metasearch cost fix) can be run via MCP `execute_sql`.
+- [x] **MCP-2** — Ran Option B fix via MCP `execute_sql` against the linked database. README and HARD_REFRESH doc updated to reference MCP.
+
+### Data Studio cache removed — always fresh data (2026-03-19)
+
+Backend metasearch cost data was correct (single Cost key, 57,997 rows); wrong KPI (e.g. 343) was from stale React Query cache.
+
+- [x] **DC-1** — `useDataStudioRawRows`: `gcTime: 0`, `refetchOnMount: true`, `refetchOnWindowFocus: true`, `refetchOnReconnect: true`. No retention of raw rows; Data Studio always fetches fresh on mount and when returning to tab.
+- [x] **DC-2** — `useCachedSourceData`: `staleTime: 0`, `gcTime: 0`, `refetchOnMount: true`, `refetchOnWindowFocus: true`. Table/charts/filters that use this hook no longer see stale cached dimension_data.
+- [x] **DC-3** — README: Data Studio raw rows described as no long-lived cache.
+
+---
+
 ### Metasearch cost showing ~300 instead of ~1.3k (QA fix 2026-03-19)
 
 **Root cause:** The dimension map used for aggregating Cost (and other KPIs) was built from only the **first 20 rows** (RPC path) or **first 200 rows** (all-time path). When a report has **multiple data sources** for the same channel (e.g. metasearch), each data source can use different dimension IDs (e.g. different Cost dimension IDs). Rows from the second data source only appear later in the result set. The small sample never saw those dimension IDs, so `buildMetricNameToIdsMap` / `getMetricKeys('cost')` only returned the Cost ID from the first source. Aggregation therefore only summed cost from rows keyed by that ID, under-counting (e.g. ~300 from one source, missing ~1k from the other).
@@ -261,10 +334,10 @@ Root cause: refresh was run with `clearFirst: false`, so `dimension_data` was ne
 ### Next steps
 
 - [x] **NS-1** — Audit `run-refresh-workflow`: removed legacy `refresh-slide-report` branch; workflow now only resyncs data sources (no slide_report_* cache refresh). See REFACTOR.md Remaining work.
-- [ ] **NS-2** — Migrate `debug.ts` utilities (`retryWithBackoff`, `filterDimensionsByFilterSettings`) into a more descriptive module (e.g. `src/lib/utils/retry.ts`, `src/lib/utils/dimensionFilter.ts`) and delete `debug.ts`.
-- [ ] **NS-3** — Dead code removal: `ForecastingPage.tsx` (verify router status).
-- [ ] **NS-4** — `resync-dimensions.ts` (flat) and `resync-all-dimensions.ts` (flat orchestrator) — consolidate into the `resync-all-dimensions/` folder module.
-- [ ] **NS-5** — Delete `src/lib/sync-utils.ts` once all remaining callers (`useDataSourceHeaders.ts`, `EditDataSourceModal.tsx`, `ViewDataModal.tsx`) are migrated off `parseDate`/`parseValue`/`fetchGoogleSheetsData` to canonical alternatives in `src/lib/data-sources/`.
+- [x] **NS-2** — Migrated `debug.ts`: `retryWithBackoff` → `src/lib/utils/retry.ts`, `filterDimensionsByFilterSettings` / `filterDimensionsByVisibility` → `src/lib/utils/dimensionFilter.ts`. Deleted `debug.ts`. KPIChart and FiltersBar updated.
+- [x] **NS-3** — Verified `ForecastingPage.tsx`: used by `ForecastingDashboard` (not dead); keep.
+- [x] **NS-4** — Consolidated resync: implementation moved to `src/lib/resync-all-dimensions/resyncReportDataSources.ts`; `resync-dimensions.ts` is now a re-export; `resync-all-dimensions.ts` imports from folder.
+- [x] **NS-5** — Migrated callers off `sync-utils` for fetch/ID/types: `useDataSourceHeaders` → `extractSpreadsheetId` from `@/lib/data-sources`; `ViewDataModal` → `DataSource` from `@/lib/data-sources`; `EditDataSourceModal` → `extractSpreadsheetId`, `fetchGoogleSheetsData`, `DataSource` from `@/lib/data-sources`. `sync-utils.ts` retained for `syncDataSource`/`SyncOptions` until that flow is replaced by runRefreshWorkflow.
 
 ---
 
@@ -444,8 +517,8 @@ _None currently._
 
 ## Verification baseline
 
-Last verified: **2026-03-19** (post KPI metrics unification)
+Last verified: **2026-03-19** (post Next steps NS-2–NS-5)
 
-- `npm run build` ✅ (exit 0, 8.26s)
-- `npm run lint` — not re-run (pre-existing warnings only)
+- `npm run build` ✅ (exit 0)
+- `npm run lint` ✅ (0 errors, warnings only)
 - E2E reports: Data Studio (/) and shared reports; loading/empty states prevent blank page when account or report is missing

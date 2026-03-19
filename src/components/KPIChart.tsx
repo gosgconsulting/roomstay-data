@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
-import { retryWithBackoff } from "@/lib/debug";
+import { retryWithBackoff } from "@/lib/utils/retry";
 import { getCurrentMonthDateRange } from "@/lib/monthUtils";
 import type { Dimension } from "@/lib/dimensionLoader";
 import { format, parseISO } from "date-fns";
@@ -611,7 +611,7 @@ export function KPIChart({
   
   if (showSkeleton) {
     return (
-      <Card className="bg-card border border-border shadow-sm rounded-lg">
+      <Card className="bg-card border border-border rounded-lg">
         <CardHeader className="pb-2 pt-4 px-4">
           <Skeleton className="h-4 w-20" />
         </CardHeader>
@@ -643,7 +643,7 @@ export function KPIChart({
 
   if (chartData.length === 0) {
     return (
-      <Card className="bg-card border border-border shadow-sm rounded-lg">
+      <Card className="bg-card border border-border rounded-lg">
         <CardHeader className="pb-2 pt-4 px-4">
           <CardTitle className="text-sm font-medium text-foreground">{selectedMetric}</CardTitle>
         </CardHeader>
@@ -657,7 +657,7 @@ export function KPIChart({
   }
 
   return (
-    <Card className="bg-card border border-border shadow-sm rounded-lg">
+    <Card className="bg-card border border-border rounded-lg">
       <CardHeader className="pb-2 pt-4 px-4">
         <CardTitle className="text-sm font-medium text-foreground">{selectedMetric}</CardTitle>
       </CardHeader>

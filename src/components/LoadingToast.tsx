@@ -79,7 +79,7 @@ export const LoadingToast = ({ isVisible, loadingComponents, onDismiss }: Loadin
 
   return (
     <div className="fixed bottom-4 right-4 z-50 animate-in slide-in-from-bottom-2 slide-in-from-right-2">
-      <Card className="w-80 shadow-lg border-l-4 border-l-primary">
+      <Card className="w-80 border-l-4 border-l-primary">
         <CardContent className="p-4">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">

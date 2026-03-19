@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { extractSpreadsheetId } from '@/lib/sync-utils';
+import { extractSpreadsheetId } from "@/lib/data-sources";
 
 interface DataSource {
   id: string;

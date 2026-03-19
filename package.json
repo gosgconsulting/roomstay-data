@@ -17,7 +17,8 @@
     "update-lockfile": "bun update-lockfile.js",
     "test-deployment": "bun test-deployment.js",
     "test-domain": "bun test-domain.js",
-    "create-make-workflow": "node create-make-workflow.js"
+    "create-make-workflow": "node create-make-workflow.js",
+    "fix:metasearch-cost": "npx supabase@latest db query -f supabase/scripts/fix_metasearch_cost_dimension_data.sql --linked"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

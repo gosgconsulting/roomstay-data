@@ -589,7 +589,7 @@ export const PerformanceTable = ({
 
   return (
     <>
-      <Card className="shadow-sm">
+      <Card>
         <CardHeader className="p-0">
           <TableHeader
             activeDateTab={activeDateTab}

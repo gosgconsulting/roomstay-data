@@ -3135,7 +3135,7 @@ export default function SlideViewPage() {
       />
       {/* Data Studio: subtle background refresh indicator (non-blocking) */}
       {isDataStudio && dataStudioRefreshStatus === 'refreshing' && (
-        <div className="fixed top-2 right-2 z-50 flex items-center gap-2 bg-background/90 border rounded-lg px-3 py-2 shadow-sm">
+        <div className="fixed top-2 right-2 z-50 flex items-center gap-2 bg-background/90 border border-border rounded-lg px-3 py-2">
           <Loader2 className="h-4 w-4 animate-spin text-primary" />
           <span className="text-sm text-muted-foreground">Refreshing from sources…</span>
         </div>

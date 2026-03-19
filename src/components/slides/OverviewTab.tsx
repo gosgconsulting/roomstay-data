@@ -62,7 +62,7 @@ function PercentChangeBadge({ current, previous, isCostMetric = false }: { curre
   const isPositive = pct >= 0;
   const isGood = isCostMetric ? !isPositive : isPositive;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${isGood ? 'text-green-600' : 'text-red-600'}`}>
+    <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${isGood ? 'text-success' : 'text-destructive'}`}>
       {isPositive ? <ArrowUpRight className="h-2.5 w-2.5" /> : <ArrowDownRight className="h-2.5 w-2.5" />}
       {Math.abs(pct).toFixed(1)}%
     </span>
@@ -157,7 +157,7 @@ export function OverviewTab({
                   { label: "CPC", key: "cpc", value: derived.cpc, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cpc },
                   { label: "COST", key: "cost", value: derived.cost, icon: DollarSign, color: "text-blue-600", format: "currency", comparison: overviewCompMetrics?.cost },
                   { label: "REVENUE", key: "revenue", value: derived.revenue, icon: DollarSign, color: "text-cyan-600", format: "currency", comparison: overviewCompMetrics?.revenue },
-                  { label: "ROAS", key: "roas", value: derived.roas, icon: TrendingUp, color: "text-green-600", format: "roas", comparison: overviewCompMetrics?.roas },
+                  { label: "ROAS", key: "roas", value: derived.roas, icon: TrendingUp, color: "text-success", format: "roas", comparison: overviewCompMetrics?.roas },
                   { label: "COST OF SALE", key: "costOfSale", value: derived.costOfSale, icon: Percent, color: "text-purple-600", format: "percent", comparison: overviewCompMetrics?.costOfSale },
                 ];
               })()

@@ -471,9 +471,9 @@ export function SlideDataBrowser({
     }
 
     const channelColors: Record<string, string> = {
-      metasearch: 'bg-purple-500/10 text-purple-500 group-hover:bg-purple-500/20',
-      sem: 'bg-green-500/10 text-green-500 group-hover:bg-green-500/20',
-      social: 'bg-pink-500/10 text-pink-500 group-hover:bg-pink-500/20',
+      metasearch: 'bg-primary/10 text-primary group-hover:bg-primary/20',
+      sem: 'bg-success/10 text-success group-hover:bg-success/20',
+      social: 'bg-muted text-muted-foreground group-hover:bg-accent',
     };
 
     return (

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Share2, RefreshCw, Loader2, Database, Layers, ArrowLeft } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
 
@@ -78,6 +79,7 @@ export function SlideViewHeader({
 
       {/* Right: actions */}
       <div className="flex items-center gap-2">
+        <ThemeToggle />
         {showCurrencySwitcher && displayCurrency && onDisplayCurrencyChange && (
           <Select value={displayCurrency} onValueChange={(v) => onDisplayCurrencyChange(v as CurrencyCode)}>
             <SelectTrigger className="h-8 w-[88px]">

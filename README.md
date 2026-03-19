@@ -122,7 +122,7 @@ Google Sheets / CSV URL
 
 - **Entry point:** `/` renders `SlideViewPage` directly — Data Studio is the app homepage.
 - **Orchestrator hook:** `src/hooks/useSlideReportPage.ts` — composes sub-hooks for report identity, raw rows, filtered data, views, budgets, and mutations.
-- **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads `dimension_data` directly (no live fetch).
+- **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads `dimension_data` directly. No long-lived cache (refetch on mount, gcTime 0) so KPIs always reflect current DB state.
 - **Filtered data:** `src/hooks/useFilteredSlideData.ts` — pure client-side filtering and aggregation.
 - **Performance table:** `src/components/PerformanceTable/` + `src/hooks/performanceTable/`.
 - **View settings:** stored in `views` table (canonical, replaces legacy `report_views` + `slide_report_views`).
@@ -138,7 +138,8 @@ Google Sheets / CSV URL
 ### 5. Refresh / Sync Workflow
 
 - **Entry point:** `src/lib/refreshWorkflow.ts` → `run-refresh-workflow` edge function.
-- **Workflow:** the UI always passes `clearFirst: true`, so the workflow first deletes all `dimension_data` for the target report(s), then calls `resync-data-source` for each data source. This gives erase-then-replace behavior and prevents duplicate or stale rows. The Refresh Data modal shows an explicit "Clearing and resetting data" step before "Fetching from sources". Full Refresh uses `refreshMode: 'full'` and reloads all data from all sources. See `docs/REFRESH_WORKFLOW_AUDIT.md` for the full SEM/Social/Metasearch flow and dimension-resolution fix (metasearch 0 cost).
+- **Workflow:** the UI always passes `clearFirst: true`, so the workflow first deletes all `dimension_data` for the target report(s), then calls `resync-data-source` for each data source. This gives erase-then-replace behavior and prevents duplicate or stale rows. The Refresh Data modal shows an explicit "Clearing and resetting data" step before "Fetching from sources". Full Refresh uses `refreshMode: 'full'` and reloads all data from all sources. See `docs/REFRESH_WORKFLOW_AUDIT.md` for the full SEM/Social/Metasearch flow and dimension-resolution fix (metasearch 0 cost). For hard-refresh steps and fixing metasearch cost via direct Supabase data, see `docs/HARD_REFRESH_AND_METASEARCH_COST.md`.
+- **Supabase MCP:** When the project is linked to the Supabase MCP (Cursor/integration), you can run SQL (e.g. metasearch cost fix) and deploy Edge Functions from the IDE. See `docs/MCP_SUPABASE.md`.
 
 ### 6. Sharing System
 
@@ -260,7 +261,8 @@ Google Sheets / CSV URL
 | `metricsCalculations` | `src/lib/metricsCalculations.ts` | KPI derivation |
 | `monthUtils` | `src/lib/monthUtils.ts` | Month/date range utilities |
 | `refreshWorkflow` | `src/lib/refreshWorkflow.ts` | Data sync entry point |
-| `resync-all-dimensions/` | `src/lib/resync-all-dimensions/` | Canonical dimension resync (modular) |
+| `resync-all-dimensions/` | `src/lib/resync-all-dimensions/` | Canonical dimension resync (resyncReportDataSources, resyncDimensionData, etc.); `resync-dimensions.ts` re-exports for backward compatibility |
+| `utils/` | `src/lib/utils/` | `retry.ts` (retryWithBackoff), `dimensionFilter.ts` (filterDimensionsByFilterSettings, filterDimensionsByVisibility) |
 | `composio-proxy` | `src/lib/composio-proxy.ts` | Composio integration client |
 
 ---
@@ -278,9 +280,9 @@ Google Sheets / CSV URL
 ### Design system (UI tokens)
 
 - **Single source of truth:** `src/index.css` defines shadcn/Tailwind tokens as **HSL CSS variables** (`--background`, `--primary`, `--border`, etc.).
-- **Theme policy:** Light-only UI (white background, neutral borders). Any `.dark` tokens are intentionally aligned to the light theme.
+- **Theme policy:** Light default; dark mode via theme toggle (persisted in `localStorage` key `roomstay-theme`). `ThemeProvider` in `src/lib/theme.tsx` and `ThemeToggle` in header/auth/standalone pages.
 - **Typography:** DM Sans is loaded in `index.html` and used as the default Tailwind `font-sans`.
-- **Design rules:** See `docs/DESIGN_SYSTEM.md` for strict color discipline, hover/focus rules, and component standards (variants-first shadcn/ui).
+- **Design rules:** See `docs/DESIGN_SYSTEM.md` for token reference and component standards. **Visual source of truth:** `docs/DESIGN_SYSTEM_RULES.md` — all new pages, components, and refactors must follow it (tokens only, no hardcoded colors, no decorative shadows).
 
 ### Naming
 

@@ -4,7 +4,7 @@
  */
 
 import { QueryClient } from "@tanstack/react-query";
-import { resyncReportDataSources } from "./resync-dimensions";
+import { resyncReportDataSources } from "./resync-all-dimensions/resyncReportDataSources";
 import { resyncReportViews } from "./resync-report-views";
 import { resyncDimensionData } from "./resync-all-dimensions/resyncDimensionData";
 

@@ -618,7 +618,7 @@ export const DimensionModal = ({
                     />
 
                     {showMentionDropdown && (
-                      <div className="absolute left-0 top-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-48 overflow-y-auto w-full">
+                      <div className="absolute left-0 top-full mt-1 bg-popover border border-border rounded-md shadow-md z-50 max-h-48 overflow-y-auto w-full">
                         {availableDimensions
                           .filter((d) =>
                             d.name

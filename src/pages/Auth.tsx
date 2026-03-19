@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { FileSpreadsheet } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { z } from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { authKeys } from "@/lib/auth";
@@ -183,7 +184,8 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative">
+      <ThemeToggle className="fixed top-4 right-4 z-50" />
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 flex flex-col items-center">
           <div className="flex items-center gap-2 mb-2">

@@ -233,13 +233,13 @@ export function TableBody({
                   return (
                     <td key={dimension.id} className="py-3 px-4 text-right">
                       <div className="flex flex-col items-end gap-1">
-                        <span className={cn(isNegative && "text-red-600")}>
+                        <span className={cn(isNegative && "text-destructive")}>
                           {formatValue(value, { ...dimension, formula: dimension.formula || null })}
                         </span>
                         {hasComparison && (
                           <span className={cn(
                             "text-xs flex items-center gap-1",
-                            change > 0 ? "text-green-600" : change < 0 ? "text-red-600" : "text-muted-foreground"
+                            change > 0 ? "text-success" : change < 0 ? "text-destructive" : "text-muted-foreground"
                           )}>
                             {change > 0 && <ArrowUp className="h-3 w-3" />}
                             {change < 0 && <ArrowDown className="h-3 w-3" />}

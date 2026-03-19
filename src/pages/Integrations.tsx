@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { useComposioProxy } from '@/hooks/useComposioProxy';
 import { supabase } from '@/integrations/supabase/client';
 import { LogOut, Plug, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { toast } from '@/hooks/use-toast';
 
 export default function Integrations() {
@@ -43,7 +44,7 @@ export default function Integrations() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-muted flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -54,14 +55,17 @@ export default function Integrations() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-muted p-6">
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Integrations</h1>
-          <Button variant="ghost" size="sm" onClick={handleSignOut}>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
             <LogOut className="h-4 w-4 mr-2" />
             Sign out
-          </Button>
+            </Button>
+          </div>
         </div>
 
         <Card>

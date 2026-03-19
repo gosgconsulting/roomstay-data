@@ -469,7 +469,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       const pct = ((current - comparison) / Math.abs(comparison)) * 100;
       const isPositive = pct >= 0;
       return (
-        <span className={cn('ml-1 text-xs', isPositive ? 'text-green-600' : 'text-red-500')}>
+        <span className={cn('ml-1 text-xs', isPositive ? 'text-success' : 'text-destructive')}>
           {isPositive ? '+' : ''}{pct.toFixed(1)}%
         </span>
       );

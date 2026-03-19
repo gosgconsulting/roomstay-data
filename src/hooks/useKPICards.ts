@@ -88,7 +88,7 @@ export function useKPICards(metrics: DerivedMetrics): KPICard[] {
         key: 'roas',
         value: metrics.roas,
         icon: TrendingUp,
-        color: 'text-green-600',
+        color: 'text-success',
         format: 'roas',
       },
       {
@@ -177,7 +177,7 @@ export function useReportKPICards() {
           key: 'roas',
           value: metrics.roas,
           icon: TrendingUp,
-          color: 'text-green-600',
+          color: 'text-success',
           format: 'roas',
         },
         {

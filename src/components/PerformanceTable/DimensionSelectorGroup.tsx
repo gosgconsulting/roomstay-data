@@ -68,7 +68,7 @@ export function DimensionSelectorGroup({
                   {reportId && (
                     dimensionHasData[currentValue] !== undefined ? (
                       dimensionHasData[currentValue] ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-success" />
                       ) : (
                         <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
                       )
@@ -91,7 +91,7 @@ export function DimensionSelectorGroup({
                     {reportId && (
                       hasData !== undefined ? (
                         hasData ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                          <CheckCircle2 className="h-3.5 w-3.5 text-success" />
                         ) : (
                           <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
                         )

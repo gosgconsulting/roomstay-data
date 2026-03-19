@@ -76,7 +76,7 @@ function SortableKPIItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-3 p-3 bg-white border rounded-md hover:bg-accent/50 ${
+      className={`flex items-center gap-3 p-3 bg-card border border-border rounded-md hover:bg-accent/50 ${
         !isEditMode ? 'opacity-60' : ''
       }`}
     >
@@ -85,7 +85,7 @@ function SortableKPIItem({
         {...(isEditMode ? listeners : {})}
         className={isEditMode ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed"}
       >
-        <GripVertical className={`h-4 w-4 ${isEditMode ? 'text-gray-400' : 'text-gray-300'}`} />
+        <GripVertical className={`h-4 w-4 ${isEditMode ? 'text-muted-foreground' : 'text-muted-foreground/70'}`} />
       </div>
       <Checkbox
         id={`kpi-${kpi.name}`}

@@ -19,7 +19,7 @@ import { useState, useEffect } from "react";
 import { FileSpreadsheet } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { type DataSource } from "@/lib/sync-utils";
+import type { DataSource } from "@/lib/data-sources";
 import type { Dimension as AppDimension } from "@/types/dimensions";
 import { useUser } from "@/lib/auth";
 
