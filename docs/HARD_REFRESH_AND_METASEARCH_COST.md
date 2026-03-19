@@ -1,6 +1,15 @@
 # Hard refresh and metasearch cost fix
 
-## Problem
+## Currency / symbol parsing
+
+Cost and other currency metrics (e.g. from metasearch) may arrive as formatted strings: `"$1,234.56"`, `"AU$ 1,234"`, `"€500"`. The app uses a single parser so these always convert correctly:
+
+- **`parseNumericValue`** in `src/lib/parseNumericValue.ts` strips currency symbols ($ € £ ¥ etc.), codes (USD, AUD, AU$, US$), commas and spaces, then parses the number.
+- It is used when ingesting source data (`transformSourceData.parseValue`), when aggregating rows (`slideViewHelpers.aggregateRowsToMetrics`, `getVal`), in `BreakdownTableSection`, and in chart/filter hooks.
+
+If Cost still shows wrong totals, the cause is usually dimension ID merging (see below), not formatting.
+
+## Problem (dimension ID / multiple sources)
 
 Metasearch Cost may show only part of the total (e.g. ~343 instead of ~1.3k) when:
 

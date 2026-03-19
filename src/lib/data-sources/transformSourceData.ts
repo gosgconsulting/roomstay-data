@@ -3,6 +3,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { parseNumericValueOrNull } from "@/lib/parseNumericValue";
 import type { ColumnMapping, Dimension, DimensionMappingResult } from "./types";
 import { autoDetectColumnType, resolveDimensionNameToId, createOrGetDimension } from "./dimensionMapping";
 
@@ -128,34 +129,15 @@ export const parseValue = (value: any, dimensionType: string, dateFormat?: strin
   
   if (dimensionType === 'number' || dimensionType === 'currency' || dimensionType === 'percentage') {
     if (stringValue.includes('%')) {
-      const percentValue = stringValue.replace(/[%,\s]/g, '');
-      const numValue = parseFloat(percentValue);
-      if (!isNaN(numValue)) {
-        return dimensionType === 'percentage' ? numValue / 100 : numValue;
+      const raw = parseNumericValueOrNull(stringValue);
+      if (raw !== null) {
+        return dimensionType === 'percentage' ? raw / 100 : raw;
       }
     }
-    
-    const currencySymbolsRegex = /[$€£¥₹₽¢₩₦₨₫₪₭₮₯₰₱₲₳₴₵₶₷₸₹₺₻₼₽₾₿]/g;
-    const hasCurrencySymbol = currencySymbolsRegex.test(stringValue) || stringValue.includes('$');
-    
-    if (hasCurrencySymbol) {
-      const cleanedValue = stringValue
-        .replace(currencySymbolsRegex, '')
-        .replace(/[,\s]/g, '')
-        .replace(/[^\d.-]/g, '');
-      
-      const numValue = parseFloat(cleanedValue);
-      if (!isNaN(numValue) && isFinite(numValue)) {
-        return numValue;
-      }
-    }
-    
-    const cleanedValue = stringValue.replace(/[,\s]/g, '');
-    const numValue = parseFloat(cleanedValue);
-    if (!isNaN(numValue)) {
+    const numValue = parseNumericValueOrNull(stringValue);
+    if (numValue !== null) {
       return numValue;
     }
-    
     return null;
   }
   

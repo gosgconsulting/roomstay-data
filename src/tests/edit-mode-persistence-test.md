@@ -28,7 +28,7 @@ Verify that all settings configured in Edit Mode are properly saved and persist 
 - ✅ Date range should be restored
 - ✅ Settings should only be editable in Edit Mode
 
-**Database Location:** `report_views.filter_dimensions`, `report_views.filter_values`, `report_views.date_range_start/end`
+**Database Location:** `views.filter_dimensions`, `views.filter_values`, `views.date_range_start/end`
 
 ### 2. KPI Settings Persistence ✅
 **Steps:**
@@ -45,7 +45,7 @@ Verify that all settings configured in Edit Mode are properly saved and persist 
 - ✅ Visible KPIs should match saved configuration
 - ✅ Settings should only be editable in Edit Mode
 
-**Database Location:** `report_views.visible_kpis`, `report_views.kpi_order`
+**Database Location:** `views.visible_kpis`, `views.kpi_order`
 
 ### 3. Performance Table Column Settings Persistence ✅
 **Steps:**
@@ -61,7 +61,7 @@ Verify that all settings configured in Edit Mode are properly saved and persist 
 - ✅ Column order should be restored
 - ✅ Settings should only be editable in Edit Mode
 
-**Database Location:** `report_views.visible_columns`, `report_views.column_order`
+**Database Location:** `views.visible_columns`, `views.column_order`
 
 ### 4. Performance Table Grouping Settings Persistence ✅
 **Steps:**
@@ -79,7 +79,7 @@ Verify that all settings configured in Edit Mode are properly saved and persist 
 - ✅ Date granularity tab should be restored
 - ✅ Settings should only be editable in Edit Mode
 
-**Database Location:** `report_views.group_by_dimensions`, `report_views.breakdown_by_dimensions`, `report_views.then_by_dimensions`, `report_views.date_granularity`
+**Database Location:** `views.group_by_dimensions`, `views.breakdown_by_dimensions`, `views.then_by_dimensions`, `views.date_granularity`
 
 ### 5. Edit Mode State Persistence ❌
 **Steps:**

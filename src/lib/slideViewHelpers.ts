@@ -4,6 +4,7 @@
 
 import { isWithinInterval } from 'date-fns';
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
+import { parseNumericValue } from '@/lib/parseNumericValue';
 import type {
   RawDataRow,
   MetricData,
@@ -337,42 +338,11 @@ export const aggregateMetricsFromRows = (
     const rowData = row.dimension_values || row;
     const data = rowData as Record<string, unknown>;
 
-    // Aggregate each metric by its dimension ID
-    const impressions = parseFloat(
-      String(
-        data[metricIds.impressions] || data['Impressions'] || 0
-      ).replace(/[^0-9.-]/g, '')
-    );
-    const clicks = parseFloat(
-      String(data[metricIds.clicks] || data['Clicks'] || 0).replace(
-        /[^0-9.-]/g,
-        ''
-      )
-    );
-    const cost = parseFloat(
-      String(data[metricIds.cost] || data['Cost'] || 0).replace(
-        /[^0-9.-]/g,
-        ''
-      )
-    );
-    const revenue = parseFloat(
-      String(data[metricIds.revenue] || data['Revenue'] || 0).replace(
-        /[^0-9.-]/g,
-        ''
-      )
-    );
-    const bookings = parseFloat(
-      String(data[metricIds.bookings] || data['Bookings'] || 0).replace(
-        /[^0-9.-]/g,
-        ''
-      )
-    );
-
-    if (!isNaN(impressions)) result.impressions += impressions;
-    if (!isNaN(clicks)) result.clicks += clicks;
-    if (!isNaN(cost)) result.cost += cost;
-    if (!isNaN(revenue)) result.revenue += revenue;
-    if (!isNaN(bookings)) result.bookings += bookings;
+    result.impressions += parseNumericValue(data[metricIds.impressions] ?? data['Impressions']);
+    result.clicks += parseNumericValue(data[metricIds.clicks] ?? data['Clicks']);
+    result.cost += parseNumericValue(data[metricIds.cost] ?? data['Cost']);
+    result.revenue += parseNumericValue(data[metricIds.revenue] ?? data['Revenue']);
+    result.bookings += parseNumericValue(data[metricIds.bookings] ?? data['Bookings']);
   });
 
   return result;
@@ -450,11 +420,11 @@ export const buildMetricNameToIdsMap = (
 
     const normalizedName = dimensionName.toLowerCase().trim();
 
-    // Map common metric name variations to standard names
+    // Map common metric name variations to standard names (report sources may use different labels)
     const metricVariations: Record<string, string[]> = {
       impressions: ['impressions', 'impression'],
       clicks: ['clicks', 'click'],
-      cost: ['cost', 'spend', 'amount spent'],
+      cost: ['cost', 'spend', 'amount spent', 'total cost', 'ad spend', 'ad cost', 'total spend', 'cost (usd)', 'cost (aud)', 'spend (usd)', 'spend (aud)'],
       revenue: ['revenue', 'conversion value', 'purchase value'],
       bookings: ['bookings', 'conversions', 'conversion'],
     };
@@ -484,6 +454,23 @@ export const buildMetricNameToIdsMap = (
 
   return nameToIds;
 };
+
+/**
+ * Read a single metric value from a row using the same key resolution as aggregateRowsToMetrics.
+ * Use this when row keys are dimension IDs and the dimension may be named e.g. "Cost", "Spend", "Total cost".
+ */
+export function getMetricValueFromRow(
+  rowData: Record<string, unknown>,
+  metricName: string,
+  nameToIdsMap: Record<string, string[]>
+): number {
+  const keys = getMetricKeys(metricName, nameToIdsMap);
+  for (const key of keys) {
+    const v = rowData[key];
+    if (v !== undefined && v !== null) return parseNumericValue(v);
+  }
+  return 0;
+}
 
 /**
  * Get all possible keys (names + IDs) for a metric
@@ -561,10 +548,7 @@ export function aggregateRowsToMetrics(
   const getVal = (rowData: Record<string, unknown>, keys: string[]): number => {
     for (const key of keys) {
       const v = rowData[key];
-      if (v !== undefined && v !== null) {
-        const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.-]/g, ''));
-        if (!isNaN(n)) return n;
-      }
+      if (v !== undefined && v !== null) return parseNumericValue(v);
     }
     return 0;
   };

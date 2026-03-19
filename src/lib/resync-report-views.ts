@@ -1,12 +1,12 @@
 /**
- * Utility to resync report_views with account-scoped dimensions
+ * Utility to resync views with account-scoped dimensions
  * This ensures that old dimension IDs in visible_dimensions are updated to use account-scoped dimensions
  */
 
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Resyncs report_views for a report to use account-scoped dimensions
+ * Resyncs views for a report to use account-scoped dimensions
  * @param reportId - The ID of the report to resync
  * @param accountId - The account ID to match dimensions against
  */
@@ -54,7 +54,7 @@ export async function resyncReportViews(
     if (viewsError) throw viewsError;
 
     if (!reportViews || reportViews.length === 0) {
-      console.log(`[RESYNC-VIEWS] No report views found for report: ${reportId}`);
+      console.log(`[RESYNC-VIEWS] No views found for report: ${reportId}`);
       return;
     }
 
@@ -67,7 +67,7 @@ export async function resyncReportViews(
       dimensionNameMap.set(dim.name.toLowerCase(), dim.name);
     });
 
-    // Update each report view
+    // Update each view
     for (const view of reportViews) {
       const oldDimensionIds = (view.visible_dimensions || []) as string[];
       const oldVisibleColumns = (view.visible_columns || []) as string[];

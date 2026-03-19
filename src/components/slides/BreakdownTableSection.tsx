@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { calculateDerivedMetrics, formatNumber, filterRawDataRows, hasActiveFiltersForChannel, aggregateRowsToMetrics } from '@/lib/slideViewHelpers';
+import { calculateDerivedMetrics, formatNumber, filterRawDataRows, hasActiveFiltersForChannel, aggregateRowsToMetrics, buildMetricNameToIdsMap, getMetricValueFromRow } from '@/lib/slideViewHelpers';
 import { parseSelectedMonths, buildMultiMonthDateRange } from '@/lib/monthUtils';
 import type { SlideReportPivotData } from '@/types/slideReports';
 
@@ -374,14 +374,8 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
           }
         });
 
-        const metricNameToIdMap: Record<string, string> = {};
-        Object.entries(dimensionMap as Record<string, string>).forEach(
-          ([dimensionId, dimensionName]) => {
-            if (dimensionName && typeof dimensionName === 'string') {
-              metricNameToIdMap[dimensionName] = dimensionId;
-            }
-          }
-        );
+        // Use same metric key resolution as aggregateRowsToMetrics so Cost/Spend/Total cost etc. all map to cost
+        const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap as Record<string, string>);
 
         Object.entries(groupedRows).forEach(([breakdownValue, groupRows]) => {
           if (!allBreakdowns[breakdownValue]) {
@@ -395,20 +389,13 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
           }
 
           groupRows.forEach((row: any) => {
-            const rowData = row.dimension_values || row;
+            const rowData = (row.dimension_values || row) as Record<string, unknown>;
 
-            allBreakdowns[breakdownValue].impressions +=
-              parseFloat(
-                rowData[metricNameToIdMap['Impressions']] || rowData['Impressions'] || 0
-              ) || 0;
-            allBreakdowns[breakdownValue].clicks +=
-              parseFloat(rowData[metricNameToIdMap['Clicks']] || rowData['Clicks'] || 0) || 0;
-            allBreakdowns[breakdownValue].cost +=
-              parseFloat(rowData[metricNameToIdMap['Cost']] || rowData['Cost'] || 0) || 0;
-            allBreakdowns[breakdownValue].revenue +=
-              parseFloat(rowData[metricNameToIdMap['Revenue']] || rowData['Revenue'] || 0) || 0;
-            allBreakdowns[breakdownValue].bookings +=
-              parseFloat(rowData[metricNameToIdMap['Bookings']] || rowData['Bookings'] || 0) || 0;
+            allBreakdowns[breakdownValue].impressions += getMetricValueFromRow(rowData, 'impressions', nameToIdsMap);
+            allBreakdowns[breakdownValue].clicks += getMetricValueFromRow(rowData, 'clicks', nameToIdsMap);
+            allBreakdowns[breakdownValue].cost += getMetricValueFromRow(rowData, 'cost', nameToIdsMap);
+            allBreakdowns[breakdownValue].revenue += getMetricValueFromRow(rowData, 'revenue', nameToIdsMap);
+            allBreakdowns[breakdownValue].bookings += getMetricValueFromRow(rowData, 'bookings', nameToIdsMap);
           });
         });
       }

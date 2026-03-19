@@ -10,7 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { Json } from "@/integrations/supabase/types";
 
 const slideReportViewKeys = {
-  all: ["slide_report_views"] as const,
+  all: ["views"] as const,
   list: (slideReportId: string) => [...slideReportViewKeys.all, "list", slideReportId] as const,
   detail: (viewId: string) => [...slideReportViewKeys.all, "detail", viewId] as const,
 };

@@ -117,6 +117,7 @@ Google Sheets / CSV URL
 - **Canonical writer:** `resync-data-source` edge function.
 - **Canonical table:** `dimension_data` — shape: `(report_id, data_source_id, row_number, dimension_values jsonb)`.
 - **Unique index:** `dimension_data_report_source_row_key` on `(report_id, data_source_id, row_number)`.
+- **Dedupe data sources:** If a report has multiple CSV or Google Sheets sources (e.g. duplicate metasearch sources), run `supabase/scripts/dedupe_data_sources.sql` to keep one per `(report_id, source_type)` and delete the rest (see docs/REFACTOR.md).
 
 ### 3. Data Studio / Report View
 

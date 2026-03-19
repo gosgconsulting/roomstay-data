@@ -9,6 +9,7 @@
 import { useMemo } from 'react';
 import { MONTH_NAMES } from '@/constants/slideViewConstants';
 import { buildMetricNameToIdsMap, getMetricKeys } from '@/lib/slideViewHelpers';
+import { parseNumericValue } from '@/lib/parseNumericValue';
 import { buildChannelChartDataFromMonthlyData } from '@/lib/chartDataCalculations';
 import type { ChartTimeRange } from '@/lib/chartDataCalculations';
 import type { RawDataRow, MonthlyDataPoint } from '@/types/slideView';
@@ -38,11 +39,7 @@ function buildMonthlyDataFromRawRows(
     const getVal = (rowData: any, keys: string[]): number => {
       for (const key of keys) {
         const v = rowData[key];
-        if (v !== undefined && v !== null) {
-          if (typeof v === 'number') return isNaN(v) ? 0 : v;
-          const n = parseFloat(String(v).replace(/[^0-9.-]/g, ''));
-          if (!isNaN(n)) return n;
-        }
+        if (v !== undefined && v !== null) return parseNumericValue(v);
       }
       return 0;
     };

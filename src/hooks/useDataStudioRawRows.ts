@@ -256,12 +256,10 @@ export function useDataStudioRawRows(
 
       const results = await Promise.all(promises);
       for (const { channel, rows, dimMap } of results) {
-        if (rows.length > 0) {
-          result[channel] = rows;
-        }
-        if (Object.keys(dimMap).length > 0) {
-          dimensionMaps[channel] = dimMap;
-        }
+        // Always include every channel so the report shows all three (metasearch, sem, social).
+        // Empty rows when no data so cost/revenue etc. show as 0 instead of only metasearch showing.
+        result[channel] = rows ?? [];
+        dimensionMaps[channel] = dimMap ?? {};
       }
 
       return { rawRows: result, dimensionMaps };

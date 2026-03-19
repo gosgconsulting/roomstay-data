@@ -17,6 +17,7 @@ import {
   buildMetricNameToIdsMap,
   getMetricKeys,
 } from '@/lib/slideViewHelpers';
+import { parseNumericValue } from '@/lib/parseNumericValue';
 import type { SlideReportPivotData } from '@/types/slideReports';
 import type { MetricData, MonthlyDataPoint, RawDataRow } from '@/types/slideView';
 
@@ -54,11 +55,7 @@ function aggregateFromRawRows(
   const getMetricValue = (rowData: any, keys: string[]): number => {
     for (const key of keys) {
       const value = rowData[key];
-      if (value !== undefined && value !== null) {
-        if (typeof value === 'number') return isNaN(value) ? 0 : value;
-        const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
-        if (!isNaN(parsed)) return parsed;
-      }
+      if (value !== undefined && value !== null) return parseNumericValue(value);
     }
     return 0;
   };

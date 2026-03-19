@@ -21,13 +21,13 @@ import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { ColumnMappingStep } from "./ColumnMappingStep";
 import { useUser } from "@/lib/auth";
-import { syncDataSource, type SyncOptions } from "@/lib/sync-utils";
 import {
   extractSpreadsheetId,
   fetchGoogleSheetsData,
-  type DataSource as SyncDataSource,
 } from "@/lib/data-sources";
 import { useCacheStatus } from "@/hooks/useCacheStatus";
+import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface DataSource {
   id: string;
@@ -62,6 +62,7 @@ export const EditDataSourceModal = ({
 }: EditDataSourceModalProps) => {
   const { data: userData } = useUser();
   const user = userData?.user || null;
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [dataName, setDataName] = useState("");
   const [url, setUrl] = useState("");
@@ -139,7 +140,7 @@ export const EditDataSourceModal = ({
     }
   }, [sourceType, dataSource, open]);
 
-  // Remove duplicate extractSpreadsheetId - now imported from sync-utils
+  // extractSpreadsheetId from @/lib/data-sources
 
   const handleNext = async () => {
     if (!dataName || !url) {
@@ -571,68 +572,45 @@ export const EditDataSourceModal = ({
 
       if (updateError) throw updateError;
 
-      toast({ title: "Resyncing...", description: "Data fetched successfully. Clearing old data..." });
+      toast({ title: "Resyncing...", description: "Running refresh workflow..." });
 
-      // Convert to sync-utils format with updated values
-      const syncDataSourceObj: SyncDataSource = {
-        id: dataSource.id,
-        name: dataName,
-        header_row: parseInt(headerRow),
-        column_mappings: dataSource.column_mappings,
-        report_id: dataSource.report_id,
-        source_type: sourceType,
-      };
-
-      if (sourceType === 'csv_url') {
-        syncDataSourceObj.csv_url = url;
-      } else {
-        const spreadsheetId = extractSpreadsheetId(url);
-        if (!spreadsheetId) throw new Error("Invalid Google Sheets URL");
-        syncDataSourceObj.google_sheets_url = url;
-        syncDataSourceObj.spreadsheet_id = spreadsheetId;
-        syncDataSourceObj.tab_name = selectedTab;
+      let resolvedAccountId = accountId;
+      if (!resolvedAccountId && dataSource.report_id) {
+        const { data: reportRow } = await supabase
+          .from('reports')
+          .select('account_id')
+          .eq('id', dataSource.report_id)
+          .single();
+        resolvedAccountId = reportRow?.account_id ?? undefined;
+      }
+      if (!resolvedAccountId) {
+        throw new Error("Account not found for this report");
       }
 
-      const options: SyncOptions = {
-        deleteExistingData: true,
-        recreateDimensions: true,
-        showProgress: true,
-        onProgress: (message) => {
-          console.log(`[RESYNC] ${message}`);
-          toast({ title: "Resyncing...", description: message });
-        }
-      };
-
-      const result = await syncDataSource(syncDataSourceObj, options);
+      const result = await runRefreshWorkflow({
+        accountId: resolvedAccountId,
+        reportId: dataSource.report_id,
+        clearFirst: true,
+        refreshMode: 'full',
+      });
 
       if (result.success) {
-        toast({ title: "Resyncing...", description: `${result.rowsProcessed.toLocaleString()} rows imported` });
+        const rowsMsg = result.rowsProcessed != null
+          ? `${result.rowsProcessed.toLocaleString()} rows imported`
+          : "Data resynced";
+        toast({ title: "Resyncing...", description: rowsMsg });
+        await new Promise((r) => setTimeout(r, 1000));
+        toast({ title: "Resync complete", description: rowsMsg });
 
-        // Wait to show completion
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        toast({
-          title: "Resync complete",
-          description: `Successfully resynced ${result.rowsProcessed.toLocaleString()} rows and recreated ${result.dimensionsCreated} dimensions from scratch.`,
-        });
-        
-        // Refresh sync statistics
+        queryClient.invalidateQueries({ queryKey: ['data-studio-raw-rows'] });
+        queryClient.invalidateQueries({ queryKey: ['cached-dimension-data'] });
         await fetchSyncStatistics();
-        
-        // Trigger component refresh before calling onSuccess
-        if (onRefreshData) {
-          console.log('[testing] EditDataSourceModal - Triggering component refresh after successful resync');
-          // Use a delay to ensure data is fully committed and indexed
-          setTimeout(() => {
-            onRefreshData();
-          }, 500);
-        }
-        
+        if (onRefreshData) setTimeout(() => onRefreshData(), 500);
         onSuccess();
         onOpenChange(false);
         resetForm();
       } else {
-        throw new Error(result.error || "Sync failed - check console for details");
+        throw new Error(result.error ?? "Sync failed");
       }
     } catch (error) {
       console.error("Error resyncing data source:", error);

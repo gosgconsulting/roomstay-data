@@ -2651,11 +2651,11 @@ export default function SlideViewPage() {
 
       // The view will be automatically refetched by the query
       // We'll select it after the query refetches
-      queryClient.invalidateQueries({ queryKey: ['slide_report_views', 'list', slideReportId] });
+      queryClient.invalidateQueries({ queryKey: ['views', 'list', slideReportId] });
 
       // Use a small delay to allow the query to refetch, then find and select the new view
       setTimeout(() => {
-        const updatedViews = queryClient.getQueryData<any[]>(['slide_report_views', 'list', slideReportId]) || [];
+        const updatedViews = queryClient.getQueryData<any[]>(['views', 'list', slideReportId]) || [];
 
         const newView = updatedViews.find(v => v.name === viewName);
         if (newView) {
@@ -2681,7 +2681,7 @@ export default function SlideViewPage() {
         price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues },
       });
-      queryClient.invalidateQueries({ queryKey: ['slide_report_views', 'list', slideReportId] });
+      queryClient.invalidateQueries({ queryKey: ['views', 'list', slideReportId] });
     } catch (error) {
       console.error('Error updating view:', error);
     }

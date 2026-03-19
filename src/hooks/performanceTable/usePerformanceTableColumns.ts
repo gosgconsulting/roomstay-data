@@ -89,7 +89,7 @@ export function usePerformanceTableColumns({
         column_order: columnOrder,
       };
 
-      console.log('[COLUMNS] Updating report_views with data:', viewData);
+      console.log('[COLUMNS] Updating views with data:', viewData);
 
       const { error } = await supabase
         .from("views")
@@ -101,11 +101,11 @@ export function usePerformanceTableColumns({
         .eq("id", activeViewId);
 
       if (error) {
-        console.error('[COLUMNS] Error updating report_views:', error);
+        console.error('[COLUMNS] Error updating views:', error);
         throw error;
       }
 
-      console.log('[COLUMNS] Successfully updated report_views');
+      console.log('[COLUMNS] Successfully updated views');
 
       setInitialVisibleColumns(new Set(visibleColumns));
       setInitialColumnOrder([...columnOrder]);

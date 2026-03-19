@@ -95,6 +95,15 @@ When metasearch Cost shows only part of the total (e.g. 343 instead of ~1.3k):
 - [x] **MCP-1** — Added `docs/MCP_SUPABASE.md`: how to use the Supabase MCP when the project is linked (execute SQL, deploy Edge Functions, list tables/migrations, advisors, branches). Option B (metasearch cost fix) can be run via MCP `execute_sql`.
 - [x] **MCP-2** — Ran Option B fix via MCP `execute_sql` against the linked database. README and HARD_REFRESH doc updated to reference MCP.
 
+### Data source dedupe + single sync path (2026-03-19)
+
+- [x] **DS-1** — Added `supabase/scripts/dedupe_data_sources.sql`: for each (report_id, source_type) keeps the row with latest `updated_at`, deletes the rest (CASCADE removes their dimension_data). Run in SQL Editor or via MCP when a report has duplicate CSV/Sheets sources (e.g. metasearch).
+- [x] **DS-2** — EditDataSourceModal "Save and sync" now uses `runRefreshWorkflow` instead of `syncDataSource` (sync-utils). Single canonical path: run-refresh-workflow → resync-data-source. accountId resolved from prop or from reports.account_id.
+
+**Verification:** `npm run build` and `npm run lint` after changes.
+
+---
+
 ### Data Studio cache removed — always fresh data (2026-03-19)
 
 Backend metasearch cost data was correct (single Cost key, 57,997 rows); wrong KPI (e.g. 343) was from stale React Query cache.
@@ -328,6 +337,17 @@ Root cause: refresh was run with `clearFirst: false`, so `dimension_data` was ne
 - [x] **MC-1** — In `resync-data-source` `utils/dimensions.ts`: added `COLUMN_HEADER_TO_STANDARD` (Spend/Amount spent → Cost, etc.) and `getStandardDimensionNameForHeader(header)` so sheet columns named "Spend" or "cost" resolve to the account "Cost" dimension. When dimension-by-ID fails we use `standardName || header`; in the final fallback we try header, then standard synonym, then title-case. Aligned with frontend `buildMetricNameToIdsMap` variations. Documented in `docs/REFACTOR.md` and `docs/REFRESH_WORKFLOW_AUDIT.md`.
 
 **Verification:** `npm run build` ✅ (exit 0). Deploy `resync-data-source` edge function and run Full Refresh to verify Cost/CPC for Metasearch.
+
+---
+
+### Refactor / Unify (plan only — see docs/REFACTOR_UNIFY_PLAN.md)
+
+- [x] **UNIFY-B** — Unify view storage: all code uses `views` only; remove `report_views` / `slide_report_views` references and query keys.
+- [x] **UNIFY-C** — Single sync path: migrate any remaining `syncDataSource` callers to `runRefreshWorkflow`; remove or stub in sync-utils.
+- [x] **UNIFY-D** — Run dedupe script, then add unique constraint on `data_sources(report_id, source_type)`.
+- [x] **UNIFY-A** — Document report identity; added `reports.channel` and backfilled.
+
+Full plan, brief fixes, and new-table/migration notes: **docs/REFACTOR_UNIFY_PLAN.md**.
 
 ---
 

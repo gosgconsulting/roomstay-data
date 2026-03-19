@@ -9,6 +9,7 @@ import {
   getMetricKeys,
   ensureMinimumChartData,
 } from './slideViewHelpers';
+import { parseNumericValue } from '@/lib/parseNumericValue';
 import type { SlideReportPivotData } from '@/types/slideReports';
 import type { RawDataRow, MonthlyDataPoint } from '@/types/slideView';
 
@@ -161,15 +162,8 @@ export function processOverviewChartData(
               for (const key of revenueKeys) {
                 const value = rowData[key];
                 if (value !== undefined && value !== null) {
-                  if (typeof value === 'number') {
-                    monthRevenue += isNaN(value) ? 0 : value;
-                    break;
-                  }
-                  const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
-                  if (!isNaN(parsed)) {
-                    monthRevenue += parsed;
-                    break;
-                  }
+                  monthRevenue += parseNumericValue(value);
+                  break;
                 }
               }
             });
@@ -304,15 +298,8 @@ export function processChannelChartData(
             for (const key of revenueKeys) {
               const value = rowData[key];
               if (value !== undefined && value !== null) {
-                if (typeof value === 'number') {
-                  monthRevenue += isNaN(value) ? 0 : value;
-                  break;
-                }
-                const parsed = parseFloat(String(value).replace(/[^0-9.-]/g, ''));
-                if (!isNaN(parsed)) {
-                  monthRevenue += parsed;
-                  break;
-                }
+                monthRevenue += parseNumericValue(value);
+                break;
               }
             }
           });

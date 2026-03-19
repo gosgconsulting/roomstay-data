@@ -61,6 +61,8 @@
 | Report filters (Data Studio) | FiltersRow, FilterControls | FiltersRow | Delete FilterControls (unused). |
 | Report dropdowns / selector | DataStudioDropdowns | (none — component unused) | Delete DataStudioDropdowns (unused). |
 | KPI cards hook | useKPICards.ts (single file) | useKPICards.ts | No duplicate. |
+| Data source sync (after edit) | syncDataSource (sync-utils), runRefreshWorkflow | runRefreshWorkflow | EditDataSourceModal migrated to runRefreshWorkflow. |
+| Data sources per report | Multiple rows per report_id + source_type allowed | One per (report_id, source_type) via script | Use supabase/scripts/dedupe_data_sources.sql to remove duplicates. |
 
 ---
 
@@ -241,6 +243,42 @@
 
 **Verification**
 - `npm run build` ✅ exit 0. `npm run lint` ✅ 0 errors (warnings only). 
+
+### Data source dedupe + single sync path (2026-03-19)
+
+**Changes**
+- One canonical sync path: EditDataSourceModal now uses `runRefreshWorkflow` (reportId + clearFirst + full) instead of deprecated `syncDataSource` from sync-utils. Resolve accountId from props or from `reports.account_id` when missing.
+- Script to dedupe `data_sources`: `supabase/scripts/dedupe_data_sources.sql` keeps one source per `(report_id, source_type)` (latest `updated_at`), deletes the rest. Use when a report (e.g. metasearch) has multiple CSV or Google Sheets sources.
+
+**Removed**
+- None (sync-utils still present for other callers; EditDataSourceModal no longer uses it).
+
+**Replaced By**
+- EditDataSourceModal "Save and sync" → `runRefreshWorkflow` + query invalidation.
+
+**Verification**
+- Build and lint (run below).
+
+### Database Refactor + View Unification (2026-03-19)
+
+**Changes**
+- Added unique constraint on `data_sources(report_id, source_type)` to enforce one canonical source per type per report (migration `20260319000000_unique_data_sources.sql`).
+- Added `reports.channel` column to identify report type explicitly rather than name matching (migration `20260319010000_add_reports_channel.sql`).
+- Dropped legacy `report_views` table from database (completed `slide_report_views` drop as well).
+- Removed legacy client-side `syncDataSource` implementation from `sync-utils.ts` in favor of edge function only (`runRefreshWorkflow`).
+- Replaced all frontend usages of `report_views` / `slide_report_views` query keys and caching with unified `views`.
+
+**Removed**
+- Client-side data sync pipeline code from `sync-utils.ts` (replaced with deprecation stub).
+- Old table `report_views` (already dropped in UI paths previously).
+
+**Replaced By**
+- Unified `views` storage.
+- Edge function `run-refresh-workflow` for sync.
+- Explicit `reports.channel` column.
+
+**Verification**
+- DB constraints validated against existing accounts. Build and lint passing.
 
 ---
 
