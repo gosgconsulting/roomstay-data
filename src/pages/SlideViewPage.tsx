@@ -914,11 +914,14 @@ export default function SlideViewPage() {
       setBreakdownConfigs(filteredBreakdownConfigs);
       setChannelConfigs(filteredChannelConfigs);
       if (config.selectedChannels) {
-        const validChannels = config.selectedChannels.filter(channel => availableChannels.includes(channel));
+        // Restore directly from the saved config — do NOT filter by availableChannels here.
+        // availableChannels may not be resolved yet when this effect first runs (accountReportIds
+        // is still loading), which would incorrectly zero-out all channels.
+        // The selectedChannels memo already gates on accountReportIds, so stale IDs are safe.
         setSelectedDimensions({
-          metasearch: validChannels.includes('metasearch'),
-          sem: validChannels.includes('sem'),
-          social: validChannels.includes('social'),
+          metasearch: config.selectedChannels.includes('metasearch'),
+          sem: config.selectedChannels.includes('sem'),
+          social: config.selectedChannels.includes('social'),
         });
       }
       if (config.selectedValueDimensionIds) {

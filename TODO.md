@@ -32,6 +32,14 @@ After coding:
 
 ## Active tasks
 
+### Metasearch (and all channels) missing from table after cache refactor (2026-03-20)
+
+- [x] **CHAN-1** — Root cause: `useEffect` in `SlideViewPage` that syncs `selectedDimensions` from `slideReport.configuration.selectedChannels` was filtering by `availableChannels` at sync time. Since `accountReportIds` hasn't resolved when the effect first fires, `availableChannels` is `[]`, so all channels get set to `false`. This makes `selectedChannels = []`, which hides all channel tabs and table data. Fixed: restore `selectedDimensions` directly from `config.selectedChannels` without filtering — the `selectedChannels` memo already gates on `accountReportIds` so stale IDs are safe.
+
+**Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0).
+
+---
+
 ### Cache miss fallback fix (2026-03-20)
 
 - [x] **CACHE-FIX-1** — `useDataStudioRawRows` now has a hard fallback to direct DB fetching (`dimension_data` + RPC path) when `get-cached-report-data` fails or cold miss returns 0 rows. This prevents zero-data screens when cache is unavailable.
