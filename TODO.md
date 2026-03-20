@@ -32,6 +32,31 @@ After coding:
 
 ## Active tasks
 
+### Data Studio default date range + January reset fix (2026-03-20)
+
+Root cause: the top filter still had several inconsistent defaults after the custom-date fixes. `SlideViewPage.tsx` initialized to the full current month, `useDataStudioFilters.ts` reset paths also snapped back to the full current month, and slide-report metadata in both `SlideViewPage.tsx` and `useSlideReportPage.ts` still wrote hardcoded January-based `date_range` values. That mismatch made the UI default to a future full-month range instead of year-to-date, and also left stale January metadata that could leak into setup/restore flows.
+
+- [x] **DDR-1** — Added canonical date helpers in `src/lib/monthUtils.ts`: `getCurrentYearToDateRange()` for the UI default (`Jan 1 -> today`) and `formatDateToLocalIso()` for safe local date-only persistence.
+- [x] **DDR-2** — `SlideViewPage.tsx`: changed the initial Data Studio date state to exact year-to-date and updated the new-report sync path to reapply that same default instead of the full current month.
+- [x] **DDR-3** — `useDataStudioFilters.ts`: changed `resetFilters()` and `applyView(null)` to reset back to exact year-to-date instead of the full current month.
+- [x] **DDR-4** — Replaced hardcoded January `date_range` metadata defaults in `SlideViewPage.tsx` and `useSlideReportPage.ts` with consistent year-to-date metadata.
+- [x] **DDR-5** — Added regression coverage in `src/lib/__tests__/monthUtils.test.ts` for the new default date helpers.
+
+**Verification:** `npm run build` ✅, `npx vitest run src/lib/__tests__/monthUtils.test.ts src/hooks/__tests__/useDataStudioFilters.test.ts` ✅, `ReadLints` ✅ (no new errors).
+
+---
+
+### Custom date Apply ownership fix (2026-03-20)
+
+Root cause: `useDataStudioFilters.ts` treated `externalCustomDateRange !== undefined` as the signal that the date range was externally controlled. But `undefined` is the valid initial page-owned state in `SlideViewPage.tsx`, so the hook fell back to its internal state on first render. Result: selecting a custom range in the picker updated the hook's internal draft state, but the page-level `customDateRange` stayed `undefined`, and the report continued using the month-level `selectedYear` / `selectedMonth` fallback after Apply.
+
+- [x] **CDF-1** — `useDataStudioFilters.ts`: switched the controlled-state check from `externalCustomDateRange !== undefined` to `typeof setExternalCustomDateRange === 'function'`, so an initially-undefined exact range still remains page-controlled.
+- [x] **CDF-2** — Added `src/hooks/__tests__/useDataStudioFilters.test.ts` regression coverage to verify that `setCustomDateRange()` calls the external setter even when the current controlled value is `undefined`.
+
+**Verification:** `npm run build` ✅ (exit 0), `npx vitest run src/hooks/__tests__/useDataStudioFilters.test.ts` ✅, `ReadLints` ✅ (no new errors).
+
+---
+
 ### Exclusive Channel Filtering & "None" Filter Bug (2026-03-20)
 
 - [x] **FLT-5** — Updated `useFilteredSlideData` to zero out metrics for unfiltered channels when global filters exist (`hasFilters && !hasChannelFilters`).

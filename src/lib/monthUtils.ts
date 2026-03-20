@@ -94,6 +94,21 @@ export function buildComparisonDateRangeFromExact(
     };
   }
 
+  // "Month-anchored" range: starts on the 1st of a month and ends within that same month
+  // (e.g. March 1–18). Shift back exactly one calendar month so March 1–18 → Feb 1–18,
+  // rather than subtracting 18 days which would give Feb 11–28.
+  if (
+    start.getDate() === 1 &&
+    start.getMonth() === end.getMonth() &&
+    start.getFullYear() === end.getFullYear()
+  ) {
+    return {
+      start: new Date(start.getFullYear(), start.getMonth() - 1, 1),
+      end: new Date(end.getFullYear(), end.getMonth() - 1, end.getDate(), 23, 59, 59, 999),
+    };
+  }
+
+  // Rolling windows (e.g. "Last 7 days", "Last 30 days"): shift back by exact span length.
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
   const spanDays = Math.floor((end.getTime() - start.getTime()) / MS_PER_DAY) + 1;
   return {
@@ -419,4 +434,29 @@ export function getCurrentMonthDateRange(): { from: Date; to: Date } {
     from: new Date(year, month, 1),
     to: new Date(year, month + 1, 0),
   };
+}
+
+/**
+ * Returns the exact year-to-date range for the current year (Jan 1 -> today).
+ * This is the canonical default date range for Data Studio so the UI does not
+ * show future days from the current month by default.
+ */
+export function getCurrentYearToDateRange(): { from: Date; to: Date } {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return {
+    from: new Date(now.getFullYear(), 0, 1),
+    to: today,
+  };
+}
+
+/**
+ * Format a Date as YYYY-MM-DD using local calendar parts.
+ * Avoids UTC shifts from toISOString() when persisting date-only values.
+ */
+export function formatDateToLocalIso(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }

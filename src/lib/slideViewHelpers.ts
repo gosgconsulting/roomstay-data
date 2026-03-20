@@ -12,6 +12,20 @@ import type {
 } from '@/types/slideView';
 
 /**
+ * Parse an ISO date string (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss) into a local Date.
+ * Using new Date(isoString) treats date-only strings as UTC midnight, which shifts the
+ * date by one day in negative-UTC-offset timezones. This function always produces a
+ * local-midnight Date so that comparisons with range boundaries (also local midnight) are correct.
+ */
+function parseLocalDateString(value: string): Date | null {
+  const dateOnly = String(value).substring(0, 10);
+  const parts = dateOnly.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return null;
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
  * Calculate derived metrics from base metric data
  */
 export const calculateDerivedMetrics = (
@@ -265,8 +279,8 @@ export const filterRawDataRows = (
       }
 
       if (dateValue) {
-        const rowDate = new Date(dateValue as string);
-        if (isNaN(rowDate.getTime()) || !isWithinInterval(rowDate, dateRange)) {
+        const rowDate = parseLocalDateString(dateValue as string);
+        if (rowDate === null || !isWithinInterval(rowDate, dateRange)) {
           return false;
         }
       }

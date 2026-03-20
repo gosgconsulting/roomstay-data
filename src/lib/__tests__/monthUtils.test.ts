@@ -4,6 +4,8 @@ import {
   slideSelectionToDateRange,
   dateRangeFromPreset,
   derivePresetFromDateRange,
+  formatDateToLocalIso,
+  getCurrentYearToDateRange,
 } from '../monthUtils';
 
 describe('dateRangeToSlideSelection', () => {
@@ -121,5 +123,19 @@ describe('roundtrip: preset → range → selection → range', () => {
     const now = new Date();
     expect(sel.year).toBe(String(now.getFullYear() - 1));
     expect(sel.month).toBe('all');
+  });
+});
+
+describe('current default range helpers', () => {
+  it('getCurrentYearToDateRange returns Jan 1 through today', () => {
+    const range = getCurrentYearToDateRange();
+    const now = new Date();
+
+    expect(range.from).toEqual(new Date(now.getFullYear(), 0, 1));
+    expect(range.to).toEqual(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+  });
+
+  it('formatDateToLocalIso uses local calendar parts', () => {
+    expect(formatDateToLocalIso(new Date(2026, 0, 5, 23, 59, 59))).toBe('2026-01-05');
   });
 });

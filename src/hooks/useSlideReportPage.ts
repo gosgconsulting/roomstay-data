@@ -12,6 +12,7 @@ import { useDataStudioRawRows } from "@/hooks/useDataStudioRawRows";
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useFilteredSlideData } from "@/hooks/useFilteredSlideData";
 import { getAccountReportIds, clearAccountReportIdsCache, type AccountReportIds } from "@/lib/accountReportIds";
+import { buildComparisonDateRangeFromExact, exactDateRangeFromDayPicker, buildComparisonDateRange, formatDateToLocalIso } from "@/lib/monthUtils";
 import type { SlideReport, SlideReportPivotData, SlideReportView, SlideReportConfiguration, SlideReportDateRange } from "@/types/slideReports";
 import type { ChannelMetrics } from "@/types/slideReports";
 import type { BreakdownRow } from "@/types/slideReports";
@@ -177,11 +178,12 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
           breakdownConfigs: Object.fromEntries(validChannels.map(ch => [ch, { breakdownDimensionIds: [] }])),
           filterConfigs: Object.fromEntries(validChannels.map(ch => [ch, { filterDimensionIds: [] }])),
         };
+        const today = new Date();
         const dateRange: SlideReportDateRange = {
-          year: new Date().getFullYear(),
-          month: 'January',
-          from: new Date().toISOString().split('T')[0],
-          to: new Date().toISOString().split('T')[0],
+          year: today.getFullYear(),
+          month: 'Year to Date',
+          from: formatDateToLocalIso(new Date(today.getFullYear(), 0, 1)),
+          to: formatDateToLocalIso(today),
         };
 
         const newReport = await createSlideReportMutation.mutateAsync({
@@ -232,15 +234,33 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   const dataStudioRawRows = dataStudioResult?.rawRows;
   const dataStudioDimensionMaps = dataStudioResult?.dimensionMaps;
 
-  // When comparisonType is 'previous_year', also fetch the previous year's rows so that
-  // useChannelMetrics can aggregate comparison data. Without this, filtering for the
-  // previous-year date range against current-year rows returns nothing.
+  // When the comparison period falls in a different calendar year than the current view,
+  // fetch that prior year's rows so useChannelMetrics can aggregate comparison data.
+  // Covers both 'previous_year' and 'previous_period' that crosses a year boundary
+  // (e.g. Jan 1–15 2026 previous_period → Dec 1–15 2025).
   const comparisonYear = useMemo((): string => {
-    if (comparisonType !== 'previous_year') return '';
+    if (comparisonType === 'none') return '';
     if (!selectedYear || selectedYear === 'all') return '';
-    const prevYear = parseInt(selectedYear) - 1;
-    return isNaN(prevYear) ? '' : String(prevYear);
-  }, [comparisonType, selectedYear]);
+    const currentYearNum = parseInt(selectedYear);
+    if (isNaN(currentYearNum)) return '';
+
+    if (comparisonType === 'previous_year') {
+      return String(currentYearNum - 1);
+    }
+
+    // For 'previous_period', compute the comparison range to check if it lands in the prior year.
+    if (comparisonType === 'previous_period') {
+      const exactRange = exactDateRangeFromDayPicker(customDateRange);
+      const compRange = exactRange
+        ? buildComparisonDateRangeFromExact({ from: exactRange.start, to: exactRange.end }, 'previous_period')
+        : buildComparisonDateRange(selectedYear, selectedMonth, 'previous_period');
+      if (compRange && compRange.start.getFullYear() < currentYearNum) {
+        return String(compRange.start.getFullYear());
+      }
+    }
+
+    return '';
+  }, [comparisonType, selectedYear, selectedMonth, customDateRange]);
 
   const { data: comparisonYearResult } = useDataStudioRawRows(
     slideReport,

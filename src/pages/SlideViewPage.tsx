@@ -53,7 +53,16 @@ import { PriceCheckTab } from "@/components/slides/PriceCheckTab";
 import { RefreshDataModal } from "@/components/slides/RefreshDataModal";
 import { isWithinInterval } from "date-fns";
 import { BASE_METRICS, CHANNEL_REPORT_IDS, MONTH_NAMES } from "@/constants/slideViewConstants";
-import { buildComparisonDateRange, buildComparisonDateRangeFromExact, buildMultiMonthDateRange, exactDateRangeFromDayPicker, parseSelectedMonths } from "@/lib/monthUtils";
+import {
+  buildComparisonDateRange,
+  buildComparisonDateRangeFromExact,
+  buildMultiMonthDateRange,
+  dateRangeToSlideSelection,
+  exactDateRangeFromDayPicker,
+  formatDateToLocalIso,
+  getCurrentYearToDateRange,
+  parseSelectedMonths,
+} from "@/lib/monthUtils";
 import type { AccountReportIds } from "@/lib/accountReportIds";
 import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
 import {
@@ -74,6 +83,30 @@ import type { RawDataRow, MetricData, ChartGranularity, ChartMetric } from "@/ty
 // These are resolved to actual IDs by BreakdownTableSection once dimensions load.
 const DEFAULT_GROUPBY: Record<string, string> = { metasearch: 'hotel', sem: 'account', social: 'account' };
 const DEFAULT_BREAKDOWNBY: Record<string, string> = { metasearch: 'link_type', sem: 'campaign', social: 'campaign' };
+
+function buildDefaultDataStudioDateState(): {
+  range: import("react-day-picker").DateRange;
+  selectedYear: string;
+  selectedMonth: string;
+} {
+  const range = getCurrentYearToDateRange();
+  const selection = dateRangeToSlideSelection(range);
+  return {
+    range,
+    selectedYear: selection.year,
+    selectedMonth: selection.month,
+  };
+}
+
+function buildDefaultSlideReportDateRange(): SlideReportDateRange {
+  const { range } = buildDefaultDataStudioDateState();
+  return {
+    year: range.to!.getFullYear(),
+    month: 'Year to Date',
+    from: formatDateToLocalIso(range.from!),
+    to: formatDateToLocalIso(range.to!),
+  };
+}
 
 // Valid breakdown/filter dimension names per channel type.
 // Dimensions not in this list are excluded from the breakdown and filter dropdowns for that channel.
@@ -128,16 +161,13 @@ export default function SlideViewPage() {
       navigate(`/tools/reports`, { replace: true });
     }
   }, [accountId, slideId, location.pathname, navigate]);
-  // Get current month name for default
-  const currentDate = new Date();
-  const currentMonthName = MONTH_NAMES[currentDate.getMonth()];
-  const currentYearStr = currentDate.getFullYear().toString();
+  const initialDateState = useMemo(() => buildDefaultDataStudioDateState(), []);
 
-  const [selectedYear, setSelectedYear] = useState(currentYearStr); // Default to current year
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthName); // Default to current month
+  const [selectedYear, setSelectedYear] = useState(initialDateState.selectedYear);
+  const [selectedMonth, setSelectedMonth] = useState(initialDateState.selectedMonth);
   // These are declared here so useSlideReportPage (called below) can receive them.
   // useDataStudioFilters receives them as controlled state so it becomes the single manager.
-  const [customDateRange, setCustomDateRange] = useState<import("react-day-picker").DateRange | undefined>(undefined);
+  const [customDateRange, setCustomDateRange] = useState<import("react-day-picker").DateRange | undefined>(initialDateState.range);
   const [comparisonType, setComparisonType] = useState("none");
   const [filterValues, setFilterValues] = useState<Record<string, Record<string, string[]>>>({
     metasearch: {},
@@ -456,12 +486,7 @@ export default function SlideViewPage() {
           filterConfigs: filterConfigsAuto,
         };
 
-        const dateRange: SlideReportDateRange = {
-          year: 2023,
-          month: 'January',
-          from: '2023-01-01',
-          to: new Date().toISOString().split('T')[0],
-        };
+        const dateRange = buildDefaultSlideReportDateRange();
 
         await updateSlideReport.mutateAsync({
           id: slideReportId,
@@ -931,11 +956,10 @@ export default function SlideViewPage() {
     const isNewReport = lastSyncedSlideReportIdRef.current !== slideReportId;
     if (isNewReport) {
       lastSyncedSlideReportIdRef.current = slideReportId;
-      const currentYear = new Date().getFullYear();
-      const currentMonth = MONTH_NAMES[new Date().getMonth()];
-      setSelectedYear(currentYear.toString());
-      setSelectedMonth(currentMonth);
-      // Date range is now always all-data (Jan 2023 → present), no user-configured start date
+      const defaultDateState = buildDefaultDataStudioDateState();
+      setSelectedYear(defaultDateState.selectedYear);
+      setSelectedMonth(defaultDateState.selectedMonth);
+      setCustomDateRange(defaultDateState.range);
     }
   }, [slideReport, slideReportId, availableChannels]);
 
@@ -2144,13 +2168,7 @@ export default function SlideViewPage() {
         reportIds[channel] = reportId;
       }
 
-      // Use all-data date range: Jan 2023 → present (no user-configured start date)
-      const dateRange: SlideReportDateRange = {
-        year: 2023,
-        month: 'January',
-        from: '2023-01-01',
-        to: new Date().toISOString().split('T')[0],
-      };
+      const dateRange = buildDefaultSlideReportDateRange();
 
       // Save or update slide report
       if (slideReportId) {

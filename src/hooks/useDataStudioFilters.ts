@@ -17,8 +17,13 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { DateRange } from 'react-day-picker';
-import { MONTH_NAMES } from '@/constants/slideViewConstants';
-import { buildMultiMonthDateRange, dateRangeFromPreset, dateRangeToSlideSelection, slideSelectionToDateRange } from '@/lib/monthUtils';
+import {
+  buildMultiMonthDateRange,
+  dateRangeFromPreset,
+  dateRangeToSlideSelection,
+  getCurrentYearToDateRange,
+  slideSelectionToDateRange,
+} from '@/lib/monthUtils';
 import { filterRawDataRows } from '@/lib/slideViewHelpers';
 import type { SlideReportConfiguration, SlideReportView } from '@/types/slideReports';
 
@@ -213,18 +218,24 @@ export function useDataStudioFilters({
   const [_internalFilterValues, _setInternalFilterValues] = useState<FilterValues>(EMPTY_FILTER_VALUES);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
 
-  // Use externally-controlled state when provided, otherwise own it internally.
-  const customDateRange = externalCustomDateRange !== undefined ? externalCustomDateRange : _internalCustomDateRange;
-  const setCustomDateRangeRaw = externalCustomDateRange !== undefined
-    ? (setExternalCustomDateRange ?? _setInternalCustomDateRange)
+  // Use externally-controlled state when a setter is supplied. `undefined` is a valid controlled
+  // value for customDateRange, so checking only the value would incorrectly fall back to internal
+  // state and prevent the page-level owner from ever receiving the applied custom range.
+  const isCustomDateRangeControlled = typeof setExternalCustomDateRange === 'function';
+  const isComparisonTypeControlled = typeof setExternalComparisonType === 'function';
+  const isFilterValuesControlled = typeof setExternalFilterValues === 'function';
+
+  const customDateRange = isCustomDateRangeControlled ? externalCustomDateRange : _internalCustomDateRange;
+  const setCustomDateRangeRaw = isCustomDateRangeControlled
+    ? setExternalCustomDateRange
     : _setInternalCustomDateRange;
-  const comparisonType = externalComparisonType !== undefined ? externalComparisonType : _internalComparisonType;
-  const setComparisonTypeRaw = externalComparisonType !== undefined
-    ? (setExternalComparisonType ?? _setInternalComparisonType)
+  const comparisonType = isComparisonTypeControlled ? (externalComparisonType ?? 'none') : _internalComparisonType;
+  const setComparisonTypeRaw = isComparisonTypeControlled
+    ? setExternalComparisonType
     : _setInternalComparisonType;
-  const filterValues = externalFilterValues !== undefined ? externalFilterValues : _internalFilterValues;
-  const setFilterValuesRaw: (v: FilterValues) => void = externalFilterValues !== undefined
-    ? (setExternalFilterValues as ((v: FilterValues) => void) ?? _setInternalFilterValues)
+  const filterValues = isFilterValuesControlled ? (externalFilterValues ?? EMPTY_FILTER_VALUES) : _internalFilterValues;
+  const setFilterValuesRaw: (v: FilterValues) => void = isFilterValuesControlled
+    ? setExternalFilterValues
     : _setInternalFilterValues;
 
   // Sync filterConfigs when the report changes (initialFilterConfigs comes from slideReport.configuration).
@@ -385,13 +396,11 @@ export function useDataStudioFilters({
     if (isReadOnly) return;
     setFilterValuesRaw(EMPTY_FILTER_VALUES);
     setComparisonTypeRaw('none');
-    // Reset to current month
-    const now = new Date();
-    const from = new Date(now.getFullYear(), now.getMonth(), 1);
-    const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    setCustomDateRangeRaw({ from, to });
-    setSelectedYear(now.getFullYear().toString());
-    setSelectedMonth(MONTH_NAMES[now.getMonth()]);
+    const range = getCurrentYearToDateRange();
+    const next = dateRangeToSlideSelection(range);
+    setCustomDateRangeRaw(range);
+    setSelectedYear(next.year);
+    setSelectedMonth(next.month);
   }, [isReadOnly, setSelectedYear, setSelectedMonth]);
 
   const applyPreset = useCallback((preset: string) => {
@@ -414,15 +423,14 @@ export function useDataStudioFilters({
 
   const applyView = useCallback((view: SlideReportView | null) => {
     if (!view) {
-      // Reset to master — clear filters, comparison, and date back to current month
+      // Reset to master — clear filters, comparison, and date back to year-to-date.
       setFilterValuesRaw(EMPTY_FILTER_VALUES);
       setComparisonTypeRaw('none');
-      const now = new Date();
-      const from = new Date(now.getFullYear(), now.getMonth(), 1);
-      const to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-      setCustomDateRangeRaw({ from, to });
-      setSelectedYear(now.getFullYear().toString());
-      setSelectedMonth(MONTH_NAMES[now.getMonth()]);
+      const range = getCurrentYearToDateRange();
+      const next = dateRangeToSlideSelection(range);
+      setCustomDateRangeRaw(range);
+      setSelectedYear(next.year);
+      setSelectedMonth(next.month);
       return;
     }
     const vf = view.filter_values || {};

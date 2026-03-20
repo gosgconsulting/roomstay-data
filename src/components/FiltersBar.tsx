@@ -8,7 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { startOfMonth, endOfMonth, startOfWeek, subDays, subMonths, startOfYear, endOfYear, differenceInDays, subYears, startOfQuarter, endOfQuarter } from "date-fns";
+import { differenceInDays, subDays, subYears } from "date-fns";
+import { dateRangeFromPreset } from "@/lib/monthUtils";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff } from "@/lib/utils/retry";
@@ -512,95 +513,16 @@ export const FiltersBar = ({
   };
 
   const applyDatePreset = (preset: string) => {
-    const now = new Date();
-    let from: Date;
-    let to: Date = now;
-
-    switch (preset) {
-      case "today":
-        from = now;
-        break;
-      case "yesterday":
-        from = subDays(now, 1);
-        to = subDays(now, 1);
-        break;
-      case "this_week":
-        from = startOfWeek(now);
-        break;
-      case "last_7_days":
-        from = subDays(now, 7);
-        break;
-      case "last_14_days":
-        from = subDays(now, 14);
-        break;
-      case "this_month": {
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth();
-        const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-        const fromDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`;
-        const toDateString = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
-        from = new Date(fromDateString);
-        to = new Date(toDateString);
-        break;
-      }
-      case "month_to_date":
-        from = startOfMonth(now);
-        to = now;
-        break;
-      case "last_30_days":
-        from = subDays(now, 30);
-        break;
-      case "last_90_days":
-        from = subDays(now, 90);
-        break;
-      case "last_month": {
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth();
-        let lastMonthYear = currentYear;
-        let lastMonth = currentMonth - 1;
-        if (lastMonth < 0) { lastMonth = 11; lastMonthYear = currentYear - 1; }
-        const lastDayOfMonth = new Date(lastMonthYear, lastMonth + 1, 0).getDate();
-        const fromDateString = `${lastMonthYear}-${String(lastMonth + 1).padStart(2, "0")}-01`;
-        const toDateString = `${lastMonthYear}-${String(lastMonth + 1).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
-        from = new Date(fromDateString);
-        to = new Date(toDateString);
-        break;
-      }
-      case "quarter_to_date":
-        from = startOfQuarter(now);
-        to = now;
-        break;
-      case "last_quarter": {
-        const prevQuarterDate = subDays(startOfQuarter(now), 1);
-        from = startOfQuarter(prevQuarterDate);
-        to = endOfQuarter(prevQuarterDate);
-        break;
-      }
-      case "this_year":
-        from = startOfYear(now);
-        to = endOfYear(now);
-        break;
-      case "year_to_date":
-        from = startOfYear(now);
-        to = now;
-        break;
-      case "last_year": {
-        const prevYear = subYears(now, 1);
-        from = startOfYear(prevYear);
-        to = endOfYear(prevYear);
-        break;
-      }
-      case "all_time":
-        setDateRange(undefined);
-        setDatePreset(preset);
-        return;
-      default:
-        from = startOfMonth(now);
-        to = endOfMonth(now);
+    if (preset === "all_time") {
+      setDateRange(undefined);
+      setDatePreset(preset);
+      return;
     }
-
-    setDateRange({ from, to });
-    setDatePreset(preset);
+    const range = dateRangeFromPreset(preset);
+    if (range) {
+      setDateRange(range);
+      setDatePreset(preset);
+    }
   };
 
   const hasActiveFilters = () => {

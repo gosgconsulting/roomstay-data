@@ -117,6 +117,20 @@ function getBucketLabel(date: Date, granularity: ChartGranularity): string {
   return format(date, 'MMM yy');
 }
 
+/**
+ * Parse an ISO date string (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss) into a local Date.
+ * new Date("2026-03-15") is treated as UTC midnight, which shifts the calendar date
+ * by one day in negative-UTC-offset timezones. Parsing the numeric parts produces a
+ * local-midnight Date that compares correctly against local range boundaries.
+ */
+function parseLocalDateString(value: string): Date | null {
+  const dateOnly = value.substring(0, 10);
+  const parts = dateOnly.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return null;
+  const d = new Date(parts[0], parts[1] - 1, parts[2]);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function readRowDate(rowData: Record<string, unknown>): Date | null {
   let dateValue = rowData.Date || rowData.date || rowData.Day || rowData.day;
   if (!dateValue) {
@@ -129,8 +143,7 @@ function readRowDate(rowData: Record<string, unknown>): Date | null {
   }
 
   if (!dateValue) return null;
-  const parsed = new Date(String(dateValue));
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  return parseLocalDateString(String(dateValue));
 }
 
 function getRowMetricTotals(
