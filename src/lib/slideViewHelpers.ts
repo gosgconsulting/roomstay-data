@@ -76,8 +76,41 @@ export const hasActiveFilters = (
   return false;
 };
 
+export const hasPositiveFiltersForChannel = (
+  channelFilterValues: Record<string, string[]>
+): boolean => {
+  if (!channelFilterValues || Object.keys(channelFilterValues).length === 0) {
+    return false;
+  }
+  for (const [, selectedValues] of Object.entries(channelFilterValues)) {
+    if (!selectedValues) continue;
+    if (selectedValues.length > 0) {
+      return true;
+    }
+  }
+  return false;
+};
+
 /**
- * Check if a specific channel has active filters (not "All" selected)
+ * Check if any channel has POSITIVE active filters (selections with >0 items)
+ * Used to trigger the Exclusive Channel rule (zeroing out unfiltered channels)
+ */
+export const hasAnyPositiveFilters = (
+  filterValues: Record<string, Record<string, string[]>>
+): boolean => {
+  if (!filterValues || Object.keys(filterValues).length === 0) {
+    return false;
+  }
+  for (const channelFilters of Object.values(filterValues)) {
+    if (hasPositiveFiltersForChannel(channelFilters)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * Check if a specific channel has active filters (including "None" / empty array)
  * Centralized filter detection logic for single channel
  * 
  * @param channelFilterValues - Filter values for the channel (dimensionId -> selectedValues[])

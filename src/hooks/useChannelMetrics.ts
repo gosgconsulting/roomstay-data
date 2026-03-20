@@ -15,6 +15,7 @@ import {
   filterRawDataRows,
   aggregateRowsToMetrics,
   hasAnyActiveFilters,
+  hasAnyPositiveFilters,
   getChannelsWithFilters,
 } from '@/lib/slideViewHelpers';
 import type { SlideReportPivotData } from '@/types/slideReports';
@@ -145,13 +146,14 @@ export function useChannelMetrics({
 
     const dateRange = buildMultiMonthDateRange(selectedYear, selectedMonth);
     const hasFilters = hasAnyActiveFilters(filterValues);
+    const hasPositiveGlobalFilters = hasAnyPositiveFilters(filterValues);
     const channelsWithFilters = hasFilters
       ? getChannelsWithFilters(filterValues)
       : new Set<string>();
 
     const channelTotals: Record<string, MetricData> = {};
     for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-      if (hasFilters && !channelsWithFilters.has(channel)) {
+      if (hasPositiveGlobalFilters && !channelsWithFilters.has(channel)) {
         channelTotals[channel] = { ...ZERO_METRICS };
       } else {
         const channelFilterValues =
@@ -184,6 +186,7 @@ export function useChannelMetrics({
 
     // Check if any filters are applied - if so, we need to filter comparison data too
     const hasFilters = hasAnyActiveFilters(filterValues);
+    const hasPositiveGlobalFilters = hasAnyPositiveFilters(filterValues);
     const channelsWithFilters = getChannelsWithFilters(filterValues);
 
     // Build comparison period date range.
@@ -198,7 +201,7 @@ export function useChannelMetrics({
 
     if (comparisonDateRange) {
       for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-        if (hasFilters && !channelsWithFilters.has(channel)) {
+        if (hasPositiveGlobalFilters && !channelsWithFilters.has(channel)) {
           channelTotals[channel] = { ...ZERO_METRICS };
         } else {
           const channelFilterValues =

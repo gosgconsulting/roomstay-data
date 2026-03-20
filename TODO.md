@@ -32,12 +32,15 @@ After coding:
 
 ## Active tasks
 
-### Exclusive Channel Filtering (2026-03-20)
+### Exclusive Channel Filtering & "None" Filter Bug (2026-03-20)
 
 - [x] **FLT-5** — Updated `useFilteredSlideData` to zero out metrics for unfiltered channels when global filters exist (`hasFilters && !hasChannelFilters`).
 - [x] **FLT-6** — Updated `useChannelChartDataFromRawRows` to exclude unfiltered channels from chart processing.
 - [x] **FLT-7** — Updated `useChannelMetrics` to return `ZERO_METRICS` for excluded channels in comparisons.
 - [x] **FLT-8** — Removed `channelAvailableValues` check from `hasActiveFiltersForChannel`, `hasAnyActiveFilters`, and `getChannelsWithFilters` to prevent cache-restricted available options from overriding explicit user filters as "no filter".
+- [x] **FLT-9** — Fixed `FiltersRow.tsx` bug where clicking the "All" row didn't properly trigger state update by adding `e.preventDefault()` and `e.stopPropagation()` and removing dual event handlers from the `Checkbox` component.
+- [x] **FLT-10** — Added `hasPositiveFiltersForChannel` and `hasAnyPositiveFilters` to `slideViewHelpers.ts`.
+- [x] **FLT-11** — Modified Exclusive Channel Filtering to only trigger when *positive* filters (>0 items selected) are applied. Selecting "None" (`[]`) correctly zeroes out its own channel but no longer forces other unfiltered channels to zero.
 
 **Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0), `vitest run src/lib/__tests__/slideViewHelpers.test.ts` ✅ (21/21 passed).
 

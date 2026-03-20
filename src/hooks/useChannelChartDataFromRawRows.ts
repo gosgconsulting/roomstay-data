@@ -16,6 +16,7 @@ import {
   filterRawDataRows,
   getMetricKeys,
   hasAnyActiveFilters,
+  hasAnyPositiveFilters,
   getChannelsWithFilters,
 } from '@/lib/slideViewHelpers';
 import { parseNumericValue } from '@/lib/parseNumericValue';
@@ -175,10 +176,11 @@ function buildChartDataFromRawRows(
   let inferredEnd: Date | null = dateRange?.end ?? null;
 
   const hasFilters = filterValues ? hasAnyActiveFilters(filterValues) : false;
+  const hasPositiveGlobalFilters = filterValues ? hasAnyPositiveFilters(filterValues) : false;
   const channelsWithFilters = filterValues ? getChannelsWithFilters(filterValues) : new Set<string>();
 
   for (const channel of channels) {
-    if (hasFilters && !channelsWithFilters.has(channel)) {
+    if (hasPositiveGlobalFilters && !channelsWithFilters.has(channel)) {
       filteredRowsByChannel[channel] = [];
       continue;
     }

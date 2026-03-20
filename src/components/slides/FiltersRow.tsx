@@ -81,7 +81,11 @@ function InlineFilterDropdown({
     onToggle([val]);
   };
 
-  const handleToggleAll = () => {
+  const handleToggleAll = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (isAllMode) {
       // Currently All, meaning no filter. User clicked "All", so they want to uncheck all -> "None".
       onToggle([]);
@@ -143,7 +147,6 @@ function InlineFilterDropdown({
           >
             <Checkbox
               checked={isAllMode}
-              onCheckedChange={handleToggleAll}
               className="shrink-0 pointer-events-none"
             />
             <span className="text-sm select-none">
