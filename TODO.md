@@ -32,6 +32,26 @@ After coding:
 
 ## Active tasks
 
+### Exclusive Channel Filtering (2026-03-20)
+
+- [x] **FLT-5** — Updated `useFilteredSlideData` to zero out metrics for unfiltered channels when global filters exist (`hasFilters && !hasChannelFilters`).
+- [x] **FLT-6** — Updated `useChannelChartDataFromRawRows` to exclude unfiltered channels from chart processing.
+- [x] **FLT-7** — Updated `useChannelMetrics` to return `ZERO_METRICS` for excluded channels in comparisons.
+- [x] **FLT-8** — Removed `channelAvailableValues` check from `hasActiveFiltersForChannel`, `hasAnyActiveFilters`, and `getChannelsWithFilters` to prevent cache-restricted available options from overriding explicit user filters as "no filter".
+
+**Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0), `vitest run src/lib/__tests__/slideViewHelpers.test.ts` ✅ (21/21 passed).
+
+---
+
+### Move Budget to DEV section (2026-03-20)
+
+- [x] **DEV-1** — Moved `Budget` out of the main `Reports` tabs list in `ReportSidebar.tsx`.
+- [x] **DEV-2** — Placed `Budget` under the `DEV` section in `ReportSidebar.tsx` while preserving its tab functionality (`onTabChange("budget")`) and active state styling.
+
+**Verification:** `npx tsc --noEmit` ✅ (exit 0), `npm run build` ✅ (exit 0).
+
+---
+
 ### Metasearch (and all channels) missing from table after cache refactor (2026-03-20)
 
 - [x] **CHAN-1** — Root cause: `useEffect` in `SlideViewPage` that syncs `selectedDimensions` from `slideReport.configuration.selectedChannels` was filtering by `availableChannels` at sync time. Since `accountReportIds` hasn't resolved when the effect first fires, `availableChannels` is `[]`, so all channels get set to `false`. This makes `selectedChannels = []`, which hides all channel tabs and table data. Fixed: restore `selectedDimensions` directly from `config.selectedChannels` without filtering — the `selectedChannels` memo already gates on `accountReportIds` so stale IDs are safe.

@@ -262,10 +262,10 @@ export function useDataStudioFilters({
         : dimMap;
       const enabledIds = filterConfigs[channel]?.filterDimensionIds ?? [];
       const channelFilterValues = filterValues[channel] ?? {};
-      // Inline filter UI uses empty selection as "All". For option derivation we
-      // treat empty arrays as no filter and only keep non-empty selections.
+      // Treat undefined as "All" (no filter), and [] as "None" (exclude all).
+      // We keep [] so it properly filters out all rows for option derivation.
       const normalizedChannelFilterValues: Record<string, string[]> = Object.fromEntries(
-        Object.entries(channelFilterValues).filter(([, values]) => Array.isArray(values) && values.length > 0)
+        Object.entries(channelFilterValues).filter(([, values]) => Array.isArray(values))
       );
 
       for (const dimId of enabledIds) {

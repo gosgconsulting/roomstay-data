@@ -20,7 +20,7 @@ interface InlineFilterDropdownProps {
   label: string;
   dimensionId: string;
   options: string[];
-  selected: string[];
+  selected?: string[]; // undefined = All (no filter), [] = None (exclude all)
   onToggle: (values: string[]) => void;
   onClear: () => void;
 }
@@ -40,28 +40,39 @@ function InlineFilterDropdown({
     [options, search]
   );
 
-  // Empty selected = "All" (no active filter). All items visually checked in that state.
-  const isAllMode = selected.length === 0;
-  const activeCount = selected.length;
+  // undefined = "All" (no active filter). [] = "None" (exclude all).
+  const isAllMode = selected === undefined;
+  const isNoneMode = selected !== undefined && selected.length === 0;
+  const activeCount = selected?.length || 0;
 
   const buttonLabel = isAllMode
     ? "All"
-    : activeCount === 1
-      ? selected[0]
-      : `${activeCount} selected`;
+    : isNoneMode
+      ? "None"
+      : activeCount === 1
+        ? selected[0]
+        : `${activeCount} selected`;
 
   const handleRowClick = (val: string) => {
     if (isAllMode) {
       // Uncheck one item from "all" → select everything except this one
       const next = options.filter((v) => v !== val);
       onToggle(next);
+    } else if (isNoneMode) {
+      // From "None", selecting one means selecting just that one
+      onToggle([val]);
     } else {
       const checked = selected.includes(val);
       const next = checked
         ? selected.filter((v) => v !== val)
         : [...selected, val];
-      // If every option is now selected, revert to "all" mode (empty = no filter)
-      onToggle(next.length === options.length ? [] : next);
+      // If every option is now selected, revert to "All" mode (clear filter)
+      if (next.length === options.length) {
+        onClear();
+      } else {
+        // If it drops to 0, it becomes [], meaning "None"
+        onToggle(next);
+      }
     }
   };
 
@@ -70,7 +81,15 @@ function InlineFilterDropdown({
     onToggle([val]);
   };
 
-  const handleSelectAll = () => onClear(); // empty selection = "All"
+  const handleToggleAll = () => {
+    if (isAllMode) {
+      // Currently All, meaning no filter. User clicked "All", so they want to uncheck all -> "None".
+      onToggle([]);
+    } else {
+      // Not All (could be some, could be None). User clicked "All", so they want to select all -> "All".
+      onClear();
+    }
+  };
 
   return (
     <div className="shrink-0">
@@ -120,17 +139,19 @@ function InlineFilterDropdown({
           {/* Select / deselect all checkbox */}
           <div
             className="px-3 py-2 border-b flex items-center gap-2 cursor-pointer hover:bg-accent transition-colors"
-            onClick={() => isAllMode ? onToggle([]) : onClear()}
+            onClick={handleToggleAll}
           >
             <Checkbox
               checked={isAllMode}
-              onCheckedChange={() => isAllMode ? onToggle([]) : onClear()}
+              onCheckedChange={handleToggleAll}
               className="shrink-0 pointer-events-none"
             />
             <span className="text-sm select-none">
               {isAllMode
                 ? `All (${options.length})`
-                : `${activeCount} selected`}
+                : isNoneMode
+                  ? "None"
+                  : `${activeCount} selected`}
             </span>
           </div>
 
@@ -141,7 +162,7 @@ function InlineFilterDropdown({
                 <p className="text-xs text-muted-foreground py-4 text-center">No options</p>
               )}
               {filtered.map((val) => {
-                const checked = isAllMode || selected.includes(val);
+                const checked = isAllMode || (!isNoneMode && selected!.includes(val));
                 return (
                   // Use CSS group-hover — no React hover state needed, avoids re-render flicker
                   <div
@@ -265,7 +286,7 @@ export function FiltersRow({
       dimId: string;
       label: string;
       options: string[];
-      selected: string[];
+      selected?: string[];
     }> = [];
 
     for (const ch of channelsToShow) {
@@ -280,7 +301,7 @@ export function FiltersRow({
           dimId,
           label: dimensionNames[dimId] || dimId,
           options,
-          selected: chSelected[dimId] ?? [],
+          selected: chSelected[dimId], // undefined means "All"
         });
       }
     }

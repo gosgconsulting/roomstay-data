@@ -245,16 +245,10 @@ export function useFilteredSlideData({
 
   // Check if any filters are active using centralized function
   const hasFilters = useMemo(() => {
-    return hasAnyActiveFilters(filterValues, filterDimensionValues);
-  }, [filterValues, filterDimensionValues]);
+    return hasAnyActiveFilters(filterValues);
+  }, [filterValues]);
 
   // Get channels with active filters
-  // IMPORTANT: Do NOT pass filterDimensionValues here. When available values are
-  // lazily loaded and happen to match the selected values exactly (e.g. an Account
-  // dimension with only 2 values that are both selected), the filter gets treated
-  // as "select all = no filter" and unfiltered totals are shown.
-  // By omitting filterDimensionValues, any explicitly set filter values are always
-  // treated as active, preventing data from jumping when switching tabs.
   const channelsWithFilters = useMemo(() => {
     return getChannelsWithFilters(filterValues);
   }, [filterValues]);
@@ -296,7 +290,12 @@ export function useFilteredSlideData({
         ? { ...dimensionMap, ...configuredDimensionNames }
         : dimensionMap;
 
-      if (hasChannelFilters) {
+      if (hasFilters && !hasChannelFilters) {
+        // ── EXCLUSIVE FILTER PATH ──────────────────────────────────────────────
+        // Exclude this channel completely since another channel is actively filtered
+        filteredRawRows[channel] = [];
+        channelTotals[channel] = { ...EMPTY_METRICS };
+      } else if (hasChannelFilters) {
         // ── FILTERED PATH ──────────────────────────────────────────────────────
         if (rawDataRows.length > 0) {
           // Filter rows by dimension values + date range, then aggregate

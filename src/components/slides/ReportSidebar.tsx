@@ -32,7 +32,6 @@ const TABS: Tab[] = [
   { value: "metasearch", label: "Metasearch", icon: <Globe className="h-4 w-4" /> },
   { value: "sem", label: "SEM", icon: <TrendingUp className="h-4 w-4" /> },
   { value: "social", label: "Social", icon: <Users className="h-4 w-4" /> },
-  { value: "budget", label: "Budget", icon: <DollarSign className="h-4 w-4" /> },
 ];
 
 interface ReportSidebarProps {
@@ -192,6 +191,18 @@ export function ReportSidebar({
         <p className="mt-3 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
           DEV
         </p>
+        <button
+          onClick={() => onTabChange("budget")}
+          className={cn(
+            "w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors text-left",
+            selectedTab === "budget"
+              ? "bg-primary/10 text-primary font-semibold"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <DollarSign className="h-4 w-4" />
+          Budget
+        </button>
         {/* DEV items are intentionally disabled until these tools are ready. */}
         <button
           disabled

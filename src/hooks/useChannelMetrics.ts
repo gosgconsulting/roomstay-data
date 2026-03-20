@@ -144,22 +144,26 @@ export function useChannelMetrics({
     }
 
     const dateRange = buildMultiMonthDateRange(selectedYear, selectedMonth);
-    const hasFilters = hasAnyActiveFilters(filterValues, filterDimensionValues);
+    const hasFilters = hasAnyActiveFilters(filterValues);
     const channelsWithFilters = hasFilters
-      ? getChannelsWithFilters(filterValues, filterDimensionValues)
+      ? getChannelsWithFilters(filterValues)
       : new Set<string>();
 
     const channelTotals: Record<string, MetricData> = {};
     for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-      const channelFilterValues =
-        hasFilters && channelsWithFilters.has(channel)
-          ? filterValues[channel] || {}
-          : {};
-      channelTotals[channel] = aggregateChannelRows(
-        channelData as any,
-        channelFilterValues,
-        dateRange
-      );
+      if (hasFilters && !channelsWithFilters.has(channel)) {
+        channelTotals[channel] = { ...ZERO_METRICS };
+      } else {
+        const channelFilterValues =
+          hasFilters && channelsWithFilters.has(channel)
+            ? filterValues[channel] || {}
+            : {};
+        channelTotals[channel] = aggregateChannelRows(
+          channelData as any,
+          channelFilterValues,
+          dateRange
+        );
+      }
     }
     return channelTotals as unknown as ChannelMetrics;
   }, [
@@ -179,8 +183,8 @@ export function useChannelMetrics({
     if (!pivotData?.channels) return null;
 
     // Check if any filters are applied - if so, we need to filter comparison data too
-    const hasFilters = hasAnyActiveFilters(filterValues, filterDimensionValues);
-    const channelsWithFilters = getChannelsWithFilters(filterValues, filterDimensionValues);
+    const hasFilters = hasAnyActiveFilters(filterValues);
+    const channelsWithFilters = getChannelsWithFilters(filterValues);
 
     // Build comparison period date range.
     // Prefer exact DateRange (custom / preset exact windows), then fall back to year/month model.
@@ -194,15 +198,19 @@ export function useChannelMetrics({
 
     if (comparisonDateRange) {
       for (const [channel, channelData] of Object.entries(pivotData.channels)) {
-        const channelFilterValues =
-          hasFilters && channelsWithFilters.has(channel)
-            ? filterValues[channel] || {}
-            : {};
-        channelTotals[channel] = aggregateChannelRows(
-          channelData as any,
-          channelFilterValues,
-          comparisonDateRange
-        );
+        if (hasFilters && !channelsWithFilters.has(channel)) {
+          channelTotals[channel] = { ...ZERO_METRICS };
+        } else {
+          const channelFilterValues =
+            hasFilters && channelsWithFilters.has(channel)
+              ? filterValues[channel] || {}
+              : {};
+          channelTotals[channel] = aggregateChannelRows(
+            channelData as any,
+            channelFilterValues,
+            comparisonDateRange
+          );
+        }
       }
       return channelTotals as unknown as ChannelMetrics;
     }

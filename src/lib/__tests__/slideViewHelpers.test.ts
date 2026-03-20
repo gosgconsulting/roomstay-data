@@ -12,47 +12,31 @@ import {
 
 describe('hasActiveFiltersForChannel', () => {
   it('should return false when no filter values are provided', () => {
-    const result = hasActiveFiltersForChannel({}, {});
+    const result = hasActiveFiltersForChannel({});
     expect(result).toBe(false);
   });
 
-  it('should return false when filter values object is empty', () => {
-    const result = hasActiveFiltersForChannel({}, { hotel: ['Hotel A', 'Hotel B'] });
-    expect(result).toBe(false);
-  });
-
-  it('should return false when empty array is selected (All/no filter mode)', () => {
+  it('should return true when empty array is selected (None mode/active filter)', () => {
     const filterValues = { hotel: [] };
-    const availableValues = { hotel: ['Hotel A', 'Hotel B'] };
-    const result = hasActiveFiltersForChannel(filterValues, availableValues);
-    expect(result).toBe(false);
-  });
-
-  it('should return false when all available values are selected (no filter)', () => {
-    const filterValues = { hotel: ['Hotel A', 'Hotel B'] };
-    const availableValues = { hotel: ['Hotel A', 'Hotel B'] };
-    const result = hasActiveFiltersForChannel(filterValues, availableValues);
-    expect(result).toBe(false);
+    const result = hasActiveFiltersForChannel(filterValues);
+    expect(result).toBe(true);
   });
 
   it('should return true when subset of values is selected (active filter)', () => {
     const filterValues = { hotel: ['Hotel A'] };
-    const availableValues = { hotel: ['Hotel A', 'Hotel B', 'Hotel C'] };
-    const result = hasActiveFiltersForChannel(filterValues, availableValues);
+    const result = hasActiveFiltersForChannel(filterValues);
     expect(result).toBe(true);
   });
 
   it('should return false when filter value is undefined', () => {
     const filterValues = { hotel: undefined as any };
-    const availableValues = { hotel: ['Hotel A', 'Hotel B'] };
-    const result = hasActiveFiltersForChannel(filterValues, availableValues);
+    const result = hasActiveFiltersForChannel(filterValues);
     expect(result).toBe(false);
   });
 
   it('should return false when filter value is null', () => {
     const filterValues = { hotel: null as any };
-    const availableValues = { hotel: ['Hotel A', 'Hotel B'] };
-    const result = hasActiveFiltersForChannel(filterValues, availableValues);
+    const result = hasActiveFiltersForChannel(filterValues);
     expect(result).toBe(false);
   });
 
@@ -61,32 +45,8 @@ describe('hasActiveFiltersForChannel', () => {
       hotel: ['Hotel A'],
       campaign: ['Campaign B'],
     };
-    const availableValues = {
-      hotel: ['Hotel A', 'Hotel B'],
-      campaign: ['Campaign A', 'Campaign B', 'Campaign C'],
-    };
-    const result = hasActiveFiltersForChannel(filterValues, availableValues);
+    const result = hasActiveFiltersForChannel(filterValues);
     expect(result).toBe(true);
-  });
-
-  it('should return false when all dimensions have all values selected', () => {
-    const filterValues = {
-      hotel: ['Hotel A', 'Hotel B'],
-      campaign: ['Campaign A', 'Campaign B'],
-    };
-    const availableValues = {
-      hotel: ['Hotel A', 'Hotel B'],
-      campaign: ['Campaign A', 'Campaign B'],
-    };
-    const result = hasActiveFiltersForChannel(filterValues, availableValues);
-    expect(result).toBe(false);
-  });
-
-  it('should handle case where available values are empty', () => {
-    const filterValues = { hotel: ['Hotel A'] };
-    const availableValues = { hotel: [] };
-    const result = hasActiveFiltersForChannel(filterValues, availableValues);
-    expect(result).toBe(true); // If we have selected values but no available, it's still a filter
   });
 });
 
@@ -97,12 +57,7 @@ describe('hasAnyActiveFilters', () => {
       sem: {},
       social: {},
     };
-    const filterDimensionValues = {
-      metasearch: {},
-      sem: {},
-      social: {},
-    };
-    const result = hasAnyActiveFilters(filterValues, filterDimensionValues);
+    const result = hasAnyActiveFilters(filterValues);
     expect(result).toBe(false);
   });
 
@@ -112,12 +67,7 @@ describe('hasAnyActiveFilters', () => {
       sem: {},
       social: {},
     };
-    const filterDimensionValues = {
-      metasearch: { hotel: ['Hotel A', 'Hotel B'] },
-      sem: {},
-      social: {},
-    };
-    const result = hasAnyActiveFilters(filterValues, filterDimensionValues);
+    const result = hasAnyActiveFilters(filterValues);
     expect(result).toBe(true);
   });
 
@@ -127,43 +77,18 @@ describe('hasAnyActiveFilters', () => {
       sem: { campaign: ['Campaign B'] },
       social: {},
     };
-    const filterDimensionValues = {
-      metasearch: { hotel: ['Hotel A', 'Hotel B'] },
-      sem: { campaign: ['Campaign A', 'Campaign B'] },
-      social: {},
-    };
-    const result = hasAnyActiveFilters(filterValues, filterDimensionValues);
+    const result = hasAnyActiveFilters(filterValues);
     expect(result).toBe(true);
   });
 
-  it('should return false when all channels have all values selected', () => {
-    const filterValues = {
-      metasearch: { hotel: ['Hotel A', 'Hotel B'] },
-      sem: { campaign: ['Campaign A', 'Campaign B'] },
-      social: {},
-    };
-    const filterDimensionValues = {
-      metasearch: { hotel: ['Hotel A', 'Hotel B'] },
-      sem: { campaign: ['Campaign A', 'Campaign B'] },
-      social: {},
-    };
-    const result = hasAnyActiveFilters(filterValues, filterDimensionValues);
-    expect(result).toBe(false);
-  });
-
-  it('should return false when one channel has empty array filter (All/no filter mode)', () => {
+  it('should return true when one channel has empty array filter (None mode/active filter)', () => {
     const filterValues = {
       metasearch: { hotel: [] },
       sem: {},
       social: {},
     };
-    const filterDimensionValues = {
-      metasearch: { hotel: ['Hotel A', 'Hotel B'] },
-      sem: {},
-      social: {},
-    };
-    const result = hasAnyActiveFilters(filterValues, filterDimensionValues);
-    expect(result).toBe(false);
+    const result = hasAnyActiveFilters(filterValues);
+    expect(result).toBe(true);
   });
 });
 
@@ -174,12 +99,7 @@ describe('getChannelsWithFilters', () => {
       sem: {},
       social: {},
     };
-    const filterDimensionValues = {
-      metasearch: {},
-      sem: {},
-      social: {},
-    };
-    const result = getChannelsWithFilters(filterValues, filterDimensionValues);
+    const result = getChannelsWithFilters(filterValues);
     expect(result).toEqual(new Set());
   });
 
@@ -189,12 +109,7 @@ describe('getChannelsWithFilters', () => {
       sem: {},
       social: {},
     };
-    const filterDimensionValues = {
-      metasearch: { hotel: ['Hotel A', 'Hotel B'] },
-      sem: {},
-      social: {},
-    };
-    const result = getChannelsWithFilters(filterValues, filterDimensionValues);
+    const result = getChannelsWithFilters(filterValues);
     expect(result).toEqual(new Set(['metasearch']));
   });
 
@@ -204,43 +119,18 @@ describe('getChannelsWithFilters', () => {
       sem: { campaign: ['Campaign B'] },
       social: {},
     };
-    const filterDimensionValues = {
-      metasearch: { hotel: ['Hotel A', 'Hotel B'] },
-      sem: { campaign: ['Campaign A', 'Campaign B'] },
-      social: {},
-    };
-    const result = getChannelsWithFilters(filterValues, filterDimensionValues);
+    const result = getChannelsWithFilters(filterValues);
     expect(result).toEqual(new Set(['metasearch', 'sem']));
   });
 
-  it('should not include channels with all values selected', () => {
-    const filterValues = {
-      metasearch: { hotel: ['Hotel A', 'Hotel B'] },
-      sem: { campaign: ['Campaign A'] },
-      social: {},
-    };
-    const filterDimensionValues = {
-      metasearch: { hotel: ['Hotel A', 'Hotel B'] },
-      sem: { campaign: ['Campaign A', 'Campaign B'] },
-      social: {},
-    };
-    const result = getChannelsWithFilters(filterValues, filterDimensionValues);
-    expect(result).toEqual(new Set(['sem']));
-  });
-
-  it('should not include channels with empty array filters (All/no filter mode)', () => {
+  it('should include channels with empty array filters (None mode/active filter)', () => {
     const filterValues = {
       metasearch: { hotel: [] },
       sem: {},
       social: {},
     };
-    const filterDimensionValues = {
-      metasearch: { hotel: ['Hotel A', 'Hotel B'] },
-      sem: {},
-      social: {},
-    };
-    const result = getChannelsWithFilters(filterValues, filterDimensionValues);
-    expect(result).toEqual(new Set());
+    const result = getChannelsWithFilters(filterValues);
+    expect(result).toEqual(new Set(['metasearch']));
   });
 });
 
@@ -312,13 +202,13 @@ describe('filterRawDataRows', () => {
     expect(result).toHaveLength(2);
   });
 
-  it('should pass through rows when filter has empty array (All/no filter mode)', () => {
+  it('should filter out all rows when filter has empty array (None mode)', () => {
     const rows = [
       makeRow({ 'dim-hotel': 'Brady' }),
       makeRow({ 'dim-hotel': 'Marriott' }),
     ];
     const result = filterRawDataRows(rows as any, { 'dim-hotel': [] });
-    expect(result).toHaveLength(2);
+    expect(result).toHaveLength(0);
   });
 
   it('should handle multiple dimension filters (AND logic)', () => {

@@ -15,6 +15,8 @@ import {
   buildMetricNameToIdsMap,
   filterRawDataRows,
   getMetricKeys,
+  hasAnyActiveFilters,
+  getChannelsWithFilters,
 } from '@/lib/slideViewHelpers';
 import { parseNumericValue } from '@/lib/parseNumericValue';
 import type { ChartGranularity, ChartMetric, RawDataRow } from '@/types/slideView';
@@ -172,7 +174,14 @@ function buildChartDataFromRawRows(
   let inferredStart: Date | null = dateRange?.start ?? null;
   let inferredEnd: Date | null = dateRange?.end ?? null;
 
+  const hasFilters = filterValues ? hasAnyActiveFilters(filterValues) : false;
+  const channelsWithFilters = filterValues ? getChannelsWithFilters(filterValues) : new Set<string>();
+
   for (const channel of channels) {
+    if (hasFilters && !channelsWithFilters.has(channel)) {
+      filteredRowsByChannel[channel] = [];
+      continue;
+    }
     const rows = rawRows[channel] || [];
     if (rows.length === 0) continue;
     const dimensionMap = dimensionMaps[channel] || {};

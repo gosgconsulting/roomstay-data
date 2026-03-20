@@ -49,8 +49,7 @@ export const calculateDerivedMetrics = (
  * @deprecated Use hasActiveFiltersForChannel for channel-specific checks or hasAnyActiveFilters for multi-channel checks
  */
 export const hasActiveFilters = (
-  filterValues: Record<string, string[]>,
-  availableValues?: Record<string, string[]>
+  filterValues: Record<string, string[]>
 ): boolean => {
   // If no filter values at all, no filters are applied
   if (!filterValues || Object.keys(filterValues).length === 0) {
@@ -58,7 +57,7 @@ export const hasActiveFilters = (
   }
 
   // Check each filter dimension
-  for (const [dimensionId, selectedValues] of Object.entries(filterValues)) {
+  for (const [, selectedValues] of Object.entries(filterValues)) {
     // If selectedValues is null/undefined, filter is not set - no filter
     if (!selectedValues) {
       continue;
@@ -67,23 +66,6 @@ export const hasActiveFilters = (
     // If empty array, it's an active filter that filters out everything
     if (selectedValues.length === 0) {
       return true; // Empty array is an active filter (shows zero data)
-    }
-
-    // If we have available values, check if all are selected (means "All" - no filter)
-    if (availableValues?.[dimensionId]) {
-      const allAvailableValues = availableValues[dimensionId];
-      // If selected values equals all available values, it's "All" - no filter
-      if (selectedValues.length === allAvailableValues.length) {
-        // Double-check: are they the same set?
-        const selectedSet = new Set(selectedValues);
-        const allSet = new Set(allAvailableValues);
-        if (
-          selectedSet.size === allSet.size &&
-          [...selectedSet].every((v) => allSet.has(v))
-        ) {
-          continue; // This is "All" - no filter
-        }
-      }
     }
 
     // If we have selected values that are a subset, filter is applied
@@ -99,12 +81,10 @@ export const hasActiveFilters = (
  * Centralized filter detection logic for single channel
  * 
  * @param channelFilterValues - Filter values for the channel (dimensionId -> selectedValues[])
- * @param channelAvailableValues - Available filter values for the channel (dimensionId -> availableValues[])
  * @returns true if channel has active filters, false otherwise
  */
 export const hasActiveFiltersForChannel = (
-  channelFilterValues: Record<string, string[]>,
-  channelAvailableValues?: Record<string, string[]>
+  channelFilterValues: Record<string, string[]>
 ): boolean => {
   // If no filter values at all, no filters are applied
   if (!channelFilterValues || Object.keys(channelFilterValues).length === 0) {
@@ -112,35 +92,18 @@ export const hasActiveFiltersForChannel = (
   }
 
   // Check each filter dimension
-  for (const [dimensionId, selectedValues] of Object.entries(channelFilterValues)) {
+  for (const [, selectedValues] of Object.entries(channelFilterValues)) {
     // If selectedValues is null/undefined, filter is not set - no filter
     if (!selectedValues) {
       continue;
     }
     
-    // Empty array represents "All" in inline filter UX (no active filter).
+    // Empty array means explicitly "None" (exclude all data). It IS an active filter.
     if (selectedValues.length === 0) {
-      continue;
+      return true;
     }
 
-    // If we have available values, check if all are selected (means "All" - no filter)
-    if (channelAvailableValues?.[dimensionId]) {
-      const allAvailableValues = channelAvailableValues[dimensionId];
-      // If selected values equals all available values, it's "All" - no filter
-      if (selectedValues.length === allAvailableValues.length) {
-        // Double-check: are they the same set?
-        const selectedSet = new Set(selectedValues);
-        const allSet = new Set(allAvailableValues);
-        if (
-          selectedSet.size === allSet.size &&
-          [...selectedSet].every((v) => allSet.has(v))
-        ) {
-          continue; // This is "All" - no filter
-        }
-      }
-    }
-
-    // If we have selected values that are a subset, filter is applied
+    // Explicit selection is always a filter
     return true;
   }
 
@@ -153,21 +116,18 @@ export const hasActiveFiltersForChannel = (
  * Multi-channel version of filter detection
  * 
  * @param filterValues - Filter values by channel (channel -> dimensionId -> selectedValues[])
- * @param filterDimensionValues - Available filter values by channel (channel -> dimensionId -> availableValues[])
  * @returns true if any channel has active filters, false otherwise
  */
 export const hasAnyActiveFilters = (
-  filterValues: Record<string, Record<string, string[]>>,
-  filterDimensionValues?: Record<string, Record<string, string[]>>
+  filterValues: Record<string, Record<string, string[]>>
 ): boolean => {
   if (!filterValues || Object.keys(filterValues).length === 0) {
     return false;
   }
 
   // Check each channel
-  for (const [channel, channelFilters] of Object.entries(filterValues)) {
-    const channelAvailableValues = filterDimensionValues?.[channel];
-    if (hasActiveFiltersForChannel(channelFilters, channelAvailableValues)) {
+  for (const channelFilters of Object.values(filterValues)) {
+    if (hasActiveFiltersForChannel(channelFilters)) {
       return true;
     }
   }
@@ -180,12 +140,10 @@ export const hasAnyActiveFilters = (
  * Used to optimize data processing (only filter channels that need it)
  * 
  * @param filterValues - Filter values by channel (channel -> dimensionId -> selectedValues[])
- * @param filterDimensionValues - Available filter values by channel (channel -> dimensionId -> availableValues[])
  * @returns Set of channel names that have active filters
  */
 export const getChannelsWithFilters = (
-  filterValues: Record<string, Record<string, string[]>>,
-  filterDimensionValues?: Record<string, Record<string, string[]>>
+  filterValues: Record<string, Record<string, string[]>>
 ): Set<string> => {
   const channelsWithFilters = new Set<string>();
 
@@ -195,8 +153,7 @@ export const getChannelsWithFilters = (
 
   // Check each channel
   for (const [channel, channelFilters] of Object.entries(filterValues)) {
-    const channelAvailableValues = filterDimensionValues?.[channel];
-    if (hasActiveFiltersForChannel(channelFilters, channelAvailableValues)) {
+    if (hasActiveFiltersForChannel(channelFilters)) {
       channelsWithFilters.add(channel);
     }
   }
@@ -286,13 +243,13 @@ export const filterRawDataRows = (
 
     // Apply dimension filters (using resolved IDs)
     for (const [dimensionId, selectedValues] of Object.entries(resolvedFilterValues)) {
-      // Empty array represents "All" in inline filter UX, so skip filtering.
-      if (selectedValues && selectedValues.length === 0) {
-        continue;
-      }
-      
       // If filter is not set (undefined/null), skip (show all)
       if (!selectedValues) continue;
+
+      // Empty array means explicitly "None" (exclude all data), so fail immediately.
+      if (selectedValues.length === 0) {
+        return false;
+      }
 
       // Try dimension ID first; then dimension name when data is keyed by name (e.g. "Link Type")
       let rowValue: unknown = rowDataRecord[dimensionId];
