@@ -14,7 +14,7 @@ export interface ChannelMetrics {
 /**
  * Aggregate metrics across all channels
  */
-export function aggregateChannelTotals(
+function aggregateChannelTotals(
   channelTotals: ChannelMetrics
 ): MetricData {
   return {
@@ -115,61 +115,3 @@ export function calculateChannelComparisonMetrics(
   return null;
 }
 
-/**
- * Calculate report breakdown data from channel totals
- */
-export function calculateReportBreakdown(
-  channelTotals: ChannelMetrics
-): Array<{ report: string } & DerivedMetrics> {
-  return [
-    {
-      report: 'Metasearch',
-      ...calculateDerivedMetrics(
-        channelTotals.metasearch || {
-          impressions: 0,
-          clicks: 0,
-          cost: 0,
-          revenue: 0,
-          bookings: 0,
-        }
-      ),
-    },
-    {
-      report: 'SEM',
-      ...calculateDerivedMetrics(
-        channelTotals.sem || {
-          impressions: 0,
-          clicks: 0,
-          cost: 0,
-          revenue: 0,
-          bookings: 0,
-        }
-      ),
-    },
-    {
-      report: 'Social',
-      ...calculateDerivedMetrics(
-        channelTotals.social || {
-          impressions: 0,
-          clicks: 0,
-          cost: 0,
-          revenue: 0,
-          bookings: 0,
-        }
-      ),
-    },
-  ];
-}
-
-/**
- * Calculate report total from channel totals
- */
-export function calculateReportTotal(
-  channelTotals: ChannelMetrics
-): { report: string } & DerivedMetrics {
-  const totalData = aggregateChannelTotals(channelTotals);
-  return {
-    report: 'Total',
-    ...calculateDerivedMetrics(totalData),
-  };
-}

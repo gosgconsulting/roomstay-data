@@ -32,6 +32,11 @@ After coding:
 
 ## Active tasks
 
+### Data Studio default = Month to Date (2026-03-23)
+
+- [x] **MTD-DEFAULT** — Default date range is month-to-date (1st of current month → today) with metadata label `Month to Date`; `getCurrentMonthToDateRange()` in `monthUtils.ts`; wired in `SlideViewPage.tsx`, `useDataStudioFilters.ts` (reset + master view clear), `useSlideReportPage.ts` (auto-create report).
+- [x] **Verification:** `npx vitest run src/lib/__tests__/monthUtils.test.ts src/hooks/__tests__/useDataStudioFilters.test.ts` ✅, `npm run build` ✅.
+
 ### Dead code cleanup (2026-03-23)
 
 - [x] **CLEAN-1** — Removed verified-unreferenced frontend modules: legacy chart pipeline (`chartDataCalculations.ts`), deprecated client `sync-utils.ts`, unused UI/components/hooks/libs, orphaned `resync-*` client bundle (sync is `runRefreshWorkflow` + Edge Functions only), root ad-hoc test scripts, unused `App.css`. README aligned (layout / KPI repair / components table).
@@ -51,6 +56,36 @@ After coding:
 - [x] **UNIFY-B4** — `docs/REFACTOR_UNIFY_PLAN.md` Option B marked **app + types complete**; `docs/REFACTOR.md` §7 tracker + §8 change log entry.
 
 **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors).
+
+### Data sources uniqueness — Option D docs (2026-03-25)
+
+- [x] **UNIFY-D1** — Documented existing migration `20260319000000_unique_data_sources.sql` and ops order (dedupe script → migrate) in `README.md`, `docs/REFACTOR.md` (§2.3, §7, §8), `docs/REFACTOR_UNIFY_PLAN.md` (§1, Option D, §3, §6).
+
+**Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors).
+
+### Report channel — Option A partial (2026-03-25)
+
+- [x] **UNIFY-A1** — `src/integrations/supabase/types.ts`: `reports.channel` nullable text per `20260319010000_add_reports_channel.sql`.
+- [x] **UNIFY-A2** — `src/lib/accountReportIds.ts`: `findReportByChannelName` uses `reports.channel` first, then existing name matching.
+- [x] **UNIFY-A3** — `README.md` Active DB Tables; `docs/REFACTOR.md` §7 + §8; `docs/REFACTOR_UNIFY_PLAN.md` §1 reports bullet.
+
+**Verification:** `npx tsc --noEmit` ✅, `npm run build` ✅, `npm run lint` ✅ (0 errors).
+
+### Report channel — create/rename (2026-03-25)
+
+- [x] **UNIFY-A4** — `inferReportChannelFromName()` in `src/lib/accountReportIds.ts` (aligned with migration CASE order).
+- [x] **UNIFY-A5** — `DashboardHeader.tsx`: `reports.insert` / `reports.update` set `channel` from name.
+- [x] **UNIFY-A6** — `src/lib/__tests__/accountReportIds.test.ts`; `docs/REFACTOR.md` §7 + §8.
+
+**Verification:** `npx vitest run src/lib/__tests__/accountReportIds.test.ts` ✅, `npm run build` ✅, `npm run lint` ✅ (0 errors).
+
+### Report channel — module split + rename safety (2026-03-25)
+
+- [x] **UNIFY-A7** — `src/lib/reportChannel.ts` holds `inferReportChannelFromName`; `accountReportIds.ts` re-exports.
+- [x] **UNIFY-A8** — `DashboardHeader` rename: only PATCH `channel` when name implies a channel (preserves DB value on generic renames).
+- [x] **UNIFY-A9** — `src/lib/__tests__/reportChannel.test.ts`; removed `accountReportIds.test.ts` (no Supabase side effects in test).
+
+**Verification:** `npx vitest run src/lib/__tests__/reportChannel.test.ts` ✅, `npm run build` ✅, `npm run lint` ✅ (0 errors).
 
 ### Data Studio default date range + January reset fix (2026-03-20)
 

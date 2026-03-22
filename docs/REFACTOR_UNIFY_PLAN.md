@@ -7,10 +7,10 @@
 
 ## 1. Current state (findings)
 
-- **Reports:** Two layers — `reports` (channel reports: Metasearch, SEM, Social) and `slide_reports` (one “Data Studio” per account). Data Studio uses one slide report whose `report_ids` (JSON) point to up to three `reports` rows. No single “report” table; naming is implicit (name match in `accountReportIds.ts`).
+- **Reports:** Two layers — `reports` (channel reports: Metasearch, SEM, Social) and `slide_reports` (one “Data Studio” per account). Data Studio uses one slide report whose `report_ids` (JSON) point to up to three `reports` rows. **`reports.channel`** (migration `20260319010000`) is the preferred discriminator; `accountReportIds.ts` matches on `channel` first, then falls back to name heuristics. **`DashboardHeader`:** new reports set `channel` from `inferReportChannelFromName()` in `src/lib/reportChannel.ts`. Renames send `channel` only when the new name matches a keyword, so generic titles do not clear an existing `channel`. Supabase `types.ts` includes `channel` on `reports`.
 - **Views:** Unified `views` table is the only runtime target (`.from("views")` across app). Legacy `report_views` / `slide_report_views` were dropped in migrations. **App audit (2026-03-24):** no `.from('report_views'|'slide_report_views')` in `src/`; generated `types.ts` no longer declares `report_views`.
 - **Sync:** **Done (2026-03-23):** Client `sync-utils.ts` removed; canonical path is only `runRefreshWorkflow` → `run-refresh-workflow` → `resync-data-source`. Column mapping / save-and-sync flows use Edge Functions via `refreshWorkflow.ts`.
-- **Data sources:** Multiple rows per `(report_id, source_type)` are allowed. Dedupe is script-only (`dedupe_data_sources.sql`); no unique constraint.
+- **Data sources:** **Schema (repo):** `supabase/migrations/20260319000000_unique_data_sources.sql` creates `data_sources_report_id_source_type_key` on `(report_id, source_type)`. **Ops:** run `supabase/scripts/dedupe_data_sources.sql` on any DB that still has duplicates *before* applying that migration, or the migration will fail.
 - **Tables:** Core for Data Studio are `dimension_data`, `dimensions`, `data_sources`, `reports`, `slide_reports`, `views`, `budgets`, `share_links`. Legacy/cache tables (e.g. `slide_report_channel_*`, `aggregated_breakdown_data`, `report_daily_metrics`) were dropped or are optional.
 
 ---
@@ -56,16 +56,15 @@
 
 ---
 
-### Option D — Enforce one data source per (report_id, source_type) (optional; schema change)
+### Option D — Enforce one data source per (report_id, source_type) (**migration in repo**)
 
 **Goal:** Prevent duplicate data sources at DB level so dedupe script is only for one-off cleanup.
 
-**Brief:**
+**In repo:** `supabase/migrations/20260319000000_unique_data_sources.sql` — `CREATE UNIQUE INDEX IF NOT EXISTS data_sources_report_id_source_type_key ON data_sources (report_id, source_type)`.
 
-- Add a unique constraint (or unique index) on `data_sources(report_id, source_type)`. If duplicates exist, run `dedupe_data_sources.sql` first, then apply migration.
-- Migration: `CREATE UNIQUE INDEX ... ON data_sources (report_id, source_type);` (and document in REFACTOR/README). Application code already assumes one source per type when running refresh (e.g. one CSV per report).
+**Ops checklist:** (1) If duplicates exist on the target project, run `supabase/scripts/dedupe_data_sources.sql` first. (2) Push/apply migrations. (3) Optional: regenerate Supabase TypeScript types.
 
-**New table:** No. **Data migration:** Run dedupe script before adding constraint.
+**New table:** No. **Data migration:** Dedupe only when duplicates exist pre-migration.
 
 ---
 
@@ -86,7 +85,7 @@
 
 1. **Option B (views)** — **App + types + test SQL docs aligned.** Ops: run migrations / regen types on schema changes.
 2. **Option C (sync-utils)** — **Done.** Client sync file removed; use only `runRefreshWorkflow`.
-3. **Option D (data_sources unique)** — Run dedupe script, then add unique constraint. Small schema change; prevents future duplicates.
+3. **Option D (data_sources unique)** — **Migration committed.** Ops: dedupe if needed, then apply migrations on linked Supabase.
 4. **Option A (report identity)** — Optional; do if you want clearer semantics or a `reports.channel` column.
 5. **Option E (new config table)** — Defer unless product needs multiple workspaces or versioned config.
 
@@ -114,6 +113,6 @@
 
 **Unify view storage (B):** **Done** in app + Supabase client types + test SQL snippets; DB migrations already dropped old tables.  
 **Single sync path (C):** **Done** — `sync-utils.ts` removed; only `runRefreshWorkflow` remains on the client.  
-**Data source uniqueness (D):** Run `dedupe_data_sources.sql`, then add unique constraint on `data_sources(report_id, source_type)`. No new table.  
+**Data source uniqueness (D):** Unique index migration is in `supabase/migrations/20260319000000_unique_data_sources.sql`; dedupe first if duplicates exist, then apply migrations.  
 **Report identity (A):** Optional: document that Data Studio report IDs come from `slide_reports.report_ids`; optionally add `reports.channel` and backfill so channel resolution does not rely on name matching.  
 **New config table (E):** Defer; only if you need multiple Data Studio workspaces or versioned config — then introduce something like `data_studio_config` and migrate from `slide_reports`.

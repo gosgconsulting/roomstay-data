@@ -62,7 +62,8 @@
 | Report dropdowns / selector | (legacy DataStudioDropdowns removed) | N/A | **Done** — `DataStudioDropdowns.tsx` deleted (Phase 1). |
 | KPI cards hook | useKPICards.ts (single file) | useKPICards.ts | No duplicate. |
 | Data source sync | Client sync removed; Edge path only | runRefreshWorkflow → run-refresh-workflow → resync-data-source | **Done** — `sync-utils.ts` removed; Data Studio / data sources use `runRefreshWorkflow` only. |
-| Data sources per report | Multiple rows per report_id + source_type allowed | One per (report_id, source_type) via script | Use `supabase/scripts/dedupe_data_sources.sql` when duplicates exist; DB unique constraint per unify migration. |
+| Data sources per report | (legacy) duplicates possible pre-migration | One per `(report_id, source_type)` | **Schema:** `20260319000000_unique_data_sources.sql` → unique index `data_sources_report_id_source_type_key`. **Ops:** run `supabase/scripts/dedupe_data_sources.sql` before applying migration if duplicates exist. |
+| Channel report lookup | Name heuristics in `accountReportIds` | `reports.channel` first, then names | **Done (2026-03-25):** types + `findReportByChannelName` prefer `channel` column (`20260319010000_add_reports_channel.sql`). |
 
 ---
 
@@ -224,10 +225,49 @@
 - [x] Phase 5 — Stabilization
 - [x] Doc reconciliation (2026-03-23) — §2.3/§2.4 duplicate mapping + issues, §8 change log, historical changelog notes, `REFACTOR_UNIFY_PLAN.md` Option C completed
 - [x] View storage alignment (2026-03-24) — Option B: removed stale `report_views` from Supabase TS types; manual test SQL/docs use `views` + `mode`
+- [x] Data sources uniqueness (2026-03-25) — Option D documented: unique index migration named in REFACTOR + unify plan + README (ops: dedupe then migrate)
+- [x] Report channel (2026-03-25) — `reports.channel` in Supabase types; `accountReportIds` prefers column over name matching
+- [x] Report channel on create/rename (2026-03-25) — `inferReportChannelFromName` + `DashboardHeader` insert/update
+- [x] Report channel module + rename semantics (2026-03-25) — `reportChannel.ts`; rename omits `channel` unless name implies one
 
 ---
 
 ## 8. Change Log
+
+### Report channel — pure module + safe rename updates (2026-03-25)
+
+**Changes**
+- `src/lib/reportChannel.ts`: `inferReportChannelFromName` (no Supabase import).
+- `accountReportIds.ts` re-exports for callers that already imported from there.
+- `DashboardHeader` rename: `reports.update` sends `channel` only when inference is non-null so generic renames do not clear an existing `channel`.
+- Tests: `src/lib/__tests__/reportChannel.test.ts` (replaces `accountReportIds.test.ts` to avoid loading the Supabase client in unit tests).
+
+**Verification**
+- `npx vitest run src/lib/__tests__/reportChannel.test.ts` ✅, `npm run build` ✅, `npm run lint` ✅ (0 errors)
+
+### Report channel — create/rename + inference helper (2026-03-25)
+
+**Changes** *(superseded in part by “pure module + safe rename” above)*
+- Introduced `inferReportChannelFromName` and `DashboardHeader` insert with `channel`.
+- Later moved inference to `reportChannel.ts` and tightened rename behavior (see prior changelog entry).
+
+### Report identity — `reports.channel` in types + lookup (2026-03-25)
+
+**Changes**
+- `src/integrations/supabase/types.ts`: added nullable `channel` on `reports` Row/Insert/Update (aligns with `20260319010000_add_reports_channel.sql`).
+- `src/lib/accountReportIds.ts`: `findReportByChannelName` selects `channel` and resolves by `reports.channel === metasearch|sem|social` before existing name-variant matching.
+
+**Verification**
+- `npx tsc --noEmit` ✅, `npm run build` ✅, `npm run lint` ✅ (0 errors)
+
+### Data sources uniqueness — documentation (2026-03-25)
+
+**Changes**
+- Clarified that `supabase/migrations/20260319000000_unique_data_sources.sql` already defines the unique index on `data_sources (report_id, source_type)`.
+- Updated `docs/REFACTOR_UNIFY_PLAN.md` Option D + §1 findings + §6 brief; `docs/REFACTOR.md` §2.3 duplicate mapping; `README.md` dedupe bullet with migration reference.
+
+**Verification**
+- `npm run build` ✅, `npm run lint` ✅ (0 errors)
 
 ### Unified views — types + QA SQL (2026-03-24)
 

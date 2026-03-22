@@ -144,24 +144,3 @@ export function useUpdateSlideReport() {
     },
   });
 }
-
-export function useDeleteSlideReport() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ id, account_id }: { id: string; account_id: string }) => {
-      const { error } = await supabase.from("slide_reports").delete().eq("id", id);
-      if (error) throw error;
-      return { id, account_id };
-    },
-    onSuccess: ({ account_id }) => {
-      queryClient.invalidateQueries({ queryKey: slideReportKeys.list(account_id) });
-      toast({ title: "Slide report deleted", description: "Your slide report has been deleted successfully." });
-    },
-    onError: (error) => {
-      console.error("Error deleting slide report:", error);
-      toast({ title: "Error", description: "Failed to delete slide report.", variant: "destructive" });
-    },
-  });
-}
-

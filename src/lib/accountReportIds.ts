@@ -7,6 +7,8 @@
 
 import { supabase } from "@/integrations/supabase/client";
 
+export { inferReportChannelFromName } from "./reportChannel";
+
 export interface AccountReportIds {
   metasearch: string | null;
   sem: string | null;
@@ -33,7 +35,7 @@ const CHANNEL_NAME_VARIANTS: Record<string, string[]> = {
  * @param channelName - The channel name ('metasearch', 'sem', or 'social')
  * @returns The report ID or null if not found
  */
-export async function findReportByChannelName(
+async function findReportByChannelName(
   accountId: string,
   channelName: 'metasearch' | 'sem' | 'social'
 ): Promise<string | null> {
@@ -48,7 +50,7 @@ export async function findReportByChannelName(
     // Query reports table for this account
     const { data: reports, error } = await supabase
       .from('reports')
-      .select('id, name')
+      .select('id, name, channel')
       .eq('account_id', accountId);
 
     if (error) {
@@ -62,7 +64,16 @@ export async function findReportByChannelName(
     }
 
     // Log all available reports for debugging
-    console.log(`[accountReportIds] Searching for ${channelName} report in account ${accountId}. Available reports:`, reports.map(r => ({ id: r.id, name: r.name })));
+    console.log(`[accountReportIds] Searching for ${channelName} report in account ${accountId}. Available reports:`, reports.map(r => ({ id: r.id, name: r.name, channel: r.channel })));
+
+    // Prefer explicit reports.channel (migration 20260319010000) when set
+    const byChannelColumn = reports.find(
+      (r) => (r.channel ?? '').toLowerCase().trim() === channelName
+    );
+    if (byChannelColumn) {
+      console.log(`[accountReportIds] ✓ Found ${channelName} report via reports.channel for account ${accountId}: ${byChannelColumn.id} (${byChannelColumn.name})`);
+      return byChannelColumn.id;
+    }
 
     // Try to find a report that matches any of the channel name variants (case-insensitive)
     const matchingReport = reports.find(report => {
@@ -161,18 +172,3 @@ export function clearAccountReportIdsCache(accountId?: string): void {
   }
 }
 
-/**
- * Get report ID for a specific channel
- * Convenience function that wraps getAccountReportIds
- * 
- * @param accountId - The account ID
- * @param channel - The channel name
- * @returns The report ID or null
- */
-export async function getAccountReportIdForChannel(
-  accountId: string,
-  channel: 'metasearch' | 'sem' | 'social'
-): Promise<string | null> {
-  const reportIds = await getAccountReportIds(accountId);
-  return reportIds[channel];
-}

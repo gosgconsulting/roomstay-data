@@ -78,16 +78,3 @@ export async function getUser(): Promise<{ user: User | null; error: any }> {
   // The cache will be populated by components using useUser()
   return fetchUser();
 }
-
-/**
- * Get user synchronously from cache (if available)
- * Returns null if not in cache
- * 
- * @param queryClient - React Query client instance
- * @returns {User | null}
- */
-export function getUserFromCache(queryClient: ReturnType<typeof useQueryClient>): User | null {
-  const cached = queryClient.getQueryData<{ user: User | null; error: any }>(authKeys.user());
-  return cached?.user || null;
-}
-

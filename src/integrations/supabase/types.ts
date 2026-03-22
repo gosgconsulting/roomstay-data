@@ -1067,6 +1067,7 @@ export type Database = {
       reports: {
         Row: {
           account_id: string | null
+          channel: string | null
           created_at: string
           id: string
           name: string
@@ -1075,6 +1076,7 @@ export type Database = {
         }
         Insert: {
           account_id?: string | null
+          channel?: string | null
           created_at?: string
           id?: string
           name: string
@@ -1083,6 +1085,7 @@ export type Database = {
         }
         Update: {
           account_id?: string | null
+          channel?: string | null
           created_at?: string
           id?: string
           name?: string

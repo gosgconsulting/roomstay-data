@@ -15,12 +15,14 @@ import type { Dimension } from "@/types/dimensions";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/lib/auth";
+import { inferReportChannelFromName } from "@/lib/reportChannel";
 import { useInvalidateSourceData } from "@/hooks/dataSources/useSourceData";
 import { useInvalidateCachedData } from "@/hooks/dataSources/useCachedSourceData";
 
 interface Report {
   id: string;
   name: string;
+  channel?: string | null;
   user_id?: string;
   owner_email?: string;
   is_shared?: boolean;
@@ -356,10 +358,11 @@ export function DashboardHeader({
 
       const { data, error } = await supabase
         .from('reports')
-        .insert({ 
+        .insert({
           name,
           user_id: user.id,
-          account_id: accountId
+          account_id: accountId,
+          channel: inferReportChannelFromName(name),
         })
         .select()
         .single();
@@ -389,20 +392,32 @@ export function DashboardHeader({
     if (!editingReport) return;
 
     try {
+      const inferred = inferReportChannelFromName(name);
+      const updateRow: { name: string; channel?: string } = { name };
+      if (inferred !== null) {
+        updateRow.channel = inferred;
+      }
+
       const { error } = await supabase
         .from('reports')
-        .update({ name })
+        .update(updateRow)
         .eq('id', editingReport.id);
 
       if (error) throw error;
 
-      const updatedReports = reports.map(r => 
-        r.id === editingReport.id ? { ...r, name } : r
+      const updatedReports = reports.map((r) =>
+        r.id === editingReport.id
+          ? { ...r, name, ...(inferred !== null ? { channel: inferred } : {}) }
+          : r
       );
       setReports(updatedReports);
-      
+
       if (currentReport?.id === editingReport.id) {
-        setCurrentReport({ ...currentReport, name });
+        setCurrentReport({
+          ...currentReport,
+          name,
+          ...(inferred !== null ? { channel: inferred } : {}),
+        });
       }
 
       setShowReportModal(false);

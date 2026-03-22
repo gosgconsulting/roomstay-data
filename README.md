@@ -117,7 +117,7 @@ Google Sheets / CSV URL
 - **Canonical writer:** `resync-data-source` edge function.
 - **Canonical table:** `dimension_data` — shape: `(report_id, data_source_id, row_number, dimension_values jsonb)`.
 - **Unique index:** `dimension_data_report_source_row_key` on `(report_id, data_source_id, row_number)`.
-- **Dedupe data sources:** If a report has multiple CSV or Google Sheets sources (e.g. duplicate metasearch sources), run `supabase/scripts/dedupe_data_sources.sql` to keep one per `(report_id, source_type)` and delete the rest (see docs/REFACTOR.md).
+- **Dedupe data sources:** If a report has multiple CSV or Google Sheets sources (e.g. duplicate metasearch sources), run `supabase/scripts/dedupe_data_sources.sql` to keep one per `(report_id, source_type)` and delete the rest **before** applying the unique index migration. Migration: `supabase/migrations/20260319000000_unique_data_sources.sql` (`data_sources_report_id_source_type_key`). See `docs/REFACTOR.md`.
 
 ### 3. Data Studio / Report View
 
@@ -185,7 +185,7 @@ Google Sheets / CSV URL
 | `query_cache` | Server-side cache for report/year query payloads (TTL via `expires_at`) |
 | `dimensions` | Dimension registry (account, custom, global scopes) |
 | `data_sources` | Google Sheets / CSV source configs |
-| `reports` | Report identity per account |
+| `reports` | Report identity per account; optional `channel` (`metasearch` / `sem` / `social`) — migration `20260319010000_add_reports_channel.sql`; `accountReportIds.ts` prefers `channel` then name heuristics; `DashboardHeader` sets `channel` on create from `inferReportChannelFromName()` (`src/lib/reportChannel.ts`); renames only update `channel` when the new name implies one (generic renames keep the existing value) |
 | `slide_reports` | Data Studio workspace record per account |
 | `views` | Unified view settings (replaces legacy `report_views` + `slide_report_views`) |
 | `share_links` | Public share link slugs |
