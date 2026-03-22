@@ -68,9 +68,9 @@
 
 ### 2.4 Issues
 
-- **Dead code:** FilterControls.tsx (no imports). DataStudioDropdowns.tsx (no imports).
-- **Potential duplication:** FiltersRow (SlideViewPage) vs FiltersBar (SharedReport) serve different contexts (Data Studio vs shared report); not duplicate, different entry points.
-- **Documentation:** REFACTOR.md was template-only; audit filled in Phase 1.
+- **Resolved (cleanup 2026-03-23):** Removed orphaned client modules: `chartDataCalculations.ts`, client `resync-*` bundle, unused components/hooks, root ad-hoc scripts. See §8 change log.
+- **Potential duplication:** FiltersRow (Data Studio) vs FiltersBar (SharedReport) — intentional; different contexts (authenticated Data Studio vs public shared report).
+- **Documentation:** This file is the refactor source of truth; keep §2/§8 aligned with README after structural changes.
 
 ---
 
@@ -222,10 +222,29 @@
 - [x] Phase 3 — Migration
 - [x] Phase 4 — Cleanup
 - [x] Phase 5 — Stabilization
+- [x] Doc reconciliation (2026-03-23) — §2.3/§2.4 duplicate mapping + issues, §8 change log, historical changelog notes, `REFACTOR_UNIFY_PLAN.md` Option C completed
 
 ---
 
 ## 8. Change Log
+
+### Client bundle cleanup + doc alignment (2026-03-23)
+
+**Changes**
+- Removed verified-unreferenced frontend code: legacy chart helpers (`chartDataCalculations.ts`), deprecated `sync-utils.ts`, unused UI/components/hooks/libs, entire client `resync-all-dimensions` / `resync-dimensions` / `resync-report-views` tree (sync is Edge Functions + `refreshWorkflow.ts` only), root one-off test scripts, unused `App.css`.
+- Removed unused `SlideViewHeader.tsx` (topbar lives in `SlideViewPage.tsx`).
+- README + this file updated so layout and KPI-repair bullets match the codebase.
+
+**Removed**
+- See TODO.md **CLEAN-1** (2026-03-23) for full file list.
+
+**Replaced By**
+- Single sync path: `runRefreshWorkflow` only.
+- Single chart path for Data Studio: `useChannelChartDataFromRawRows` + `slideViewHelpers` (no separate `chartDataCalculations` module).
+
+**Verification**
+- `npm run build` ✅ exit 0
+- `npm run lint` ✅ 0 errors (warnings only)
 
 ### Chart date-source unification (2026-03-20)
 
@@ -279,10 +298,10 @@
 - Script to dedupe `data_sources`: `supabase/scripts/dedupe_data_sources.sql` keeps one source per `(report_id, source_type)` (latest `updated_at`), deletes the rest. Use when a report (e.g. metasearch) has multiple CSV or Google Sheets sources.
 
 **Removed**
-- None (sync-utils still present for other callers; EditDataSourceModal no longer uses it).
+- N/A at this step (later: entire `sync-utils.ts` removed 2026-03-23; `EditDataSourceModal` also removed as unused).
 
 **Replaced By**
-- EditDataSourceModal "Save and sync" → `runRefreshWorkflow` + query invalidation.
+- Save-and-sync flows → `runRefreshWorkflow` + query invalidation (see change log 2026-03-23).
 
 **Verification**
 - Build and lint (run below).
@@ -297,7 +316,7 @@
 - Replaced all frontend usages of `report_views` / `slide_report_views` query keys and caching with unified `views`.
 
 **Removed**
-- Client-side data sync pipeline code from `sync-utils.ts` (replaced with deprecation stub).
+- Client-side data sync pipeline from `sync-utils.ts` (later the file was deleted entirely — 2026-03-23).
 - Old table `report_views` (already dropped in UI paths previously).
 
 **Replaced By**
@@ -337,8 +356,7 @@
 - Fixed view filters (e.g. Brady) not applying to breakdown tables and charts.
 - `BreakdownTableSection`: removed `selectedChannel !== 'overview'` guard that disabled dimension filters on the overview tab. Each channel's filters now apply independently regardless of which tab is selected.
 - `BreakdownTableSection`: all `filterRawDataRows` calls now receive a merged `dimensionIdToName` map (`dimensionMap + configuredDimensionNames`) so global/configured filter UUIDs resolve to report-specific row keys.
-- `chartDataCalculations.ts`: `processOverviewChartData` and `processChannelChartData` now accept and pass `configuredDimensionNames` to `filterRawDataRows`.
-- `useChartData.ts`: all chart hooks thread `configuredDimensionNames` to the chart processing functions.
+- Chart path (historical): at the time, `chartDataCalculations` / `useChartData` threaded `configuredDimensionNames`; those modules were later removed in favor of **`useChannelChartDataFromRawRows`** only, which applies the same merged map when filtering rows for charts.
 - `ChannelTab.tsx`: accepts and passes `configuredDimensionNames` to `UnifiedBreakdownTable`.
 - `SlideViewPage.tsx`: passes `configuredDimensionNames` to chart hooks and `ChannelTab`.
 - `handleApplyView` (master reset): chart time range, price-check chart range, and tab are now reset to defaults when switching to master view (prevents stale state from a previous view).
@@ -348,7 +366,7 @@
 - Redundant `dimensionMap` redeclaration inside chart filter blocks.
 
 **Replaced By**
-- Single `configuredDimensionNames` prop threaded from `SlideViewPage` through all consumers.
+- Single `configuredDimensionNames` prop threaded from `SlideViewPage` through breakdown + chart consumers; charts via `useChannelChartDataFromRawRows`.
 
 **Verification**
 - `npx tsc --noEmit` ✅ 0 errors.

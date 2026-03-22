@@ -8,8 +8,8 @@
 ## 1. Current state (findings)
 
 - **Reports:** Two layers — `reports` (channel reports: Metasearch, SEM, Social) and `slide_reports` (one “Data Studio” per account). Data Studio uses one slide report whose `report_ids` (JSON) point to up to three `reports` rows. No single “report” table; naming is implicit (name match in `accountReportIds.ts`).
-- **Views:** Unified `views` table exists and is used by SharedReport and CreateShareLinkModal. README says `report_views` and `slide_report_views` were dropped. Some code still references `report_views` or query keys `slide_report_views` (e.g. SlideViewPage invalidation, useSlideReportViews key, usePerformanceTableColumns logs, resync-report-views).
-- **Sync:** Single canonical path is `runRefreshWorkflow` → `run-refresh-workflow` → `resync-data-source`. `sync-utils.ts` still exports `syncDataSource`; EditDataSourceModal and DataSourcesPage already use `runRefreshWorkflow`. Any remaining callers of `syncDataSource` are legacy.
+- **Views:** Unified `views` table exists and is used by SharedReport and CreateShareLinkModal. README says `report_views` and `slide_report_views` were dropped. If any legacy query keys or logs remain, grep for `report_views` / `slide_report_views` and align with `views` only (see Option B).
+- **Sync:** **Done (2026-03-23):** Client `sync-utils.ts` removed; canonical path is only `runRefreshWorkflow` → `run-refresh-workflow` → `resync-data-source`. Column mapping / save-and-sync flows use Edge Functions via `refreshWorkflow.ts`.
 - **Data sources:** Multiple rows per `(report_id, source_type)` are allowed. Dedupe is script-only (`dedupe_data_sources.sql`); no unique constraint.
 - **Tables:** Core for Data Studio are `dimension_data`, `dimensions`, `data_sources`, `reports`, `slide_reports`, `views`, `budgets`, `share_links`. Legacy/cache tables (e.g. `slide_report_channel_*`, `aggregated_breakdown_data`, `report_daily_metrics`) were dropped or are optional.
 
@@ -39,24 +39,20 @@
 **Brief:**
 
 - Confirm in DB that `report_views` and `slide_report_views` are dropped (per README). If either still exists, add a migration to drop it only after all code is migrated.
-- Audit: `useSlideReportViews`, `usePerformanceTableViews`, `usePerformanceTableColumns`, `SlideViewPage`, `resync-report-views.ts`, any other view load/save. Ensure they read/write only `views` (and correct columns).
+- Audit: `useSlideReportViews`, `usePerformanceTableViews`, `usePerformanceTableColumns`, `SlideViewPage`, any other view load/save. Ensure they read/write only `views` (and correct columns).
 - Replace query keys and invalidation: use a single key pattern for views (e.g. `['views', slideReportId]` or `['views', reportId]`) and remove `slide_report_views` / `report_views` from keys and invalidation.
-- If `resync-report-views` is still needed, make it resync `views` (and optionally remove if no longer needed).
+- Client-side `resync-report-views.ts` was removed (2026-03-23); any future “repair” of view rows belongs in Edge/cron or one-off SQL, not a duplicate client sync tree.
 - Update tests and docs that mention `report_views` or `slide_report_views` to reference `views`.
 
 **New table:** No. **Data migration:** None if tables are already dropped; otherwise migrate any remaining rows from `report_views` / `slide_report_views` into `views` then drop old tables.
 
 ---
 
-### Option C — Remove sync-utils sync path (recommended; no new table)
+### Option C — Remove sync-utils sync path (**completed**)
 
-**Goal:** Single sync path only: `runRefreshWorkflow` → Edge Functions. Remove or deprecate `syncDataSource` in `sync-utils.ts`.
+**Goal:** Single sync path only: `runRefreshWorkflow` → Edge Functions.
 
-**Brief:**
-
-- Grep for `syncDataSource` and `SyncOptions` usages. Migrate any remaining callers to `runRefreshWorkflow` (same as EditDataSourceModal/DataSourcesPage).
-- Remove or stub out `syncDataSource` (and any helpers used only by it) in `sync-utils.ts`. Keep in `sync-utils` only what is still used (e.g. column mapping helpers if any).
-- Update README/REFACTOR to state that the only sync entry is `refreshWorkflow.runRefreshWorkflow`.
+**Done (2026-03-23):** `src/lib/sync-utils.ts` deleted; no client `syncDataSource`. README and `docs/REFACTOR.md` state the only sync entry is `refreshWorkflow.runRefreshWorkflow`.
 
 **New table:** No. **Data migration:** None.
 
@@ -91,7 +87,7 @@
 ## 3. Recommended order of work
 
 1. **Option B (views)** — Unify view storage and remove legacy view references. Low risk, no new table; removes confusion and aligns code with README.
-2. **Option C (sync-utils)** — Remove or deprecate `syncDataSource` and use only `runRefreshWorkflow`. Complements existing EditDataSourceModal/DataSourcesPage migration.
+2. **Option C (sync-utils)** — **Done.** Client sync file removed; use only `runRefreshWorkflow`.
 3. **Option D (data_sources unique)** — Run dedupe script, then add unique constraint. Small schema change; prevents future duplicates.
 4. **Option A (report identity)** — Optional; do if you want clearer semantics or a `reports.channel` column.
 5. **Option E (new config table)** — Defer unless product needs multiple workspaces or versioned config.
@@ -119,7 +115,7 @@
 ## 6. One-paragraph brief (for quick reference)
 
 **Unify view storage (B):** Use only `views` for all view reads/writes; remove or migrate every reference to `report_views` and `slide_report_views` (query keys, invalidation, resync-report-views). No new table; optional migration if old tables still exist.  
-**Single sync path (C):** Migrate any remaining `syncDataSource` callers to `runRefreshWorkflow`; remove or stub `syncDataSource` in sync-utils. No new table or data migration.  
+**Single sync path (C):** **Done** — `sync-utils.ts` removed; only `runRefreshWorkflow` remains on the client.  
 **Data source uniqueness (D):** Run `dedupe_data_sources.sql`, then add unique constraint on `data_sources(report_id, source_type)`. No new table.  
 **Report identity (A):** Optional: document that Data Studio report IDs come from `slide_reports.report_ids`; optionally add `reports.channel` and backfill so channel resolution does not rely on name matching.  
 **New config table (E):** Defer; only if you need multiple Data Studio workspaces or versioned config — then introduce something like `data_studio_config` and migrate from `slide_reports`.
