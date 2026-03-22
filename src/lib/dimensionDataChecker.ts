@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
  * @param reportId - The report ID
  * @returns Promise<Set<string>> - Set of dimension IDs that are mapped
  */
-export async function getMappedDimensionIds(reportId: string): Promise<Set<string>> {
+async function getMappedDimensionIds(reportId: string): Promise<Set<string>> {
   try {
     const { data: dataSource, error } = await supabase
       .from("data_sources")
@@ -36,54 +36,6 @@ export async function getMappedDimensionIds(reportId: string): Promise<Set<strin
   }
 }
 
-/**
- * Checks which dimensions actually have data in dimension_data for a given report
- * @param reportId - The report ID to check
- * @param dimensionIds - Optional array of dimension IDs to check. If not provided, checks all.
- * @returns Promise<Set<string>> - Set of dimension IDs that have data
- */
-export async function getDimensionsWithData(
-  reportId: string,
-  dimensionIds?: string[]
-): Promise<Set<string>> {
-  try {
-    const { data, error } = await supabase
-      .from("dimension_data")
-      .select("dimension_values")
-      .eq("report_id", reportId)
-      .limit(100); // Sample enough rows to find dimensions with data
-
-    if (error) {
-      console.error("[dimensionDataChecker] Error fetching dimension data:", error);
-      return new Set();
-    }
-
-    const dimensionsWithData = new Set<string>();
-    
-    // Check which dimension IDs appear as keys in dimension_values
-    data?.forEach(row => {
-      const dv = row.dimension_values as Record<string, any>;
-      if (dv) {
-        Object.keys(dv).forEach(dimId => {
-          // Only include if we're not filtering, or if this ID is in our filter list
-          if (!dimensionIds || dimensionIds.includes(dimId)) {
-            // Check if the dimension actually has a non-empty value
-            const value = dv[dimId];
-            if (value !== null && value !== undefined && value !== "") {
-              dimensionsWithData.add(dimId);
-            }
-          }
-        });
-      }
-    });
-
-    console.log("[dimensionDataChecker] Dimensions with data:", Array.from(dimensionsWithData));
-    return dimensionsWithData;
-  } catch (error) {
-    console.error("[dimensionDataChecker] Error checking dimension data:", error);
-    return new Set();
-  }
-}
 
 /**
  * Filters dimension IDs to only include those that are mapped in the report's data source

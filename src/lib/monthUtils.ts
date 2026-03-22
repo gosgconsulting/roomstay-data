@@ -117,58 +117,6 @@ export function buildComparisonDateRangeFromExact(
   };
 }
 
-/**
- * Given a set of selected month indices (0-based), enforce consecutive selection
- * by filling gaps between min and max.
- */
-export function enforceConsecutive(indices: number[]): number[] {
-  if (indices.length <= 1) return indices;
-  const min = Math.min(...indices);
-  const max = Math.max(...indices);
-  const result: number[] = [];
-  for (let i = min; i <= max; i++) result.push(i);
-  return result;
-}
-
-/**
- * Format selected months for display.
- */
-export function formatSelectedMonths(selectedMonth: string): string {
-  const months = parseSelectedMonths(selectedMonth);
-  if (!months || months.length === 0) return 'All Months';
-  if (months.length === 1) return MONTH_NAMES[months[0] - 1];
-  if (months.length === 12) return 'All Months';
-  const first = MONTH_NAMES[Math.min(...months) - 1];
-  const last = MONTH_NAMES[Math.max(...months) - 1];
-  return `${first.slice(0, 3)} – ${last.slice(0, 3)}`;
-}
-
-/**
- * Check if a month number matches the selected months filter.
- */
-export function isMonthInSelection(monthNum: number, selectedMonth: string): boolean {
-  const months = parseSelectedMonths(selectedMonth);
-  if (!months) return true; // 'all' - include everything
-  return months.includes(monthNum);
-}
-
-/**
- * Compute an anchor Date from selectedYear/selectedMonth for chart time range calculations.
- * Uses the latest selected month as the anchor. Falls back to current date if 'all'.
- */
-export function getChartAnchorDate(selectedYear: string, selectedMonth: string): Date {
-  if (selectedYear === 'all') return new Date();
-  const yearNum = parseInt(selectedYear);
-  const months = parseSelectedMonths(selectedMonth);
-  if (!months || months.length === 0) {
-    // Year selected but no specific month — use December of that year or current month if current year
-    const now = new Date();
-    if (yearNum === now.getFullYear()) return now;
-    return new Date(yearNum, 11, 1); // December
-  }
-  const maxMonth = Math.max(...months) - 1; // 0-based
-  return new Date(yearNum, maxMonth, 1);
-}
 
 /**
  * Convert SlideView selection model (year + selectedMonth string) to a DayPicker DateRange.

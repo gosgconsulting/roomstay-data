@@ -117,7 +117,7 @@ Google Sheets / CSV URL
 - **Canonical writer:** `resync-data-source` edge function.
 - **Canonical table:** `dimension_data` — shape: `(report_id, data_source_id, row_number, dimension_values jsonb)`.
 - **Unique index:** `dimension_data_report_source_row_key` on `(report_id, data_source_id, row_number)`.
-- **Dedupe data sources:** If a report has multiple CSV or Google Sheets sources (e.g. duplicate metasearch sources), run `supabase/scripts/dedupe_data_sources.sql` to keep one per `(report_id, source_type)` and delete the rest **before** applying the unique index migration. Migration: `supabase/migrations/20260319000000_unique_data_sources.sql` (`data_sources_report_id_source_type_key`). See `docs/REFACTOR.md`.
+- **Dedupe data sources:** If a report has multiple CSV or Google Sheets sources (e.g. duplicate metasearch sources), run `supabase/scripts/dedupe_data_sources.sql` to keep one per `(report_id, source_type)` and delete the rest **before** applying the unique index migration. Migration: `supabase/migrations/20260319000000_unique_data_sources.sql` (`data_sources_report_id_source_type_key`). Canonical duplicate mapping for sync, charts, and reports is summarized under **Refactor process** below.
 
 ### 3. Data Studio / Report View
 
@@ -125,7 +125,7 @@ Google Sheets / CSV URL
 - **Orchestrator hook:** `src/hooks/useSlideReportPage.ts` — composes sub-hooks for report identity, raw rows, filtered data, views, budgets, and mutations.
 - **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads via `get-cached-report-data` edge function. The canonical source remains `dimension_data`; query results are cache-aside stored in `query_cache` (30m TTL) and React Query uses `staleTime` (5m) + `gcTime` (10m) to reduce repeated fetches.
 - **Filtered data:** `src/hooks/useFilteredSlideData.ts` — pure client-side filtering and aggregation. Single source of truth for KPI totals, monthly chart data, and filtered raw rows.
-- **Filter state:** `src/hooks/useDataStudioFilters.ts` — canonical owner of `filterValues`, `customDateRange`, `comparisonType`, `filterConfigs`. Restores view filters via `applyView`. All consumers (KPI cards, charts, breakdown tables) read from the same `filterValues` and use a shared `configuredDimensionNames` map for global-to-report dimension ID resolution. Exact custom date ranges stay page-controlled even when the initial value is `undefined`, so applying a sub-month range updates KPI cards, charts, and tables together. The default top date filter is **year to date** (`Jan 1 -> today`), not the full current month.
+- **Filter state:** `src/hooks/useDataStudioFilters.ts` — canonical owner of `filterValues`, `customDateRange`, `comparisonType`, `filterConfigs`. Restores view filters via `applyView`. All consumers (KPI cards, charts, breakdown tables) read from the same `filterValues` and use a shared `configuredDimensionNames` map for global-to-report dimension ID resolution. Exact custom date ranges stay page-controlled even when the initial value is `undefined`, so applying a sub-month range updates KPI cards, charts, and tables together. The default top date filter is **month to date** (1st of current month → today), labeled “Month to Date” (`getCurrentMonthToDateRange()` in `monthUtils.ts`).
 - **Filter flow:** saved view → `applyView` → top date filter + `filterValues` → `useFilteredSlideData` (KPI totals + monthly data) + `useChannelChartDataFromRawRows` (overview/channel charts) + `BreakdownTableSection` (breakdown tables). All paths resolve filter IDs via `filterRawDataRows(..., combinedDimNames)`, and charts now use the same top date range as KPI cards/tables.
 - **Performance table:** `src/components/PerformanceTable/` + `src/hooks/performanceTable/`.
 - **View settings:** stored in `views` table (canonical, replaces legacy `report_views` + `slide_report_views`).
@@ -142,8 +142,8 @@ Google Sheets / CSV URL
 ### 5. Refresh / Sync Workflow
 
 - **Entry point:** `src/lib/refreshWorkflow.ts` → `run-refresh-workflow` edge function.
-- **Workflow:** the UI always passes `clearFirst: true`, so the workflow first deletes all `dimension_data` for the target report(s), then calls `resync-data-source` for each data source. This gives erase-then-replace behavior and prevents duplicate or stale rows. After resync, the workflow now pre-warms `get-cached-report-data` (`forceRefresh=true`) per report for the current year so first post-refresh loads are fast across users. The Refresh Data modal shows an explicit "Clearing and resetting data" step before "Fetching from sources". Full Refresh uses `refreshMode: 'full'` and reloads all data from all sources. See `docs/REFRESH_WORKFLOW_AUDIT.md` for the full SEM/Social/Metasearch flow and dimension-resolution fix (metasearch 0 cost). For hard-refresh steps and fixing metasearch cost via direct Supabase data, see `docs/HARD_REFRESH_AND_METASEARCH_COST.md`.
-- **Supabase MCP:** When the project is linked to the Supabase MCP (Cursor/integration), you can run SQL (e.g. metasearch cost fix) and deploy Edge Functions from the IDE. See `docs/MCP_SUPABASE.md`.
+- **Workflow:** the UI always passes `clearFirst: true`, so the workflow first deletes all `dimension_data` for the target report(s), then calls `resync-data-source` for each data source. Erase-then-replace prevents duplicate or stale rows. After resync, the workflow pre-warms `get-cached-report-data` (`forceRefresh=true`) per report for the current year. The Refresh Data modal shows “Clearing and resetting data” before “Fetching from sources”. Full Refresh uses `refreshMode: 'full'`. Column→dimension mapping in `resync-data-source` includes header synonyms (e.g. Spend → Cost) so full resync recovers missing Cost after dimension churn. After refresh completes, the app awaits a refetch of `data-studio-raw-rows` so KPIs/charts are not stale.
+- **Supabase MCP:** When the project is linked in Cursor, agents can use MCP tools (`execute_sql`, `apply_migration`, `deploy_edge_function`, `list_tables`, etc.) against the linked project. See **Runbooks** below for metasearch Cost fixes.
 
 ### 6. Sharing System
 
@@ -185,7 +185,7 @@ Google Sheets / CSV URL
 | `query_cache` | Server-side cache for report/year query payloads (TTL via `expires_at`) |
 | `dimensions` | Dimension registry (account, custom, global scopes) |
 | `data_sources` | Google Sheets / CSV source configs |
-| `reports` | Report identity per account; optional `channel` (`metasearch` / `sem` / `social`) — migration `20260319010000_add_reports_channel.sql`; `accountReportIds.ts` prefers `channel` then name heuristics; `DashboardHeader` sets `channel` on create from `inferReportChannelFromName()` (`src/lib/reportChannel.ts`); renames only update `channel` when the new name implies one (generic renames keep the existing value) |
+| `reports` | Report identity per account; optional `channel` (`metasearch` / `sem` / `social`) — migration `20260319010000_add_reports_channel.sql`; `accountReportIds.ts` prefers `channel` then name heuristics; `DashboardHeader` sets `channel` on create from `inferReportChannelFromName()` (`src/lib/reportChannel.ts`); renames only update `channel` when the new name implies one (generic renames keep the existing value); after create/update/delete, `DashboardHeader` calls `clearAccountReportIdsCache(accountId)` so `getAccountReportIds` refetches |
 | `slide_reports` | Data Studio workspace record per account |
 | `views` | Unified view settings (replaces legacy `report_views` + `slide_report_views`) |
 | `share_links` | Public share link slugs |
@@ -288,7 +288,7 @@ Google Sheets / CSV URL
 - **Single source of truth:** `src/index.css` defines shadcn/Tailwind tokens as **HSL CSS variables** (`--background`, `--primary`, `--border`, etc.).
 - **Theme policy:** Light default; dark mode via theme toggle (persisted in `localStorage` key `roomstay-theme`). `ThemeProvider` in `src/lib/theme.tsx` and `ThemeToggle` in header/auth/standalone pages.
 - **Typography:** DM Sans is loaded in `index.html` and used as the default Tailwind `font-sans`.
-- **Design rules:** See `docs/DESIGN_SYSTEM.md` for token reference and component standards. **Visual source of truth:** `docs/DESIGN_SYSTEM_RULES.md` — all new pages, components, and refactors must follow it (tokens only, no hardcoded colors, no decorative shadows).
+- **Design rules:** Use HSL tokens in `src/index.css` only — no hardcoded hex/rgb in components; use Tailwind classes mapped to `--background`, `--foreground`, `--primary`, `--destructive`, `--muted`, `--border`, `--chart-*`, etc. Prefer `--radius` and the spacing scale. Reserve strong color for meaning (primary actions, destructive). Support light and dark via tokens. Avoid decorative shadows; use elevation only for dialogs/popovers. Reuse shadcn variants before inventing new button or card styles.
 
 ### Naming
 
@@ -337,19 +337,46 @@ Supabase anon key and project URL are hardcoded in `src/integrations/supabase/cl
 
 ---
 
-## Refactor Notes
+## Refactor process
 
-See `docs/REFACTOR.md` for the full refactor plan, phase-by-phase progress, and the Verify → Migrate → Delete protocol.
+**Ongoing rules:** one implementation per feature; no parallel APIs or routes; prefer rewrite over endless patches; **Verify → Migrate → Delete** before removing any module (no imports, no routes, no tests/EF deps, schema safe).
 
-**Looker Studio Refactor — completed 2026-03-18:**
-- Dropped AI summary tables: `ai_summary_cards`, `ai_summary_budgets`, `ai_summary_forecasts`, `slide_report_summaries`
-- Dropped legacy pivot cache tables: `slide_report_channel_*`, `slide_report_monthly_data`, `monthly_dimension_data`, `aggregated_breakdown_data`, `sheet_data`, `report_api_data`
-- Dropped legacy view tables: `report_views`, `slide_report_views` (replaced by `views`)
-- Deleted 12 retired edge functions (AI summary, legacy pivot cache, vlookup, sheet migration)
-- Deleted ~30 dead frontend files (Kanban cluster, AI components, legacy pivot engine, dead hooks)
-- Migrated `SharedReport.tsx` + `CreateShareLinkModal.tsx` to `views` table
-- Removed `report_api_data` fast-path from `get-performance-data`
-- `useSlideReportPage` now uses `useFilteredSlideData` directly (no intermediate passthrough hook)
+**Phases 1–5** (audit → canonical definition → migration → cleanup → stabilization) are **complete**. Recent work: unified `views`; single sync path `runRefreshWorkflow` → `run-refresh-workflow` → `resync-data-source`; client `sync-utils` removed; Data Studio charts use `useChannelChartDataFromRawRows` only; `reports.channel` + `reportChannel.ts` / `DashboardHeader` + `clearAccountReportIdsCache` on report CRUD; unique `data_sources (report_id, source_type)` after optional `dedupe_data_sources.sql`.
+
+**Duplicate mapping (canonical vs retired):**
+
+| Area | Canonical |
+|------|-----------|
+| Data Studio filters | `FiltersRow` + `useDataStudioFilters` |
+| Shared/public report filters | `FiltersBar` (different context) |
+| Sync | `refreshWorkflow.ts` / Edge only |
+| Raw rows | `useDataStudioRawRows` → `get-cached-report-data` / `dimension_data` |
+| Charts | `useChannelChartDataFromRawRows` |
+| Saved views | `views` table |
+| Channel report lookup | `reports.channel` first, then name heuristics (`accountReportIds`) |
+
+**Looker Studio refactor (2026-03-18) — major removals:** AI summary and legacy pivot cache tables dropped; `views` replaces `report_views` / `slide_report_views`; retired edge functions (AI, pivot cache, vlookup, sheet migration); ~30 dead frontend files removed; `useSlideReportPage` uses `useFilteredSlideData` directly.
+
+---
+
+## Data Studio ↔ Supabase
+
+1. **Slide report:** one active `slide_reports` row per account with `name = 'Data Studio'` (auto-created if missing). Holds `report_ids` (metasearch / sem / social → `reports.id`), `configuration`, etc.
+2. **Channel reports:** rows in `reports`; **`reports.channel`** (`metasearch` \| `sem` \| `social`) is preferred for resolution; fallback is display-name matching. `DashboardHeader` sets `channel` on create from `inferReportChannelFromName()`; on rename, updates `channel` only when the new name implies a channel.
+3. **Facts:** `dimension_data` keyed by `report_id` + `data_source_id` + `row_number`; **writer** is `resync-data-source` only.
+4. **Saved UI state:** `views` (filters, table mode, etc.); **budgets** / **share_links** reference slide or channel reports as implemented in app code.
+
+RPCs such as `get_dimension_data_by_report_and_date` support year-scoped fetches. Detailed task history lives in `TODO.md`.
+
+---
+
+## Runbooks
+
+**Metasearch Cost (or other metrics) under-counted:** Prefer **Data Studio → Refresh Data → Full Refresh**. That clears `dimension_data` for the report(s) and re-syncs from sources with correct column → dimension mapping. **Optional DB fix without re-fetch:** run `supabase/scripts/fix_metasearch_cost_dimension_data.sql` via Supabase SQL Editor, `npm run fix:metasearch-cost` (linked CLI), or MCP `execute_sql` with the script body. Currency strings in sheets are normalized via `parseNumericValue` / `transformSourceData` — wrong totals are usually dimension ID / multi-source issues, not formatting.
+
+**Supabase MCP (linked project):** authenticate once if required; use `execute_sql` for one-off scripts, `apply_migration` for DDL, `deploy_edge_function` to ship functions from `supabase/functions/`, `list_tables` / `list_migrations` for inspection.
+
+**Local MCP refresh server:** see `mcp/README.md` for the optional `run_refresh_workflow` MCP tool package.
 
 ---
 

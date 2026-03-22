@@ -24,19 +24,6 @@ export interface DerivedMetrics extends MetricData {
   costOfSale: number;
 }
 
-export interface ChannelData extends MetricData {
-  previous_period?: ChannelData;
-  previous_year?: ChannelData;
-}
-
-export interface PivotDataChannel {
-  monthly: Record<string, ChannelData>;
-  breakdowns: Record<string, any[]>;
-  rawDataRows?: RawDataRow[];
-  dimensionMap?: Record<string, string>;
-  previous_period?: ChannelData;
-  previous_year?: ChannelData;
-}
 
 export interface MonthlyDataPoint {
   year: number;

@@ -124,7 +124,7 @@ export default function SlideViewPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const { data: userData } = useUser();
+  const { data: userData, isLoading: isUserLoading } = useUser();
   const user = userData?.user || null;
   const userLabel = user?.email?.split("@")[0] || user?.email || "user";
 
@@ -513,6 +513,8 @@ export default function SlideViewPage() {
 
   // Check for share authentication when user is not authenticated (moved after slideReportId declaration)
   useEffect(() => {
+    if (isUserLoading) return;
+
     if (!user) {
       // Check if we're accessing via a share link
       const isShared = searchParams.get('shared') === 'true';
@@ -555,14 +557,14 @@ export default function SlideViewPage() {
             }
           }
         } else {
-          // No share auth found, redirect back to share link
-          navigate(`/${slug}`);
+          // No share auth found, redirect to public share route (not /:slug alone — that collides with app paths)
+          navigate(`/shared/${slug}`, { replace: true });
         }
       }
     } else {
       setIsSharedAccess(false);
     }
-  }, [user, searchParams, navigate, slideReportId, accountId]);
+  }, [user, isUserLoading, searchParams, navigate, slideReportId, accountId]);
 
   // Check for viewId in URL params or share link on mount and when views load
   // Also check if we're accessing via a share link (shared=true)
@@ -2286,6 +2288,16 @@ export default function SlideViewPage() {
     isApplyingViewRef.current = true;
 
     const view = viewId ? views.find(v => v.id === viewId) ?? null : null;
+    if (viewId && !view) {
+      toast({
+        title: 'View unavailable',
+        description: 'That view could not be loaded. Try refreshing the page.',
+        variant: 'destructive',
+      });
+      isApplyingViewRef.current = false;
+      return;
+    }
+
     setSelectedViewId(viewId);
 
     // Delegate filter value + date restore to the canonical hook
@@ -2296,19 +2308,28 @@ export default function SlideViewPage() {
     if (view?.tab) setSelectedTab(view.tab);
     else if (!viewId) setSelectedTab('overview');
 
-    // Update URL with viewId
-    const newParams = new URLSearchParams(searchParams);
-    if (viewId) {
-      newParams.set('viewId', viewId);
-    } else {
-      newParams.delete('viewId');
-    }
-    setSearchParams(newParams, { replace: true });
+    // Update URL with viewId; drop stale share preview params so slug never hijacks routing on auth edge cases
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (viewId) {
+          next.set('viewId', viewId);
+        } else {
+          next.delete('viewId');
+        }
+        if (!isReadOnlyMode) {
+          next.delete('shared');
+          next.delete('slug');
+        }
+        return next;
+      },
+      { replace: true }
+    );
 
     setTimeout(() => {
       isApplyingViewRef.current = false;
     }, 0);
-  }, [slideReportId, searchParams, views, dsFilters]);
+  }, [slideReportId, views, dsFilters, isReadOnlyMode, setSearchParams]);
 
   // ========== Refresh Data Modal handler ==========
   const handleRefreshDataWithModal = useCallback(() => {

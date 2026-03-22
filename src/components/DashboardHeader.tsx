@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/lib/auth";
 import { inferReportChannelFromName } from "@/lib/reportChannel";
+import { clearAccountReportIdsCache } from "@/lib/accountReportIds";
 import { useInvalidateSourceData } from "@/hooks/dataSources/useSourceData";
 import { useInvalidateCachedData } from "@/hooks/dataSources/useCachedSourceData";
 
@@ -369,6 +370,10 @@ export function DashboardHeader({
 
       if (error) throw error;
 
+      if (accountId) {
+        clearAccountReportIdsCache(accountId);
+      }
+
       setReports([data, ...reports]);
       setCurrentReport(data);
       onReportChange(data.id); // Notify parent
@@ -404,6 +409,10 @@ export function DashboardHeader({
         .eq('id', editingReport.id);
 
       if (error) throw error;
+
+      if (accountId) {
+        clearAccountReportIdsCache(accountId);
+      }
 
       const updatedReports = reports.map((r) =>
         r.id === editingReport.id
@@ -445,6 +454,10 @@ export function DashboardHeader({
         .eq('id', report.id);
 
       if (error) throw error;
+
+      if (accountId) {
+        clearAccountReportIdsCache(accountId);
+      }
 
       const updatedReports = reports.filter(r => r.id !== report.id);
       setReports(updatedReports);

@@ -15,13 +15,15 @@ Always read `README.md` and `TODO.md` before making changes.
 Before adding anything new:
 - Check if it already exists.
 - Check if a similar system already exists.
-- Avoid duplicate routes, logic, components, hooks, services, schemas, and docs.
+- Avoid duplicate routes, logic, components, hooks, services, schemas, and documentation files.
 - Prefer reusing or unifying existing systems.
+
+**Documentation:** Only `README.md` and this file are project docs. Do not add `docs/` or other root `*.md` guides.
 
 Before coding, provide:
 1. Findings
 2. Plan
-3. Docs to update
+3. Which sections of `README.md` / `TODO.md` to update
 
 After coding:
 - Update `README.md` if architecture or system behavior changed.
@@ -31,6 +33,19 @@ After coding:
 ---
 
 ## Active tasks
+
+### Documentation single source (2026-03-23)
+
+- [x] **DOC-1** — Merged `docs/*` and refactor/audit/runbook/design content into `README.md`; removed obsolete standalone doc files.
+- [x] **DOC-2** — Updated Cursor refactor skills to use `README.md` as refactor/architecture source of truth.
+- [x] **Verification:** `npm run build` ✅ (exit 0).
+
+### Data Studio stability — view URL + budgets (2026-03-23)
+
+- [x] **DS-STAB-1** — `SlideViewPage.tsx`: auth loading guard on share effect; redirect unauthenticated share preview to `/shared/${slug}`; functional `setSearchParams` in `handleApplyView`; clear `shared`/`slug` when switching views (non-read-only); toast on missing view id.
+- [x] **DS-STAB-2** — `budgetCalculations.ts`: add `normalizeBudgetValue`; use `normalizeMonthKeyToNameYear` when merging view budgets in the pivot path.
+- [x] **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors).
+- [x] **Docs:** `docs/REFACTOR.md` §2.4, §7, §8 updated.
 
 ### Data Studio default = Month to Date (2026-03-23)
 
@@ -86,6 +101,21 @@ After coding:
 - [x] **UNIFY-A9** — `src/lib/__tests__/reportChannel.test.ts`; removed `accountReportIds.test.ts` (no Supabase side effects in test).
 
 **Verification:** `npx vitest run src/lib/__tests__/reportChannel.test.ts` ✅, `npm run build` ✅, `npm run lint` ✅ (0 errors).
+
+### Report channel — account report id cache (2026-03-25)
+
+- [x] **UNIFY-A10** — `DashboardHeader.tsx`: `clearAccountReportIdsCache(accountId)` after successful report create, rename, and delete so `getAccountReportIds` does not serve stale metasearch/sem/social mappings.
+- [x] **UNIFY-A11** — `docs/REFACTOR.md` §7 + §8; `docs/REFACTOR_UNIFY_PLAN.md` Option A / §6; `README.md` Active DB Tables.
+
+**Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors).
+
+### Reports audit + lint script (2026-03-25)
+
+- [x] **RF-AUDIT-1** — `docs/SUPABASE_REPORTS_AUDIT.md`: Option A semantics (`reports.channel`, lookup order, `DashboardHeader` + cache, unified `views`).
+- [x] **RF-AUDIT-2** — `docs/REFACTOR_UNIFY_PLAN.md` §4; `docs/REFACTOR.md` §7 + §8; `README.md` link from Refactor Notes.
+- [x] **RF-LINT-1** — `package.json`: `"lint": "npx eslint ."`.
+
+**Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors, warnings only).
 
 ### Data Studio default date range + January reset fix (2026-03-20)
 
@@ -301,13 +331,13 @@ Root cause: Data Studio still ran two chart pathways in parallel. The legacy `us
 
 ### Refactor Phase 1 + Cleanup (2026-03-19)
 
-Per `docs/REFACTOR.md` and refactor skill:
+Per `README.md` (Refactor process) and refactor skill:
 
-- [x] **RF-1** — Phase 1 Audit: populated REFACTOR.md §2 (routes, systems, duplicate mapping, issues) and §3 (target architecture).
+- [x] **RF-1** — Phase 1 Audit: mapped routes, systems, duplicate mapping, and issues (later consolidated into README).
 - [x] **RF-2** — Removed dead code: `src/components/slides/FilterControls.tsx`, `src/components/DataStudioDropdowns.tsx` (no imports; Verify → Delete).
 - [x] **RF-3** — Progress: Phase 1 marked complete; Phase 4 cleanup (two files) executed; build + lint pass.
 
-**Next:** Phase 2 (Canonical Definition) or further Phase 4 cleanup as needed. See `docs/REFACTOR.md` Progress Tracker.
+**Next:** Further cleanup only if new duplicates appear; track in this file.
 
 ---
 
@@ -596,14 +626,12 @@ Root cause: refresh was run with `clearFirst: false`, so `dimension_data` was ne
 
 ---
 
-### Refactor / Unify (plan only — see docs/REFACTOR_UNIFY_PLAN.md)
+### Refactor / Unify (completed; summary in README)
 
 - [x] **UNIFY-B** — Unify view storage: all code uses `views` only; remove `report_views` / `slide_report_views` references and query keys.
 - [x] **UNIFY-C** — Single sync path: migrate any remaining `syncDataSource` callers to `runRefreshWorkflow`; remove or stub in sync-utils.
 - [x] **UNIFY-D** — Run dedupe script, then add unique constraint on `data_sources(report_id, source_type)`.
-- [x] **UNIFY-A** — Document report identity; added `reports.channel` and backfilled.
-
-Full plan, brief fixes, and new-table/migration notes: **docs/REFACTOR_UNIFY_PLAN.md**.
+- [x] **UNIFY-A** — Report identity: `reports.channel` and backfill; lookup + UI documented in **README.md** (Data Studio ↔ Supabase, Refactor process).
 
 ---
 

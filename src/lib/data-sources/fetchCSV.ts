@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 /**
  * Fetch data from CSV URL
  */
-export const fetchCSVData = async (csvUrl: string): Promise<any[][]> => {
+const fetchCSVData = async (csvUrl: string): Promise<any[][]> => {
   console.log(`[DATA-SOURCE] Fetching CSV URL data:`, { csvUrl });
   
   const { data: csvData, error: csvError } = await supabase.functions.invoke('fetch-csv-url', {

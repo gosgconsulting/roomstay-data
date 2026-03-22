@@ -1,17 +1,16 @@
 ---
 name: refactor
-description: Execute refactor phases using docs/REFACTOR.md as the single source of truth. Removes duplication, unifies systems, cleans architecture, and ensures stability through Verify → Migrate → Delete workflow. Use when the user asks to refactor, execute a refactor phase, remove duplicates, unify routes, or clean architecture.
+description: Execute refactor phases using README.md as the single source of truth for architecture and refactor rules. Removes duplication, unifies systems, cleans architecture, and ensures stability through Verify → Migrate → Delete workflow. Use when the user asks to refactor, execute a refactor phase, remove duplicates, unify routes, or clean architecture.
 ---
 
 # Refactor Executor
 
 ## Authority (must follow)
 
-- `docs/REFACTOR.md` → scope, phases, rules
-- `README.md` → architecture reference
+- `README.md` → architecture, refactor rules, runbooks, duplicate mapping
 - `TODO.md` → execution tracking
 
-If conflict exists → follow `docs/REFACTOR.md`
+If conflict exists → follow `README.md`
 
 ---
 
@@ -41,13 +40,12 @@ If conflict exists → follow `docs/REFACTOR.md`
 ### 1. Load Context
 
 - Read:
-  - `docs/REFACTOR.md`
   - `README.md`
   - `TODO.md`
 
 - Identify:
-  - current phase
-  - next phase to execute
+  - next concrete tasks in `TODO.md`
+  - any architecture gaps described in `README.md` (Refactor process / Runbooks)
 
 ---
 
@@ -94,7 +92,7 @@ If conflict exists → follow `docs/REFACTOR.md`
 
 #### C. Unify routes
 
-- align with REFACTOR.md
+- align with README.md
 - remove legacy routes after verification
 - ensure single entry per feature
 
@@ -130,11 +128,9 @@ If error:
 
 Update:
 
-#### docs/REFACTOR.md
+#### README.md
 
-- progress tracker
-- change log
-- decisions
+- refactor / architecture sections if behavior or canonical paths changed
 
 #### TODO.md
 

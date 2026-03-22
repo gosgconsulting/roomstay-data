@@ -11,13 +11,13 @@ import { buildDimensionMappingWithAutoDetection, transformDataRows } from "@/lib
 import type { DataSource, ColumnMapping, Dimension } from "@/lib/data-sources/types";
 import { getUser } from "@/lib/auth";
 
-export interface UseSourceDataOptions {
+interface UseSourceDataOptions {
   enabled?: boolean;
   staleTime?: number;
   gcTime?: number;
 }
 
-export interface SourceDataResult {
+interface SourceDataResult {
   headers: string[];
   rows: any[][];
   dimensionIdMap: Record<string, string>;
@@ -27,9 +27,8 @@ export interface SourceDataResult {
 
 /**
  * Fetch source data from Google Sheets or CSV
- * Exported for use in non-hook contexts (e.g., data-loading-fix.ts)
  */
-export async function fetchSourceData(
+async function fetchSourceData(
   dataSource: DataSource,
   userId: string,
   accountId?: string | null

@@ -90,6 +90,24 @@ export const hasActiveFilters = (
   return false;
 };
 
+/**
+ * True when this channel has at least one dimension with a non-empty selection.
+ * Empty arrays mean "None" (exclude all) and do not count as positive filters.
+ * Used with {@link hasAnyPositiveFilters} for the Exclusive Channel rule.
+ */
+const hasPositiveFiltersForChannel = (
+  channelFilterValues: Record<string, string[]>
+): boolean => {
+  if (!channelFilterValues || Object.keys(channelFilterValues).length === 0) {
+    return false;
+  }
+  for (const [, selectedValues] of Object.entries(channelFilterValues)) {
+    if (selectedValues && selectedValues.length > 0) {
+      return true;
+    }
+  }
+  return false;
+};
 
 /**
  * Check if any channel has POSITIVE active filters (selections with >0 items)

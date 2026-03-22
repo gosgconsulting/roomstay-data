@@ -23,7 +23,7 @@ interface PerformanceSettingsModalProps {
   isEditMode?: boolean;
 }
 
-export function PerformanceSettingsModal({
+function PerformanceSettingsModal({
   open,
   onOpenChange,
   dimensions,

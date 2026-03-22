@@ -10,7 +10,7 @@ export interface Dimension {
 /**
  * Format date based on granularity
  */
-export function formatDate(
+function formatDate(
   dateValue: string | number | Date,
   granularity: 'day' | 'week' | 'month' | 'year'
 ): string {

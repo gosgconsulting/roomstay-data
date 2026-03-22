@@ -610,7 +610,7 @@ UnifiedBreakdownTable.displayName = 'UnifiedBreakdownTable';
 /**
  * Breakdown Table Section Card Wrapper
  */
-export const BreakdownTableSection = React.memo<{
+const BreakdownTableSection = React.memo<{
   title?: string;
   children: React.ReactNode;
 }>(({ title = 'Breakdown Analysis', children }) => {

@@ -5,21 +5,6 @@ const dimensionDataCache = new Map<string, Record<string, boolean>>();
 const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 const cacheTimestamps = new Map<string, number>();
 
-/**
- * Clears the dimension data cache for a specific report or all reports
- * @param reportId - Optional report ID to clear cache for. If not provided, clears all cache
- */
-export function clearDimensionDataCache(reportId?: string) {
-  if (reportId) {
-    dimensionDataCache.delete(reportId);
-    cacheTimestamps.delete(reportId);
-    console.log('[DIMENSION-UTILS] Cleared cache for report:', reportId);
-  } else {
-    dimensionDataCache.clear();
-    cacheTimestamps.clear();
-    console.log('[DIMENSION-UTILS] Cleared all dimension data cache');
-  }
-}
 
 /**
  * Checks if cache is valid for a report
@@ -40,60 +25,6 @@ function isCacheValid(reportId: string): boolean {
   return dimensionDataCache.has(reportId);
 }
 
-/**
- * Checks if a dimension has data for a specific report using source data
- * @param dimensionId - The ID of the dimension to check
- * @param reportId - The ID of the report to check data for
- * @param sourceData - Optional source data to check. If not provided, will fetch from source
- * @returns Promise<boolean> - true if dimension has data, false otherwise
- */
-export async function checkDimensionHasData(
-  dimensionId: string,
-  reportId: string,
-  sourceData?: { transformedRows: any[] }
-): Promise<boolean> {
-  try {
-    if (!dimensionId || !reportId) {
-      console.warn('[DIMENSION-UTILS] Missing dimensionId or reportId');
-      return false;
-    }
-
-    let rowsToCheck: any[] = [];
-
-    if (sourceData && sourceData.transformedRows) {
-      // Use provided source data (already fetched from Google Sheets/CSV)
-      rowsToCheck = sourceData.transformedRows.slice(0, 10); // Check first 10 rows
-    } else {
-      // If sourceData is not provided, we cannot check - return false
-      // The caller should provide sourceData from useSourceData hook
-      console.warn('[DIMENSION-UTILS] No sourceData provided. Caller should use useSourceData hook and pass the data.');
-      return false;
-    }
-
-    if (rowsToCheck.length === 0) {
-      console.log('[DIMENSION-UTILS] No data found for report:', reportId);
-      return false;
-    }
-
-    // Check if any row has this dimension in its dimension_values
-    const hasData = rowsToCheck.some((row) => {
-      try {
-        const dimValues = row.dimension_values || {};
-        return dimValues[dimensionId] !== undefined && 
-               dimValues[dimensionId] !== null && 
-               dimValues[dimensionId] !== '';
-      } catch (rowError) {
-        console.warn('[DIMENSION-UTILS] Error checking row data:', rowError);
-        return false;
-      }
-    });
-
-    return hasData;
-  } catch (error) {
-    console.error('[DIMENSION-UTILS] Error checking dimension data:', error);
-    return false;
-  }
-}
 
 /**
  * Checks if multiple dimensions have data for a specific report using source data (with caching)

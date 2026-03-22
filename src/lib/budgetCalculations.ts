@@ -7,7 +7,7 @@ import { filterRawDataRows } from '@/lib/slideViewHelpers';
 import type { SlideReportPivotData } from '@/types/slideReports';
 import type { RawDataRow } from '@/types/slideView';
 
-export type BudgetMonthlyRow = {
+type BudgetMonthlyRow = {
   month: string;
   metasearchBudget: number;
   semBudget: number;
@@ -95,26 +95,30 @@ function normalizeMonthKeyToNameYear(monthKey: string): string {
 }
 
 /**
- * Normalizes budget value to channel-specific structure
- * Supports both legacy flat format and new channel-specific format
+ * View `budget_data` values may be a legacy flat number (one total per month) or per-channel objects.
  */
-export function normalizeBudgetValue(value: number | ChannelBudgets | null | undefined): ChannelBudgets {
-  if (!value) {
+function normalizeBudgetValue(value: number | ChannelBudgets | unknown): ChannelBudgets {
+  if (value == null || value === '') {
     return { metasearch: 0, sem: 0, social: 0 };
   }
-  
-  if (typeof value === 'number') {
-    // Legacy format: divide by 3 (old assumption was equal distribution)
-    const perChannel = value / 3;
-    return { metasearch: perChannel, sem: perChannel, social: perChannel };
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return { metasearch: value, sem: 0, social: 0 };
   }
-  
-  // New format: return as-is with defaults for missing channels
-  return {
-    metasearch: value.metasearch || 0,
-    sem: value.sem || 0,
-    social: value.social || 0,
-  };
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    const o = value as Record<string, unknown>;
+    const m = Number(o.metasearch);
+    const s = Number(o.sem);
+    const soc = Number(o.social);
+    return {
+      metasearch: Number.isFinite(m) ? m : 0,
+      sem: Number.isFinite(s) ? s : 0,
+      social: Number.isFinite(soc) ? soc : 0,
+    };
+  }
+  const n = Number(value);
+  return Number.isFinite(n)
+    ? { metasearch: n, sem: 0, social: 0 }
+    : { metasearch: 0, sem: 0, social: 0 };
 }
 
 /**
@@ -601,9 +605,8 @@ export function calculateBudgetMonthlyData(
     if (!isMasterView && viewBudgets.length > 0) {
       viewBudgets.forEach((budget) => {
         Object.entries(budget.budget_data).forEach(([monthKey, amount]) => {
-        const [year, month] = monthKey.split('-');
-        const monthName = MONTH_NAMES[parseInt(month) - 1];
-        const yearMonthKey = `${monthName} ${year}`;
+        const yearMonthKey = normalizeMonthKeyToNameYear(monthKey);
+        if (!yearMonthKey) return;
 
         if (!monthlyDataMap[yearMonthKey]) {
           monthlyDataMap[yearMonthKey] = {

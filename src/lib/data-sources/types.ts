@@ -41,7 +41,7 @@ export interface Dimension {
   formula?: string | null;
 }
 
-export interface TransformedRow {
+interface TransformedRow {
   id: string;
   name: string;
   level: number;
@@ -55,12 +55,6 @@ export interface TransformedRow {
   dimension_values: Record<string, any>;
 }
 
-export interface SourceDataResult {
-  headers: string[];
-  rows: any[][];
-  dataSourceId: string;
-  reportId: string;
-}
 
 export interface DimensionMappingResult {
   dimensionIdMap: Record<string, string>;

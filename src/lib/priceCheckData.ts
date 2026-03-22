@@ -66,7 +66,7 @@ function parseDate(value: any): string | null {
 /**
  * Load price check data from database
  */
-export async function loadPriceCheckData(accountId: string): Promise<PriceCheckDataRow[]> {
+async function loadPriceCheckData(accountId: string): Promise<PriceCheckDataRow[]> {
   // Return cached data if available for the same account
   if (cachedData && cachedAccountId === accountId) {
     return cachedData;
@@ -186,13 +186,6 @@ export async function loadPriceCheckData(accountId: string): Promise<PriceCheckD
   }
 }
 
-/**
- * Clear cached data (useful when data is updated)
- */
-export function clearPriceCheckCache(): void {
-  cachedData = null;
-  cachedAccountId = null;
-}
 
 /**
  * Get all price check data (async version that requires accountId)

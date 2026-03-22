@@ -7,8 +7,6 @@
 
 import { supabase } from "@/integrations/supabase/client";
 
-export { inferReportChannelFromName } from "./reportChannel";
-
 export interface AccountReportIds {
   metasearch: string | null;
   sem: string | null;

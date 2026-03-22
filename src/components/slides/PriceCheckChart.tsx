@@ -49,7 +49,7 @@ interface PriceCheckChartProps {
 /**
  * Skeleton loader for chart
  */
-export const ChartSkeleton = ({ height = 250 }: { height?: number }) => (
+const ChartSkeleton = ({ height = 250 }: { height?: number }) => (
   <Card>
     <CardHeader className="pb-2 flex flex-row items-center justify-between">
       <Skeleton className="h-5 w-24" />

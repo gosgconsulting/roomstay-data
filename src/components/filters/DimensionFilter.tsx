@@ -142,5 +142,3 @@ export const DimensionFilter: React.FC<DimensionFilterProps> = ({
     </div>
   );
 };
-
-export default DimensionFilter;

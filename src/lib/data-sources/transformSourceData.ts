@@ -10,7 +10,7 @@ import { autoDetectColumnType, resolveDimensionNameToId, createOrGetDimension } 
 /**
  * Parse date value with auto-detection
  */
-export const parseDate = (value: any, dateFormat: string = 'auto-detect'): Date | null => {
+const parseDate = (value: any, dateFormat: string = 'auto-detect'): Date | null => {
   if (value === null || value === undefined || value === '') return null;
   
   const stringValue = String(value).trim();

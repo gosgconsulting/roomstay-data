@@ -15,7 +15,7 @@ export const extractSpreadsheetId = (url: string): string | null => {
 /**
  * Fetch data from Google Sheets
  */
-export const fetchGoogleSheetsData = async (
+const fetchGoogleSheetsData = async (
   spreadsheetId: string,
   tabName: string,
   range: string
@@ -117,7 +117,7 @@ export const fetchGoogleSheetsData = async (
 /**
  * Fetch headers only from Google Sheets
  */
-export const fetchGoogleSheetsHeaders = async (
+const fetchGoogleSheetsHeaders = async (
   spreadsheetId: string,
   tabName: string,
   headerRow: number
