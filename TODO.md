@@ -32,6 +32,11 @@ After coding:
 
 ## Active tasks
 
+### Dead code cleanup (2026-03-23)
+
+- [x] **CLEAN-1** — Removed verified-unreferenced frontend modules: legacy chart pipeline (`chartDataCalculations.ts`), deprecated client `sync-utils.ts`, unused UI/components/hooks/libs, orphaned `resync-*` client bundle (sync is `runRefreshWorkflow` + Edge Functions only), root ad-hoc test scripts, unused `App.css`. README aligned (layout / KPI repair / components table).
+- [x] **CLEAN-2** — Verification: `npm run build` ✅, `npm run lint` ✅ (0 errors).
+
 ### Data Studio default date range + January reset fix (2026-03-20)
 
 Root cause: the top filter still had several inconsistent defaults after the custom-date fixes. `SlideViewPage.tsx` initialized to the full current month, `useDataStudioFilters.ts` reset paths also snapped back to the full current month, and slide-report metadata in both `SlideViewPage.tsx` and `useSlideReportPage.ts` still wrote hardcoded January-based `date_range` values. That mismatch made the UI default to a future full-month range instead of year-to-date, and also left stale January metadata that could leak into setup/restore flows.

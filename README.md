@@ -129,7 +129,7 @@ Google Sheets / CSV URL
 - **Filter flow:** saved view → `applyView` → top date filter + `filterValues` → `useFilteredSlideData` (KPI totals + monthly data) + `useChannelChartDataFromRawRows` (overview/channel charts) + `BreakdownTableSection` (breakdown tables). All paths resolve filter IDs via `filterRawDataRows(..., combinedDimNames)`, and charts now use the same top date range as KPI cards/tables.
 - **Performance table:** `src/components/PerformanceTable/` + `src/hooks/performanceTable/`.
 - **View settings:** stored in `views` table (canonical, replaces legacy `report_views` + `slide_report_views`).
-- **Layout:** `flex h-screen overflow-hidden` root → `ReportSidebar` (left nav: tabs + Actions/Manage/Tools sections) + main column (`flex-col flex-1`) → `SlideViewHeader` (topbar: back, report name, Data Sources, Dimensions, Share, Refresh Data) + scrollable tab content.
+- **Layout:** `flex h-screen overflow-hidden` root → `ReportSidebar` (left nav: tabs + Actions/Manage/Tools sections) + main column (`flex-col flex-1`) → topbar + tab content rendered inside `SlideViewPage.tsx` (back, report name, Data Sources, Dimensions, Share, Refresh Data) + scrollable tab content.
 - **Filters:** `FiltersRow` component (date range + channel filters); uses `DateRangeFilter` from `src/components/filters/`.
 - **Chart controls:** Overview and channel charts share two dropdowns in the chart header: a KPI metric selector (Revenue, Impressions, Clicks, Cost, Bookings, CTR, Conversion Rate, CPC, AOV, ROAS, Cost of Sale) and a granularity selector (`Month`, `Week`, `Day`). The chart date scope is no longer independent; it always follows the top date filter, and the granularity dropdown only changes bucket size.
 
@@ -137,7 +137,7 @@ Google Sheets / CSV URL
 
 - **KPI derivation:** `src/lib/metricsCalculations.ts` — ROAS, CPC, AOV (revenue / bookings), cost-of-sale, etc.
 - **Default KPIs:** `getAccountDefaultKPIs()` returns exact KPI names matched case-insensitively from available dimensions.
-- **KPI repair:** `resyncReportViews()` normalizes and repairs `kpi_order` to stay consistent with `visible_kpis`.
+- **KPI repair:** default view creation / updates in `usePerformanceTableViews` keep `kpi_order` aligned with account-visible KPIs (`visible_kpis`).
 
 ### 5. Refresh / Sync Workflow
 
@@ -212,7 +212,7 @@ Google Sheets / CSV URL
    → SlideViewPage → useSlideReportPage
    → useDataStudioRawRows → get-cached-report-data (cache miss computes from `dimension_data`, cache hit returns `query_cache.payload`)
    → useFilteredSlideData → client-side filtering + aggregation
-   → ReportSidebar (left nav) + SlideViewHeader (topbar) + tab content
+   → ReportSidebar (left nav) + `SlideViewPage` topbar + tab content
    → PerformanceTable / KPICards / Charts rendered
 
 4. User saves a view
@@ -233,7 +233,7 @@ Google Sheets / CSV URL
 | Component | Location | Purpose |
 |---|---|---|
 | `ReportSidebar` | `src/components/slides/ReportSidebar.tsx` | Left nav: tabs + Actions/Manage/Tools sections |
-| `SlideViewHeader` | `src/components/slides/SlideViewHeader.tsx` | Topbar: back, report name, Data Sources, Dimensions, Share, Refresh Data |
+| `SlideViewPage` | `src/pages/SlideViewPage.tsx` | Data Studio page: topbar, filters, tabs (overview + channels) |
 | `FiltersRow` | `src/components/slides/FiltersRow.tsx` | Date range + channel filter dropdowns row |
 | `DateRangeFilter` | `src/components/filters/DateRangeFilter.tsx` | Date range picker with presets + compare toggle |
 | `PerformanceTable` | `src/components/PerformanceTable/` | Core data table with dimensions, sorting, column visibility |
@@ -268,7 +268,6 @@ Google Sheets / CSV URL
 | `metricsCalculations` | `src/lib/metricsCalculations.ts` | KPI derivation |
 | `monthUtils` | `src/lib/monthUtils.ts` | Month/date range utilities |
 | `refreshWorkflow` | `src/lib/refreshWorkflow.ts` | Data sync entry point |
-| `resync-all-dimensions/` | `src/lib/resync-all-dimensions/` | Canonical dimension resync (resyncReportDataSources, resyncDimensionData, etc.); `resync-dimensions.ts` re-exports for backward compatibility |
 | `utils/` | `src/lib/utils/` | `retry.ts` (retryWithBackoff), `dimensionFilter.ts` (filterDimensionsByFilterSettings, filterDimensionsByVisibility) |
 | `composio-proxy` | `src/lib/composio-proxy.ts` | Composio integration client |
 

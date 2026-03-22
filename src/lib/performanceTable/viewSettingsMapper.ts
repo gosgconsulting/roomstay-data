@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Canonical view-settings mapping: visible_columns, visible_kpis, kpi_order.
- * Used by usePerformanceTableViews and resync-report-views for mapping persisted
+ * Used by usePerformanceTableViews for mapping persisted
  * dimension IDs to the current account-scoped dimensions.
  */
 export interface Dimension {

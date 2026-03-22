@@ -44,7 +44,7 @@
 
 - **Dimension:** dimensionLoader.ts, dimensions table, dimension_data (canonical writer: resync-data-source).
 - **Data ingestion:** refreshWorkflow.ts → run-refresh-workflow → resync-data-source, fetch-google-sheets, fetch-csv-url.
-- **Data Studio:** SlideViewPage, useSlideReportPage, useDataStudioRawRows, useFilteredSlideData, ReportSidebar, SlideViewHeader, FiltersRow.
+- **Data Studio:** SlideViewPage, useSlideReportPage, useDataStudioRawRows, useFilteredSlideData, ReportSidebar, FiltersRow.
 - **Filters (Data Studio):** FiltersRow (date + presets) in SlideViewPage.
 - **Filters (Shared / legacy table):** FiltersBar, FilterState type — SharedReport, PerformanceTable.
 - **KPI / metrics:** metricsCalculations.ts, useKPICards, useReportKPICards (single hook file).
@@ -56,13 +56,13 @@
 
 ### 2.3 Duplicate Mapping
 
-| Feature | Implementations | Canonical | Action |
+| Feature | Implementations | Canonical | Status |
 |--------|-----------------|-----------|--------|
-| Report filters (Data Studio) | FiltersRow, FilterControls | FiltersRow | Delete FilterControls (unused). |
-| Report dropdowns / selector | DataStudioDropdowns | (none — component unused) | Delete DataStudioDropdowns (unused). |
+| Report filters (Data Studio) | FiltersRow (legacy FilterControls removed) | FiltersRow | **Done** — `FilterControls.tsx` deleted (Phase 1). |
+| Report dropdowns / selector | (legacy DataStudioDropdowns removed) | N/A | **Done** — `DataStudioDropdowns.tsx` deleted (Phase 1). |
 | KPI cards hook | useKPICards.ts (single file) | useKPICards.ts | No duplicate. |
-| Data source sync (after edit) | syncDataSource (sync-utils), runRefreshWorkflow | runRefreshWorkflow | EditDataSourceModal migrated to runRefreshWorkflow. |
-| Data sources per report | Multiple rows per report_id + source_type allowed | One per (report_id, source_type) via script | Use supabase/scripts/dedupe_data_sources.sql to remove duplicates. |
+| Data source sync | Client sync removed; Edge path only | runRefreshWorkflow → run-refresh-workflow → resync-data-source | **Done** — `sync-utils.ts` removed; Data Studio / data sources use `runRefreshWorkflow` only. |
+| Data sources per report | Multiple rows per report_id + source_type allowed | One per (report_id, source_type) via script | Use `supabase/scripts/dedupe_data_sources.sql` when duplicates exist; DB unique constraint per unify migration. |
 
 ---
 
@@ -80,7 +80,7 @@
 
 - **Dimensions:** dimensionLoader.ts + dimensions table; writer: resync-data-source.
 - **Data:** dimension_data table; reader: useDataStudioRawRows / get-performance-data; filter: useFilteredSlideData.
-- **Data Studio UI:** SlideViewPage → ReportSidebar + SlideViewHeader + FiltersRow + tab content.
+- **Data Studio UI:** SlideViewPage → ReportSidebar + topbar (in page) + FiltersRow + tab content.
 - **Shared report:** SharedReport + FiltersBar; slug: /shared/:slug.
 - **Theme:** ThemeProvider + useTheme + ThemeToggle; persistence: localStorage roomstay-theme.
 - **Refresh:** refreshWorkflow.ts → run-refresh-workflow edge function.
