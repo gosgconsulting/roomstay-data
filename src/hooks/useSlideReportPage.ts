@@ -12,7 +12,7 @@ import { useDataStudioRawRows } from "@/hooks/useDataStudioRawRows";
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useFilteredSlideData } from "@/hooks/useFilteredSlideData";
 import { getAccountReportIds, clearAccountReportIdsCache, type AccountReportIds } from "@/lib/accountReportIds";
-import { buildComparisonDateRangeFromExact, exactDateRangeFromDayPicker, buildComparisonDateRange, formatDateToLocalIso } from "@/lib/monthUtils";
+import { buildComparisonDateRangeFromExact, exactDateRangeFromDayPicker, buildComparisonDateRange, formatDateToLocalIso, getCurrentMonthToDateRange } from "@/lib/monthUtils";
 import type { SlideReport, SlideReportPivotData, SlideReportView, SlideReportConfiguration, SlideReportDateRange } from "@/types/slideReports";
 import type { ChannelMetrics } from "@/types/slideReports";
 import type { BreakdownRow } from "@/types/slideReports";
@@ -178,12 +178,12 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
           breakdownConfigs: Object.fromEntries(validChannels.map(ch => [ch, { breakdownDimensionIds: [] }])),
           filterConfigs: Object.fromEntries(validChannels.map(ch => [ch, { filterDimensionIds: [] }])),
         };
-        const today = new Date();
+        const mtd = getCurrentMonthToDateRange();
         const dateRange: SlideReportDateRange = {
-          year: today.getFullYear(),
-          month: 'Year to Date',
-          from: formatDateToLocalIso(new Date(today.getFullYear(), 0, 1)),
-          to: formatDateToLocalIso(today),
+          year: mtd.to!.getFullYear(),
+          month: 'Month to Date',
+          from: formatDateToLocalIso(mtd.from!),
+          to: formatDateToLocalIso(mtd.to!),
         };
 
         const newReport = await createSlideReportMutation.mutateAsync({

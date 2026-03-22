@@ -5,6 +5,7 @@ import {
   dateRangeFromPreset,
   derivePresetFromDateRange,
   formatDateToLocalIso,
+  getCurrentMonthToDateRange,
   getCurrentYearToDateRange,
 } from '../monthUtils';
 
@@ -132,6 +133,14 @@ describe('current default range helpers', () => {
     const now = new Date();
 
     expect(range.from).toEqual(new Date(now.getFullYear(), 0, 1));
+    expect(range.to).toEqual(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
+  });
+
+  it('getCurrentMonthToDateRange returns 1st of month through today', () => {
+    const range = getCurrentMonthToDateRange();
+    const now = new Date();
+
+    expect(range.from).toEqual(new Date(now.getFullYear(), now.getMonth(), 1));
     expect(range.to).toEqual(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
   });
 

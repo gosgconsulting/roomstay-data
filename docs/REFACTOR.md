@@ -223,10 +223,21 @@
 - [x] Phase 4 — Cleanup
 - [x] Phase 5 — Stabilization
 - [x] Doc reconciliation (2026-03-23) — §2.3/§2.4 duplicate mapping + issues, §8 change log, historical changelog notes, `REFACTOR_UNIFY_PLAN.md` Option C completed
+- [x] View storage alignment (2026-03-24) — Option B: removed stale `report_views` from Supabase TS types; manual test SQL/docs use `views` + `mode`
 
 ---
 
 ## 8. Change Log
+
+### Unified views — types + QA SQL (2026-03-24)
+
+**Changes**
+- Dropped `report_views` from `src/integrations/supabase/types.ts` (table removed by migration `20260318180000`); runtime code already used only `views`.
+- Updated manual test markdown SQL (`edit-mode-*.md`, `dimension-visibility-save-test.md`) to query `public.views` with `mode = 'performance_table'` where appropriate.
+- `docs/REFACTOR_UNIFY_PLAN.md` Option B marked complete for application + client types layer.
+
+**Verification**
+- `npm run build` ✅, `npm run lint` ✅ (0 errors)
 
 ### Client bundle cleanup + doc alignment (2026-03-23)
 

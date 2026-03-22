@@ -21,7 +21,7 @@ import {
   buildMultiMonthDateRange,
   dateRangeFromPreset,
   dateRangeToSlideSelection,
-  getCurrentYearToDateRange,
+  getCurrentMonthToDateRange,
   slideSelectionToDateRange,
 } from '@/lib/monthUtils';
 import { filterRawDataRows } from '@/lib/slideViewHelpers';
@@ -396,7 +396,7 @@ export function useDataStudioFilters({
     if (isReadOnly) return;
     setFilterValuesRaw(EMPTY_FILTER_VALUES);
     setComparisonTypeRaw('none');
-    const range = getCurrentYearToDateRange();
+    const range = getCurrentMonthToDateRange();
     const next = dateRangeToSlideSelection(range);
     setCustomDateRangeRaw(range);
     setSelectedYear(next.year);
@@ -423,10 +423,10 @@ export function useDataStudioFilters({
 
   const applyView = useCallback((view: SlideReportView | null) => {
     if (!view) {
-      // Reset to master — clear filters, comparison, and date back to year-to-date.
+      // Reset to master — clear filters, comparison, and date back to month-to-date.
       setFilterValuesRaw(EMPTY_FILTER_VALUES);
       setComparisonTypeRaw('none');
-      const range = getCurrentYearToDateRange();
+      const range = getCurrentMonthToDateRange();
       const next = dateRangeToSlideSelection(range);
       setCustomDateRangeRaw(range);
       setSelectedYear(next.year);

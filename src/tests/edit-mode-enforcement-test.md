@@ -163,17 +163,19 @@ testEditModeState();
 After making changes in Edit Mode, verify in database:
 
 ```sql
--- Check that settings were saved
+-- Check that settings were saved (unified `views`; legacy `report_views` dropped)
 SELECT 
   name,
+  mode,
   filter_dimensions,
   visible_kpis,
   visible_columns,
   group_by_dimensions,
   updated_at
-FROM report_views 
-WHERE report_id = 'YOUR_REPORT_ID' 
-AND is_default = true;
+FROM views
+WHERE report_id = 'YOUR_REPORT_ID'
+  AND mode = 'performance_table'
+  AND is_default = true;
 ```
 
 The `updated_at` timestamp should reflect recent changes made in Edit Mode.

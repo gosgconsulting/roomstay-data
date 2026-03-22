@@ -438,14 +438,25 @@ export function getCurrentMonthDateRange(): { from: Date; to: Date } {
 
 /**
  * Returns the exact year-to-date range for the current year (Jan 1 -> today).
- * This is the canonical default date range for Data Studio so the UI does not
- * show future days from the current month by default.
  */
 export function getCurrentYearToDateRange(): { from: Date; to: Date } {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return {
     from: new Date(now.getFullYear(), 0, 1),
+    to: today,
+  };
+}
+
+/**
+ * Returns month-to-date (1st of current calendar month -> today).
+ * Canonical default for Data Studio so the scope matches the "Month to Date" preset.
+ */
+export function getCurrentMonthToDateRange(): { from: Date; to: Date } {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return {
+    from: new Date(now.getFullYear(), now.getMonth(), 1),
     to: today,
   };
 }

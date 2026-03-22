@@ -44,6 +44,14 @@ After coding:
 
 **Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors).
 
+### Unified views — Option B closure (2026-03-24)
+
+- [x] **UNIFY-B2** — Confirmed no `.from('report_views')` / `slide_report_views` in application `src/`; removed stale `report_views` table typings from `src/integrations/supabase/types.ts`.
+- [x] **UNIFY-B3** — Updated `src/tests/edit-mode-persistence-test.md`, `edit-mode-enforcement-test.md`, `dimension-visibility-save-test.md` SQL/schema notes to use `views` + `performance_table` mode.
+- [x] **UNIFY-B4** — `docs/REFACTOR_UNIFY_PLAN.md` Option B marked **app + types complete**; `docs/REFACTOR.md` §7 tracker + §8 change log entry.
+
+**Verification:** `npm run build` ✅, `npm run lint` ✅ (0 errors).
+
 ### Data Studio default date range + January reset fix (2026-03-20)
 
 Root cause: the top filter still had several inconsistent defaults after the custom-date fixes. `SlideViewPage.tsx` initialized to the full current month, `useDataStudioFilters.ts` reset paths also snapped back to the full current month, and slide-report metadata in both `SlideViewPage.tsx` and `useSlideReportPage.ts` still wrote hardcoded January-based `date_range` values. That mismatch made the UI default to a future full-month range instead of year-to-date, and also left stale January metadata that could leak into setup/restore flows.

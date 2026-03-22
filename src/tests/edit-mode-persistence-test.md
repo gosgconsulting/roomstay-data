@@ -108,9 +108,10 @@ Verify that all settings configured in Edit Mode are properly saved and persist 
 
 ### Check Database State
 ```sql
--- Check report_views for a specific report
+-- Check unified `views` row for PerformanceTable (legacy `report_views` was dropped)
 SELECT 
   name,
+  mode,
   filter_dimensions,
   filter_values,
   visible_kpis,
@@ -124,9 +125,10 @@ SELECT
   date_range_start,
   date_range_end,
   date_range_preset
-FROM report_views 
-WHERE report_id = 'YOUR_REPORT_ID' 
-AND is_default = true;
+FROM views
+WHERE report_id = 'YOUR_REPORT_ID'
+  AND mode = 'performance_table'
+  AND is_default = true;
 ```
 
 ### Browser Console Debugging

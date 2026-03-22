@@ -60,7 +60,7 @@ import {
   dateRangeToSlideSelection,
   exactDateRangeFromDayPicker,
   formatDateToLocalIso,
-  getCurrentYearToDateRange,
+  getCurrentMonthToDateRange,
   parseSelectedMonths,
 } from "@/lib/monthUtils";
 import type { AccountReportIds } from "@/lib/accountReportIds";
@@ -89,7 +89,7 @@ function buildDefaultDataStudioDateState(): {
   selectedYear: string;
   selectedMonth: string;
 } {
-  const range = getCurrentYearToDateRange();
+  const range = getCurrentMonthToDateRange();
   const selection = dateRangeToSlideSelection(range);
   return {
     range,
@@ -102,7 +102,7 @@ function buildDefaultSlideReportDateRange(): SlideReportDateRange {
   const { range } = buildDefaultDataStudioDateState();
   return {
     year: range.to!.getFullYear(),
-    month: 'Year to Date',
+    month: 'Month to Date',
     from: formatDateToLocalIso(range.from!),
     to: formatDateToLocalIso(range.to!),
   };

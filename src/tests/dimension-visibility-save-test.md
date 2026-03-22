@@ -243,16 +243,17 @@ Created: 2025-11-02
 
 ## Database Schema Verification
 
-### Table: `report_views`
-Required columns:
+### Table: `views` (mode `performance_table`)
+Required columns (relevant to this feature):
 - `id`: UUID (primary key)
-- `report_id`: UUID (foreign key)
+- `report_id`: UUID (foreign key, nullable for slide-scoped rows)
 - `user_id`: UUID (foreign key)
+- `mode`: text — use `performance_table` for dashboard views (Data Studio saved views use `slide_view`)
 - `is_default`: boolean
 - `name`: text
-- `visible_dimensions`: UUID[] (array of dimension IDs)
+- `visible_columns`: string[] | null (dimension / column visibility for the table)
 
-**Verification**: ✅ Schema supports the feature
+**Verification**: ✅ Schema supports the feature (unified `views` replaced legacy `report_views`)
 
 ## Regression Tests
 
@@ -304,6 +305,6 @@ If issues are found:
 ## Notes
 
 - Feature is backward compatible
-- Database schema unchanged (uses existing `report_views` table)
+- Persists to unified `views` table (`mode = 'performance_table'`)
 - Performance improved (fewer database calls)
 - Better UX with batch operations

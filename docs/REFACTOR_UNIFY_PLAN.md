@@ -8,7 +8,7 @@
 ## 1. Current state (findings)
 
 - **Reports:** Two layers — `reports` (channel reports: Metasearch, SEM, Social) and `slide_reports` (one “Data Studio” per account). Data Studio uses one slide report whose `report_ids` (JSON) point to up to three `reports` rows. No single “report” table; naming is implicit (name match in `accountReportIds.ts`).
-- **Views:** Unified `views` table exists and is used by SharedReport and CreateShareLinkModal. README says `report_views` and `slide_report_views` were dropped. If any legacy query keys or logs remain, grep for `report_views` / `slide_report_views` and align with `views` only (see Option B).
+- **Views:** Unified `views` table is the only runtime target (`.from("views")` across app). Legacy `report_views` / `slide_report_views` were dropped in migrations. **App audit (2026-03-24):** no `.from('report_views'|'slide_report_views')` in `src/`; generated `types.ts` no longer declares `report_views`.
 - **Sync:** **Done (2026-03-23):** Client `sync-utils.ts` removed; canonical path is only `runRefreshWorkflow` → `run-refresh-workflow` → `resync-data-source`. Column mapping / save-and-sync flows use Edge Functions via `refreshWorkflow.ts`.
 - **Data sources:** Multiple rows per `(report_id, source_type)` are allowed. Dedupe is script-only (`dedupe_data_sources.sql`); no unique constraint.
 - **Tables:** Core for Data Studio are `dimension_data`, `dimensions`, `data_sources`, `reports`, `slide_reports`, `views`, `budgets`, `share_links`. Legacy/cache tables (e.g. `slide_report_channel_*`, `aggregated_breakdown_data`, `report_daily_metrics`) were dropped or are optional.
@@ -32,19 +32,17 @@
 
 ---
 
-### Option B — Unify view storage (recommended; no new table)
+### Option B — Unify view storage (**app layer complete**)
 
 **Goal:** All view reads/writes use `views` only; remove references to `report_views` and `slide_report_views`.
 
-**Brief:**
+**Done in application code:** Hooks and pages use `views` + stable React Query keys (`useSlideReportViews` uses `["views"]`, etc.). No client queries target dropped tables.
 
-- Confirm in DB that `report_views` and `slide_report_views` are dropped (per README). If either still exists, add a migration to drop it only after all code is migrated.
-- Audit: `useSlideReportViews`, `usePerformanceTableViews`, `usePerformanceTableColumns`, `SlideViewPage`, any other view load/save. Ensure they read/write only `views` (and correct columns).
-- Replace query keys and invalidation: use a single key pattern for views (e.g. `['views', slideReportId]` or `['views', reportId]`) and remove `slide_report_views` / `report_views` from keys and invalidation.
-- Client-side `resync-report-views.ts` was removed (2026-03-23); any future “repair” of view rows belongs in Edge/cron or one-off SQL, not a duplicate client sync tree.
-- Update tests and docs that mention `report_views` or `slide_report_views` to reference `views`.
+**Done (2026-03-24):** Removed stale `report_views` entry from `src/integrations/supabase/types.ts` (table no longer in DB). Manual test SQL in `src/tests/*.md` updated to query `views` with `mode = 'performance_table'` where applicable.
 
-**New table:** No. **Data migration:** None if tables are already dropped; otherwise migrate any remaining rows from `report_views` / `slide_report_views` into `views` then drop old tables.
+**Remaining (ops only):** Confirm linked Supabase project has migrations applied (old tables dropped). Regenerate types via `supabase gen types` when schema changes so `types.ts` stays authoritative.
+
+**New table:** No. **Data migration:** Historical; unified migration already backfilled `views`.
 
 ---
 
@@ -86,7 +84,7 @@
 
 ## 3. Recommended order of work
 
-1. **Option B (views)** — Unify view storage and remove legacy view references. Low risk, no new table; removes confusion and aligns code with README.
+1. **Option B (views)** — **App + types + test SQL docs aligned.** Ops: run migrations / regen types on schema changes.
 2. **Option C (sync-utils)** — **Done.** Client sync file removed; use only `runRefreshWorkflow`.
 3. **Option D (data_sources unique)** — Run dedupe script, then add unique constraint. Small schema change; prevents future duplicates.
 4. **Option A (report identity)** — Optional; do if you want clearer semantics or a `reports.channel` column.
@@ -114,7 +112,7 @@
 
 ## 6. One-paragraph brief (for quick reference)
 
-**Unify view storage (B):** Use only `views` for all view reads/writes; remove or migrate every reference to `report_views` and `slide_report_views` (query keys, invalidation, resync-report-views). No new table; optional migration if old tables still exist.  
+**Unify view storage (B):** **Done** in app + Supabase client types + test SQL snippets; DB migrations already dropped old tables.  
 **Single sync path (C):** **Done** — `sync-utils.ts` removed; only `runRefreshWorkflow` remains on the client.  
 **Data source uniqueness (D):** Run `dedupe_data_sources.sql`, then add unique constraint on `data_sources(report_id, source_type)`. No new table.  
 **Report identity (A):** Optional: document that Data Studio report IDs come from `slide_reports.report_ids`; optionally add `reports.channel` and backfill so channel resolution does not rely on name matching.  
