@@ -56,6 +56,8 @@ interface ChannelTabProps {
   displayCurrency?: 'AUD' | 'USD';
   onOpenBreakdownDimensionSettings?: (channel: 'metasearch' | 'sem' | 'social') => void;
   configuredDimensionNames?: Record<string, string>;
+  /** Aligns breakdown Gross Profit with Performance Model KPI commission math. */
+  isPerformanceModelView?: boolean;
 }
 
 export function ChannelTab({
@@ -94,6 +96,7 @@ export function ChannelTab({
   displayCurrency,
   onOpenBreakdownDimensionSettings,
   configuredDimensionNames,
+  isPerformanceModelView = false,
 }: ChannelTabProps) {
   const gradientId = `${channel}Gradient`;
   const compGradientId = `${channel}CompGradient`;
@@ -262,6 +265,7 @@ export function ChannelTab({
                     comparisonChannelTotals={comparisonTotals}
                     comparisonType={comparisonType}
                     configuredDimensionNames={configuredDimensionNames}
+                    isPerformanceModelView={isPerformanceModelView}
                   />
                 );
               })()}

@@ -3083,6 +3083,7 @@ export default function SlideViewPage() {
                   setDimensionSettingsOpen(true);
                 }}
                 configuredDimensionNames={configuredDimensionNames}
+                isPerformanceModelView={isPerformanceModelView}
               />
             </TabsContent>
           ))}

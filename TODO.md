@@ -43,6 +43,7 @@ After coding:
 - [x] **PM-5** — `ChannelTab`: `getReportKPICards(channel, totals)` for per-channel Performance Model math.
 
 - [x] **PM-6** — Free tier detection: Link Type values without the word `free` (e.g. Google Universal / `Google Uni…`, organic) now map to **Commissions Free** at 3%; explicit `paid` still wins for 15%.
+- [x] **PM-7** — Breakdown Analysis table: **Gross Profit** column (group rows, expanded rows, total); Performance Model uses `computePerformanceModelCommissionSplit` per channel slice (`isPerformanceModelView` → `ChannelTab` → `UnifiedBreakdownTable`).
 
 **Verification:** `npm run build` ✅, `npx vitest run src/lib/__tests__/slideViewHelpers.test.ts` ✅.
 

@@ -22,7 +22,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { calculateDerivedMetrics, formatNumber, filterRawDataRows, hasActiveFiltersForChannel, aggregateRowsToMetrics, buildMetricNameToIdsMap, getMetricValueFromRow } from '@/lib/slideViewHelpers';
+import {
+  calculateDerivedMetrics,
+  computePerformanceModelCommissionSplit,
+  formatNumber,
+  filterRawDataRows,
+  hasActiveFiltersForChannel,
+  aggregateRowsToMetrics,
+  buildMetricNameToIdsMap,
+  getMetricValueFromRow,
+} from '@/lib/slideViewHelpers';
 import { parseSelectedMonths, buildMultiMonthDateRange } from '@/lib/monthUtils';
 import type { SlideReportPivotData } from '@/types/slideReports';
 
@@ -77,6 +86,39 @@ export interface UnifiedBreakdownTableProps {
    * global/configured filter UUIDs to report-specific row keys.
    */
   configuredDimensionNames?: Record<string, string>;
+  /** When true, Gross Profit uses Performance Model commission split (metasearch link type + 15% sem/social). */
+  isPerformanceModelView?: boolean;
+}
+
+type BreakdownAggRow = {
+  impressions: number;
+  clicks: number;
+  cost: number;
+  revenue: number;
+  bookings: number;
+  commissionsPaid?: number;
+  commissionsFree?: number;
+};
+
+function mergePerformanceModelGrossProfit(
+  cleanData: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number },
+  agg: BreakdownAggRow,
+  isPerformanceModelView: boolean
+) {
+  const base = calculateDerivedMetrics(cleanData);
+  if (
+    !isPerformanceModelView ||
+    agg.commissionsPaid === undefined ||
+    agg.commissionsFree === undefined
+  ) {
+    return base;
+  }
+  return {
+    ...base,
+    commissionsPaid: agg.commissionsPaid,
+    commissionsFree: agg.commissionsFree,
+    grossProfit: agg.commissionsPaid + agg.commissionsFree - cleanData.cost,
+  };
 }
 
 /**
@@ -109,6 +151,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
     comparisonChannelTotals,
     comparisonType,
     configuredDimensionNames,
+    isPerformanceModelView = false,
   }) => {
     // Auto-select defaults when dimensions are available.
     // groupBy / breakdownBy may be a dimension ID (UUID) or a lowercase name hint (e.g. 'hotel', 'account').
@@ -175,10 +218,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       const groupByName = groupByDim?.name || groupBy;
       const groupByDimId = groupByDim?.id || groupBy;
 
-      const allBreakdowns: Record<
-        string,
-        { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }
-      > = {};
+      const allBreakdowns: Record<string, BreakdownAggRow> = {};
 
       const channelsToCheck =
         selectedChannel && selectedChannel !== 'overview'
@@ -219,7 +259,14 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
 
           Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
             if (!allBreakdowns[groupValue]) {
-              allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+              allBreakdowns[groupValue] = {
+                impressions: 0,
+                clicks: 0,
+                cost: 0,
+                revenue: 0,
+                bookings: 0,
+                ...(isPerformanceModelView ? { commissionsPaid: 0, commissionsFree: 0 } : {}),
+              };
             }
             const agg = aggregateRowsToMetrics(groupRows, dimensionMap);
             allBreakdowns[groupValue].impressions += agg.impressions;
@@ -227,6 +274,14 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
             allBreakdowns[groupValue].cost += agg.cost;
             allBreakdowns[groupValue].revenue += agg.revenue;
             allBreakdowns[groupValue].bookings += agg.bookings;
+            if (isPerformanceModelView) {
+              const ch = channel as 'metasearch' | 'sem' | 'social';
+              const split = computePerformanceModelCommissionSplit(ch, groupRows, dimensionMap);
+              allBreakdowns[groupValue].commissionsPaid =
+                (allBreakdowns[groupValue].commissionsPaid || 0) + split.commissionsPaid;
+              allBreakdowns[groupValue].commissionsFree =
+                (allBreakdowns[groupValue].commissionsFree || 0) + split.commissionsFree;
+            }
           });
         } else {
           let breakdownData: any[] = [];
@@ -272,7 +327,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
 
           return {
             groupValue,
-            metrics: calculateDerivedMetrics(cleanData),
+            metrics: mergePerformanceModelGrossProfit(cleanData, data, isPerformanceModelView),
             rawData: cleanData,
           };
         });
@@ -286,6 +341,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       filterValues,
       breakdownDateRange,
       configuredDimensionNames,
+      isPerformanceModelView,
     ]);
 
 
@@ -309,10 +365,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
           ? [selectedChannel]
           : Object.keys(pivotData.channels);
 
-      const allBreakdowns: Record<
-        string,
-        { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }
-      > = {};
+      const allBreakdowns: Record<string, BreakdownAggRow> = {};
 
       for (const channel of channelsToCheck) {
         const channelData = pivotData.channels[channel];
@@ -368,6 +421,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
               cost: 0,
               revenue: 0,
               bookings: 0,
+              ...(isPerformanceModelView ? { commissionsPaid: 0, commissionsFree: 0 } : {}),
             };
           }
 
@@ -380,6 +434,15 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
             allBreakdowns[breakdownValue].revenue += getMetricValueFromRow(rowData, 'revenue', nameToIdsMap);
             allBreakdowns[breakdownValue].bookings += getMetricValueFromRow(rowData, 'bookings', nameToIdsMap);
           });
+
+          if (isPerformanceModelView) {
+            const ch = channel as 'metasearch' | 'sem' | 'social';
+            const split = computePerformanceModelCommissionSplit(ch, groupRows, dimensionMap);
+            allBreakdowns[breakdownValue].commissionsPaid =
+              (allBreakdowns[breakdownValue].commissionsPaid || 0) + split.commissionsPaid;
+            allBreakdowns[breakdownValue].commissionsFree =
+              (allBreakdowns[breakdownValue].commissionsFree || 0) + split.commissionsFree;
+          }
         });
       }
 
@@ -388,7 +451,17 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
         .sort(([, a], [, b]) => b.revenue - a.revenue)
         .map(([value, data]) => ({
           value,
-          metrics: calculateDerivedMetrics(data),
+          metrics: mergePerformanceModelGrossProfit(
+            {
+              impressions: data.impressions,
+              clicks: data.clicks,
+              cost: data.cost,
+              revenue: data.revenue,
+              bookings: data.bookings,
+            },
+            data,
+            isPerformanceModelView
+          ),
         }));
     }, [
       expandedRow,
@@ -402,6 +475,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       groupBy,
       breakdownDateRange,
       configuredDimensionNames,
+      isPerformanceModelView,
     ]);
 
     const totals = groupedData.reduce(
@@ -415,6 +489,9 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
     );
     const totalMetrics = calculateDerivedMetrics(totals);
+    const totalGrossProfit = isPerformanceModelView
+      ? groupedData.reduce((sum, group) => sum + (group.metrics.grossProfit || 0), 0)
+      : totalMetrics.grossProfit;
 
     const groupByDim = availableDimensions.find((d) => d.id === groupBy);
     const breakdownByDim = availableDimensions.find((d) => d.id === breakdownBy);
@@ -515,6 +592,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">ROAS</TableHead>
                 <TableHead className="text-right">Cost of Sale</TableHead>
+                <TableHead className="text-right">Gross Profit</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -546,6 +624,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                     <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.revenue, 'currency', displayCurrency))}</TableCell>
                     <TableCell className="text-right">{renderMetricCell(`${group.metrics.roas.toFixed(1)}x`)}</TableCell>
                     <TableCell className="text-right">{renderMetricCell(`${group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%`)}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.grossProfit, 'currency', displayCurrency))}</TableCell>
                   </TableRow>
                   {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
                     <>
@@ -575,6 +654,9 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                               ? item.metrics.costOfSale.toFixed(4)
                               : item.metrics.costOfSale.toFixed(2)}%
                           </TableCell>
+                          <TableCell className="text-right text-muted-foreground">
+                            {formatNumber(item.metrics.grossProfit, 'currency', displayCurrency)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </>
@@ -596,6 +678,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                 <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.revenue, 'currency', displayCurrency))}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(`${totalMetrics.roas.toFixed(1)}x`)}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(`${totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%`)}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(formatNumber(totalGrossProfit, 'currency', displayCurrency))}</TableCell>
               </TableRow>
             </TableBody>
           </Table>
