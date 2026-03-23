@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Filter, Share2, RefreshCw, Loader2, ChevronDown, X, RotateCcw } from "lucide-react";
 import { slideSelectionToDateRange, deriveSlideDatePreset, derivePresetFromDateRange } from "@/lib/monthUtils";
@@ -158,9 +157,13 @@ function InlineFilterDropdown({
             </span>
           </div>
 
-          {/* Option list */}
-          <ScrollArea className="max-h-[240px]">
-            <div className="p-1.5 space-y-px">
+          {/* Option list — native overflow so a real scrollbar appears when content exceeds max height */}
+          <div
+            className="max-h-[min(280px,45dvh)] overflow-y-auto overflow-x-hidden overscroll-y-contain [scrollbar-gutter:stable]"
+            role="listbox"
+            aria-label={`${label} options`}
+          >
+            <div className="p-1.5 space-y-px pr-0.5">
               {filtered.length === 0 && (
                 <p className="text-xs text-muted-foreground py-4 text-center">No options</p>
               )}
@@ -191,7 +194,7 @@ function InlineFilterDropdown({
                 );
               })}
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Footer */}
           {!isAllMode && (

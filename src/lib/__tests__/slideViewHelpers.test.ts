@@ -8,6 +8,7 @@ import {
   hasAnyActiveFilters,
   getChannelsWithFilters,
   filterRawDataRows,
+  getRowKeysForSameNamedDimension,
 } from '../slideViewHelpers';
 
 describe('hasActiveFiltersForChannel', () => {
@@ -134,6 +135,18 @@ describe('getChannelsWithFilters', () => {
   });
 });
 
+describe('getRowKeysForSameNamedDimension', () => {
+  it('returns every UUID that shares the same display name', () => {
+    const map = {
+      'uuid-a': 'Hotel',
+      'uuid-b': 'Hotel',
+      'uuid-c': 'Channel',
+    };
+    const keys = getRowKeysForSameNamedDimension('uuid-a', map);
+    expect(keys.sort()).toEqual(['uuid-a', 'uuid-b'].sort());
+  });
+});
+
 describe('filterRawDataRows', () => {
   const makeRow = (vals: Record<string, unknown>) => ({ dimension_values: vals });
 
@@ -224,5 +237,27 @@ describe('filterRawDataRows', () => {
     expect(result).toHaveLength(1);
     expect((result[0] as any).dimension_values['dim-hotel']).toBe('Brady');
     expect((result[0] as any).dimension_values['dim-channel']).toBe('Google');
+  });
+
+  it('should match Hotel across alternate dimension UUIDs (merged metasearch sources)', () => {
+    const rows = [
+      makeRow({ 'dim-hotel-a': 'Brady Hotels', 'dim-date': '2025-01-01' }),
+      makeRow({ 'dim-hotel-b': 'Daydream Island Resort and Living Reef', 'dim-date': '2025-01-02' }),
+    ];
+    const dimensionIdToName: Record<string, string> = {
+      'dim-hotel-a': 'Hotel',
+      'dim-hotel-b': 'Hotel',
+      'cfg-hotel': 'Hotel',
+    };
+    const result = filterRawDataRows(
+      rows as any,
+      { 'cfg-hotel': ['Daydream Island Resort and Living Reef'] },
+      undefined,
+      dimensionIdToName
+    );
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).dimension_values['dim-hotel-b']).toBe(
+      'Daydream Island Resort and Living Reef'
+    );
   });
 });

@@ -26,6 +26,50 @@ function parseLocalDateString(value: string): Date | null {
 }
 
 /**
+ * When one channel has multiple data sources, the same logical column (e.g. Hotel) can be
+ * stored under different dimension UUIDs. Filter options and filter matching must read
+ * every key that shares the same display name in dimensionIdToName.
+ */
+export function getRowKeysForSameNamedDimension(
+  filterDimId: string,
+  dimensionIdToName: Record<string, string>
+): string[] {
+  const keys = new Set<string>();
+  keys.add(filterDimId);
+  const human = dimensionIdToName[filterDimId]?.trim();
+  if (!human) return [...keys];
+  const target = human.toLowerCase();
+  for (const [id, name] of Object.entries(dimensionIdToName)) {
+    if (name && name.trim().toLowerCase() === target) keys.add(id);
+  }
+  return [...keys];
+}
+
+/** First non-empty text value among all keys that map to the same dimension name as filterDimId. */
+export function readRowTextDimensionValue(
+  rowData: Record<string, unknown>,
+  filterDimId: string,
+  dimensionIdToName: Record<string, string>
+): string | undefined {
+  for (const key of getRowKeysForSameNamedDimension(filterDimId, dimensionIdToName)) {
+    const v = rowData[key];
+    if (v !== undefined && v !== null) {
+      const s = String(v).trim();
+      if (s !== '') return s;
+    }
+  }
+  const human = dimensionIdToName[filterDimId];
+  if (human) {
+    const v = rowData[human];
+    if (v !== undefined && v !== null) {
+      const s = String(v).trim();
+      if (s !== '') return s;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Calculate derived metrics from base metric data
  */
 export const calculateDerivedMetrics = (
@@ -302,10 +346,11 @@ export const filterRawDataRows = (
         return false;
       }
 
-      // Try dimension ID first; then dimension name when data is keyed by name (e.g. "Link Type")
-      let rowValue: unknown = rowDataRecord[dimensionId];
-      if ((rowValue === undefined || rowValue === null) && dimensionIdToName?.[dimensionId]) {
-        rowValue = rowDataRecord[dimensionIdToName[dimensionId]];
+      let rowValue: unknown;
+      if (dimensionIdToName && Object.keys(dimensionIdToName).length > 0) {
+        rowValue = readRowTextDimensionValue(rowDataRecord, dimensionId, dimensionIdToName);
+      } else {
+        rowValue = rowDataRecord[dimensionId];
       }
       if (rowValue === undefined || rowValue === null) {
         return false; // Row doesn't have this dimension

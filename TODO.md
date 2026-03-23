@@ -34,6 +34,17 @@ After coding:
 
 ## Active tasks
 
+### Inline filter dropdown scrollbar (2026-03-23)
+
+- [x] **FLT-SCROLL-1** — `FiltersRow` `InlineFilterDropdown`: replaced Radix `ScrollArea` (viewport often grew with content, no usable scroll) with a native `overflow-y-auto` region, `max-h-[min(280px,45dvh)]`, `scrollbar-gutter:stable`, `overscroll-y-contain`.
+- [x] **Verification:** `npm run build` ✅.
+
+### Metasearch hotel filter — missing dropdown options (2026-03-23)
+
+- [x] **MS-FILTER-1** — Root cause: metasearch rows can use **multiple dimension UUIDs** for the same logical column (e.g. Hotel) when a report has more than one data source. Filter option extraction and `filterRawDataRows` only read **one** resolved UUID, so hotels stored under the other UUID appeared in breakdown/KPI totals but not in the Hotel filter list.
+- [x] **MS-FILTER-2** — Fix: `getRowKeysForSameNamedDimension` + `readRowTextDimensionValue` in `slideViewHelpers.ts`; `filterRawDataRows` uses multi-key reads; `useDataStudioFilters` `extractUniqueValues` unions values across all keys sharing the same display name.
+- [x] **Verification:** `npx vitest run src/lib/__tests__/slideViewHelpers.test.ts` ✅ (23/23), `npm run build` ✅.
+
 ### Documentation single source (2026-03-23)
 
 - [x] **DOC-1** — Merged `docs/*` and refactor/audit/runbook/design content into `README.md`; removed obsolete standalone doc files.

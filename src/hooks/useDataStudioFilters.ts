@@ -24,7 +24,7 @@ import {
   getCurrentMonthToDateRange,
   slideSelectionToDateRange,
 } from '@/lib/monthUtils';
-import { filterRawDataRows } from '@/lib/slideViewHelpers';
+import { filterRawDataRows, getRowKeysForSameNamedDimension } from '@/lib/slideViewHelpers';
 import type { SlideReportConfiguration, SlideReportView } from '@/types/slideReports';
 
 type Channel = 'metasearch' | 'sem' | 'social';
@@ -104,15 +104,22 @@ function extractUniqueValues(
   configuredDimNames?: Record<string, string>
 ): string[] {
   if (rows.length === 0) return [];
-  const sampleKeys = new Set(Object.keys(rows[0]));
-  const lookupKey = resolveFilterDimKey(filterDimId, dimensionMap, sampleKeys, configuredDimNames);
+  const combinedDimNames = configuredDimNames
+    ? { ...dimensionMap, ...configuredDimNames }
+    : dimensionMap;
+  const keys = getRowKeysForSameNamedDimension(filterDimId, combinedDimNames);
 
   const unique = new Set<string>();
   for (const row of rows) {
-    const val = row[lookupKey];
-    if (val !== undefined && val !== null) {
-      const s = String(val).trim();
-      if (s !== '') unique.add(s);
+    for (const key of keys) {
+      const val = row[key];
+      if (val !== undefined && val !== null) {
+        const s = String(val).trim();
+        if (s !== '') {
+          unique.add(s);
+          break;
+        }
+      }
     }
   }
   return Array.from(unique).sort();
