@@ -86,6 +86,9 @@ export const calculateDerivedMetrics = (
   const aov = bookings > 0 ? revenue / bookings : 0;
   const roas = cost > 0 ? revenue / cost : 0;
   const costOfSale = revenue > 0 ? (cost / revenue) * 100 : 0;
+  const commissionsPaid = revenue * 0.15;
+  const commissionsFree = 0;
+  const grossProfit = commissionsPaid + commissionsFree - cost;
 
   return {
     impressions,
@@ -99,6 +102,9 @@ export const calculateDerivedMetrics = (
     aov,
     roas,
     costOfSale,
+    commissionsPaid,
+    commissionsFree,
+    grossProfit,
   };
 };
 
@@ -624,6 +630,140 @@ export function aggregateRowsToMetrics(
   }
 
   return metrics;
+}
+
+/** Raw channel blob from pivot (dimension_data) — used for Performance Model commission splits. */
+export type PivotChannelBundle = {
+  rawDataRows?: RawDataRow[];
+  dimensionMap?: Record<string, string>;
+};
+
+/**
+ * Filter raw rows for a channel to a date window with the same filter semantics as
+ * useFilteredSlideData / useChannelMetrics (including exclusive positive-filter rule).
+ */
+export function getFilteredPivotRowsForChannel(
+  channelData: PivotChannelBundle | null | undefined,
+  channel: string,
+  filterValues: Record<string, Record<string, string[]>>,
+  dateRange: { start: Date; end: Date } | undefined,
+  configuredDimensionNames?: Record<string, string>
+): RawDataRow[] {
+  const rawDataRows = channelData?.rawDataRows ?? [];
+  const dimensionMap = channelData?.dimensionMap ?? {};
+  if (rawDataRows.length === 0) return [];
+
+  const combinedDimNames = configuredDimensionNames
+    ? { ...dimensionMap, ...configuredDimensionNames }
+    : dimensionMap;
+
+  const hasFilters = hasAnyActiveFilters(filterValues);
+  const hasPositiveGlobalFilters = hasAnyPositiveFilters(filterValues);
+  const channelsWithFilters = hasFilters
+    ? getChannelsWithFilters(filterValues)
+    : new Set<string>();
+
+  if (hasPositiveGlobalFilters && !channelsWithFilters.has(channel)) {
+    return [];
+  }
+  const channelFilterValues =
+    hasFilters && channelsWithFilters.has(channel) ? filterValues[channel] || {} : {};
+
+  return filterRawDataRows(rawDataRows, channelFilterValues, dateRange, combinedDimNames);
+}
+
+const LINK_TYPE_NAME_PATTERN = /^(link type|link_type)$/i;
+
+function isLinkTypeDimensionName(name: string | undefined): boolean {
+  if (!name) return false;
+  return LINK_TYPE_NAME_PATTERN.test(name.trim());
+}
+
+/**
+ * Metasearch Link Type → commission rate. Free/organic tier = 3%, paid = 15%.
+ * Labels often omit the word "free" (e.g. "Google Uni…", "Google Universal", "organic").
+ */
+function classifyLinkTypeCommissionRate(linkLabel: string): 0.15 | 0.03 {
+  const s = linkLabel.trim().toLowerCase();
+  if (!s) return 0.15;
+
+  // Paid placements first so explicit "paid" wins over generic "google"
+  if (/\bpaid\b/.test(s) || s.includes('paid')) {
+    return 0.15;
+  }
+
+  // Free / organic tier
+  if (/\bfree\b/.test(s) || s.includes('free')) return 0.03;
+  if (/\borganic\b/.test(s) || s.includes('organic')) return 0.03;
+  // Google Universal / "Google Uni…" — free organic–style metasearch link types (no "free" in label)
+  if (s.includes('google') && (s.includes('uni') || s.includes('universal'))) return 0.03;
+
+  return 0.15;
+}
+
+/**
+ * Performance Model commissions: Metasearch uses Link Type — Paid 15%, Free 3% of row revenue.
+ * SEM/Social: all revenue at 15% as "paid", none as "free".
+ */
+export function computePerformanceModelCommissionSplit(
+  channel: 'metasearch' | 'sem' | 'social',
+  rows: Array<{ dimension_values?: Record<string, unknown> } | Record<string, unknown>>,
+  dimensionIdToName: Record<string, string>
+): { commissionsPaid: number; commissionsFree: number } {
+  if (channel !== 'metasearch') {
+    const totals = aggregateRowsToMetrics(rows, dimensionIdToName);
+    return {
+      commissionsPaid: totals.revenue * 0.15,
+      commissionsFree: 0,
+    };
+  }
+
+  const nameToIdsMap = buildMetricNameToIdsMap(dimensionIdToName);
+  const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
+
+  const linkTypeDimIds: string[] = [];
+  for (const [id, humanName] of Object.entries(dimensionIdToName)) {
+    if (isLinkTypeDimensionName(humanName)) linkTypeDimIds.push(id);
+  }
+
+  const getRevenue = (rowData: Record<string, unknown>): number => {
+    for (const key of revenueKeys) {
+      const v = rowData[key];
+      if (v !== undefined && v !== null) return parseNumericValue(v);
+    }
+    return 0;
+  };
+
+  let commissionsPaid = 0;
+  let commissionsFree = 0;
+
+  for (const row of rows) {
+    const rowData = ((row as { dimension_values?: Record<string, unknown> }).dimension_values ||
+      row) as Record<string, unknown>;
+    const rev = getRevenue(rowData);
+    if (rev <= 0) continue;
+
+    let linkLabel = '';
+    for (const dimId of linkTypeDimIds) {
+      const v = readRowTextDimensionValue(rowData, dimId, dimensionIdToName);
+      if (v) {
+        linkLabel = v;
+        break;
+      }
+    }
+    if (!linkLabel) {
+      linkLabel = String(rowData['Link Type'] ?? rowData['link type'] ?? '').trim();
+    }
+
+    const rate = classifyLinkTypeCommissionRate(linkLabel);
+    if (rate === 0.03) {
+      commissionsFree += rev * 0.03;
+    } else {
+      commissionsPaid += rev * 0.15;
+    }
+  }
+
+  return { commissionsPaid, commissionsFree };
 }
 
 /**

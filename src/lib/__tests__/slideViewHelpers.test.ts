@@ -9,6 +9,7 @@ import {
   getChannelsWithFilters,
   filterRawDataRows,
   getRowKeysForSameNamedDimension,
+  computePerformanceModelCommissionSplit,
 } from '../slideViewHelpers';
 
 describe('hasActiveFiltersForChannel', () => {
@@ -259,5 +260,58 @@ describe('filterRawDataRows', () => {
     expect((result[0] as any).dimension_values['dim-hotel-b']).toBe(
       'Daydream Island Resort and Living Reef'
     );
+  });
+});
+
+describe('computePerformanceModelCommissionSplit', () => {
+  const dimMap: Record<string, string> = {
+    'lt-id': 'Link Type',
+    'rev-id': 'Revenue',
+  };
+
+  it('metasearch: Paid link 15%, Free link 3% of row revenue', () => {
+    const rows = [
+      { dimension_values: { 'lt-id': 'Paid', 'rev-id': 1000 } },
+      { dimension_values: { 'lt-id': 'Free Link', 'rev-id': 2000 } },
+    ];
+    const r = computePerformanceModelCommissionSplit('metasearch', rows, dimMap);
+    expect(r.commissionsPaid).toBeCloseTo(150);
+    expect(r.commissionsFree).toBeCloseTo(60);
+  });
+
+  it('metasearch: unrecognized link type (no free/organic/google-uni signals) defaults to 15%', () => {
+    const rows = [{ dimension_values: { 'lt-id': 'Standard CPC', 'rev-id': 100 } }];
+    const r = computePerformanceModelCommissionSplit('metasearch', rows, dimMap);
+    expect(r.commissionsPaid).toBeCloseTo(15);
+    expect(r.commissionsFree).toBe(0);
+  });
+
+  it('metasearch: organic label uses 3% free tier', () => {
+    const rows = [{ dimension_values: { 'lt-id': 'Organic Search', 'rev-id': 2000 } }];
+    const r = computePerformanceModelCommissionSplit('metasearch', rows, dimMap);
+    expect(r.commissionsFree).toBeCloseTo(60);
+    expect(r.commissionsPaid).toBe(0);
+  });
+
+  it('metasearch: Google Universal / Google Uni uses 3% free tier (no "free" in label)', () => {
+    const rows = [
+      { dimension_values: { 'lt-id': 'Google Universal', 'rev-id': 1000 } },
+      { dimension_values: { 'lt-id': 'Google Uni Hotel', 'rev-id': 500 } },
+    ];
+    const r = computePerformanceModelCommissionSplit('metasearch', rows, dimMap);
+    expect(r.commissionsFree).toBeCloseTo(45);
+    expect(r.commissionsPaid).toBe(0);
+  });
+
+  it('sem/social: all revenue as commissions paid at 15%', () => {
+    const rows = [{ dimension_values: { 'rev-id': 800 } }];
+    expect(computePerformanceModelCommissionSplit('sem', rows, dimMap)).toEqual({
+      commissionsPaid: 120,
+      commissionsFree: 0,
+    });
+    expect(computePerformanceModelCommissionSplit('social', rows, dimMap)).toEqual({
+      commissionsPaid: 120,
+      commissionsFree: 0,
+    });
   });
 });

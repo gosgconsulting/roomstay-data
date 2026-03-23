@@ -34,6 +34,20 @@ After coding:
 
 ## Active tasks
 
+### Performance Model view — Commissions + Gross Profit KPIs (2026-03-23)
+
+- [x] **PM-1** — Extended `DerivedMetrics` (`src/types/slideView.ts`) with `commissionsPaid`, `commissionsFree`, `grossProfit`.
+- [x] **PM-2** — `calculateDerivedMetrics`: default `commissionsPaid = revenue × 15%`, `commissionsFree = 0`, `grossProfit = paid + free − cost`.
+- [x] **PM-3** — `computePerformanceModelCommissionSplit` + `getFilteredPivotRowsForChannel` in `slideViewHelpers.ts`: Metasearch uses **Link Type** per row (paid 15%, free 3%); SEM/Social 15% paid on channel revenue.
+- [x] **PM-4** — `useKPICards` / `buildKPICardsFromDerivedMetrics`: **COMMISSIONS PAID**, **COMMISSIONS FREE**, **GROSS PROFIT** cards; `SlideViewPage` merges overview + channel KPIs from row splits when view is Performance Model; comparison period uses same split via filtered pivot rows.
+- [x] **PM-5** — `ChannelTab`: `getReportKPICards(channel, totals)` for per-channel Performance Model math.
+
+- [x] **PM-6** — Free tier detection: Link Type values without the word `free` (e.g. Google Universal / `Google Uni…`, organic) now map to **Commissions Free** at 3%; explicit `paid` still wins for 15%.
+
+**Verification:** `npm run build` ✅, `npx vitest run src/lib/__tests__/slideViewHelpers.test.ts` ✅.
+
+---
+
 ### Inline filter dropdown scrollbar (2026-03-23)
 
 - [x] **FLT-SCROLL-1** — `FiltersRow` `InlineFilterDropdown`: replaced Radix `ScrollArea` (viewport often grew with content, no usable scroll) with a native `overflow-y-auto` region, `max-h-[min(280px,45dvh)]`, `scrollbar-gutter:stable`, `overscroll-y-contain`.

@@ -46,7 +46,10 @@ interface ChannelTabProps {
   breakdownConfigs: Record<string, BreakdownConfig>;
   renderKPICards: (cards: any[], comparisonMetrics?: any) => JSX.Element;
   renderKPICardsSkeleton: () => JSX.Element;
-  getReportKPICards: (data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }) => any[];
+  getReportKPICards: (
+    channel: 'metasearch' | 'sem' | 'social',
+    data: { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }
+  ) => any[];
   getChannelComparisonMetrics: (channel: 'metasearch' | 'sem' | 'social') => any;
   comparisonTotals?: Record<string, any> | null;
   comparisonType?: string;
@@ -117,7 +120,7 @@ export function ChannelTab({
           {(() => {
             const effectiveTotals = currentTotals[channel] || { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
             return renderKPICards(
-              getReportKPICards(effectiveTotals),
+              getReportKPICards(channel, effectiveTotals),
               getChannelComparisonMetrics(channel)
             );
           })()}

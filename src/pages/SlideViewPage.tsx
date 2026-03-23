@@ -26,7 +26,7 @@ import { useEditSourceModal } from "@/hooks/useEditSourceModal";
 import { useDataLoadingCache } from "@/hooks/useDataLoadingCache";
 import { useOverviewMetrics } from "@/hooks/useOverviewMetrics";
 import { useComparisonMetrics, useChannelComparisonMetrics } from "@/hooks/useComparisonMetrics";
-import { useKPICards, useReportKPICards } from "@/hooks/useKPICards";
+import { useKPICards, buildKPICardsFromDerivedMetrics } from "@/hooks/useKPICards";
 import { useChannelChartDataFromRawRows } from "@/hooks/useChannelChartDataFromRawRows";
 import { useBudgetData, useBudgetMonthlyData } from "@/hooks/useBudgetData";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -67,6 +67,8 @@ import type { AccountReportIds } from "@/lib/accountReportIds";
 import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
 import {
   calculateDerivedMetrics,
+  computePerformanceModelCommissionSplit,
+  getFilteredPivotRowsForChannel,
   hasActiveFilters,
   hasActiveFiltersForChannel,
   filterRawDataRows,
@@ -2521,9 +2523,72 @@ export default function SlideViewPage() {
   }, [deleteView, selectedViewId]);
 
   // ========== KPI Cards & Render Helpers ==========
-  const overviewMetrics = useOverviewMetrics(currentTotals);
+  const isPerformanceModelView = useMemo(() => {
+    if (!selectedViewId) return false;
+    const v = views.find(view => view.id === selectedViewId);
+    return v?.name?.toLowerCase() === 'performance model';
+  }, [selectedViewId, views]);
+
+  const PERFORMANCE_MODEL_KEYS = new Set(['commissionsPaid', 'commissionsFree', 'grossProfit']);
+
+  const overviewMetricsBase = useOverviewMetrics(currentTotals);
+
+  const performanceModelOverviewPatch = useMemo(() => {
+    if (!isPerformanceModelView) return null;
+    const channels = ['metasearch', 'sem', 'social'] as const;
+    let commissionsPaid = 0;
+    let commissionsFree = 0;
+    for (const ch of channels) {
+      const rows = filteredData.getFilteredRowsForChannel(ch);
+      const dimMap =
+        (effectivePivotData?.channels as Record<string, { dimensionMap?: Record<string, string> }> | undefined)?.[ch]
+          ?.dimensionMap ?? {};
+      const part = computePerformanceModelCommissionSplit(ch, rows, dimMap);
+      commissionsPaid += part.commissionsPaid;
+      commissionsFree += part.commissionsFree;
+    }
+    const cost =
+      (currentTotals.metasearch?.cost || 0) +
+      (currentTotals.sem?.cost || 0) +
+      (currentTotals.social?.cost || 0);
+    return {
+      commissionsPaid,
+      commissionsFree,
+      grossProfit: commissionsPaid + commissionsFree - cost,
+    };
+  }, [isPerformanceModelView, filteredData, effectivePivotData, currentTotals]);
+
+  const overviewMetrics = useMemo(
+    () =>
+      performanceModelOverviewPatch
+        ? { ...overviewMetricsBase, ...performanceModelOverviewPatch }
+        : overviewMetricsBase,
+    [overviewMetricsBase, performanceModelOverviewPatch]
+  );
+
   const KPI_CARDS = useKPICards(overviewMetrics);
-  const getReportKPICards = useReportKPICards();
+
+  const getReportKPICards = useCallback(
+    (channel: 'metasearch' | 'sem' | 'social', data: MetricData) => {
+      const derived = calculateDerivedMetrics(data);
+      if (!isPerformanceModelView) {
+        return buildKPICardsFromDerivedMetrics(derived);
+      }
+      const rows = filteredData.getFilteredRowsForChannel(channel);
+      const dimMap =
+        (effectivePivotData?.channels as Record<string, { dimensionMap?: Record<string, string> }> | undefined)?.[
+          channel
+        ]?.dimensionMap ?? {};
+      const { commissionsPaid, commissionsFree } = computePerformanceModelCommissionSplit(channel, rows, dimMap);
+      return buildKPICardsFromDerivedMetrics({
+        ...derived,
+        commissionsPaid,
+        commissionsFree,
+        grossProfit: commissionsPaid + commissionsFree - data.cost,
+      });
+    },
+    [isPerformanceModelView, filteredData, effectivePivotData]
+  );
 
   const getOverviewComparisonMetrics = useCallback(() => {
     if (!comparisonTotals || comparisonType === 'none') return null;
@@ -2539,22 +2604,124 @@ export default function SlideViewPage() {
     const hasAnyCompData = totals.impressions > 0 || totals.clicks > 0 || totals.cost > 0 || totals.revenue > 0 || totals.bookings > 0;
     if (!hasAnyCompData) return null;
     const derived = calculateDerivedMetrics(totals);
-    return { ...derived, label: comparisonType === 'previous_period' ? 'vs prev period' : 'vs prev year' };
-  }, [comparisonTotals, comparisonType]);
+    const label = comparisonType === 'previous_period' ? 'vs prev period' : 'vs prev year';
 
-  const getChannelComparisonMetrics = useCallback((channel: 'metasearch' | 'sem' | 'social') => {
-    if (!comparisonTotals || comparisonType === 'none') return null;
-    const ch = comparisonTotals[channel];
-    if (!ch) return null;
-    // If all base metrics are zero, there's no real comparison data — don't show misleading 100% changes
-    const hasAnyCompData = (ch.impressions || 0) > 0 || (ch.clicks || 0) > 0 || (ch.cost || 0) > 0 || (ch.revenue || 0) > 0 || (ch.bookings || 0) > 0;
-    if (!hasAnyCompData) return null;
-    const derived = calculateDerivedMetrics(ch);
-    return { ...derived, label: comparisonType === 'previous_period' ? 'vs prev period' : 'vs prev year' };
-  }, [comparisonTotals, comparisonType]);
+    if (!isPerformanceModelView) {
+      return { ...derived, label };
+    }
+
+    const exactCurrentRange = exactDateRangeFromDayPicker(customDateRange);
+    const comparisonDateRange = exactCurrentRange
+      ? buildComparisonDateRangeFromExact(exactCurrentRange, comparisonType as 'previous_period' | 'previous_year')
+      : buildComparisonDateRange(selectedYear, selectedMonth, comparisonType as 'previous_period' | 'previous_year');
+
+    if (!comparisonDateRange) {
+      return { ...derived, label };
+    }
+
+    const channels = ['metasearch', 'sem', 'social'] as const;
+    let commissionsPaid = 0;
+    let commissionsFree = 0;
+    for (const ch of channels) {
+      const chData = (effectivePivotData?.channels as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[ch];
+      const rows = getFilteredPivotRowsForChannel(
+        chData,
+        ch,
+        filterValues,
+        comparisonDateRange,
+        configuredDimensionNames
+      );
+      const dimMap = chData?.dimensionMap ?? {};
+      const part = computePerformanceModelCommissionSplit(ch, rows, dimMap);
+      commissionsPaid += part.commissionsPaid;
+      commissionsFree += part.commissionsFree;
+    }
+
+    return {
+      ...derived,
+      commissionsPaid,
+      commissionsFree,
+      grossProfit: commissionsPaid + commissionsFree - totals.cost,
+      label,
+    };
+  }, [
+    comparisonTotals,
+    comparisonType,
+    isPerformanceModelView,
+    customDateRange,
+    selectedYear,
+    selectedMonth,
+    effectivePivotData,
+    filterValues,
+    configuredDimensionNames,
+  ]);
+
+  const getChannelComparisonMetrics = useCallback(
+    (channel: 'metasearch' | 'sem' | 'social') => {
+      if (!comparisonTotals || comparisonType === 'none') return null;
+      const ch = comparisonTotals[channel];
+      if (!ch) return null;
+      // If all base metrics are zero, there's no real comparison data — don't show misleading 100% changes
+      const hasAnyCompData =
+        (ch.impressions || 0) > 0 ||
+        (ch.clicks || 0) > 0 ||
+        (ch.cost || 0) > 0 ||
+        (ch.revenue || 0) > 0 ||
+        (ch.bookings || 0) > 0;
+      if (!hasAnyCompData) return null;
+      const derived = calculateDerivedMetrics(ch);
+      const label = comparisonType === 'previous_period' ? 'vs prev period' : 'vs prev year';
+
+      if (!isPerformanceModelView) {
+        return { ...derived, label };
+      }
+
+      const exactCurrentRange = exactDateRangeFromDayPicker(customDateRange);
+      const comparisonDateRange = exactCurrentRange
+        ? buildComparisonDateRangeFromExact(exactCurrentRange, comparisonType as 'previous_period' | 'previous_year')
+        : buildComparisonDateRange(selectedYear, selectedMonth, comparisonType as 'previous_period' | 'previous_year');
+
+      if (!comparisonDateRange) {
+        return { ...derived, label };
+      }
+
+      const chData = (effectivePivotData?.channels as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[channel];
+      const rows = getFilteredPivotRowsForChannel(
+        chData,
+        channel,
+        filterValues,
+        comparisonDateRange,
+        configuredDimensionNames
+      );
+      const dimMap = chData?.dimensionMap ?? {};
+      const { commissionsPaid, commissionsFree } = computePerformanceModelCommissionSplit(channel, rows, dimMap);
+
+      return {
+        ...derived,
+        commissionsPaid,
+        commissionsFree,
+        grossProfit: commissionsPaid + commissionsFree - ch.cost,
+        label,
+      };
+    },
+    [
+      comparisonTotals,
+      comparisonType,
+      isPerformanceModelView,
+      customDateRange,
+      selectedYear,
+      selectedMonth,
+      effectivePivotData,
+      filterValues,
+      configuredDimensionNames,
+    ]
+  );
 
   const renderKPICards = useCallback((cards: any[], comparisonMetrics?: any) => {
-    const enriched = cards.map((kpi: any) => {
+    const visible = isPerformanceModelView
+      ? cards
+      : cards.filter((kpi: any) => !PERFORMANCE_MODEL_KEYS.has(kpi.key));
+    const enriched = visible.map((kpi: any) => {
       const formattedValue = (() => {
         if (kpi.format === 'currency') {
           if (kpi.key === 'cpc' || kpi.key === 'aov') return formatNumber(kpi.value, 'currency', undefined, 2);
@@ -2571,7 +2738,7 @@ export default function SlideViewPage() {
       };
     });
     return <KPICardsSection cards={enriched} comparisonMetrics={comparisonMetrics} />;
-  }, []);
+  }, [isPerformanceModelView]);
 
   const renderKPICardsSkeleton = useCallback(() => <KPICardsSkeleton />, []);
 

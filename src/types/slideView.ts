@@ -22,6 +22,12 @@ export interface DerivedMetrics extends MetricData {
   aov: number;
   roas: number;
   costOfSale: number;
+  /** SEM/Social: revenue × 15%. Metasearch: sum of paid-link revenue × 15% — Performance Model view only */
+  commissionsPaid: number;
+  /** Metasearch free-link revenue × 3%; 0 for SEM/Social — Performance Model view only */
+  commissionsFree: number;
+  /** commissionsPaid + commissionsFree − cost — Performance Model view only */
+  grossProfit: number;
 }
 
 

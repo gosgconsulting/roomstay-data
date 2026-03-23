@@ -1,7 +1,7 @@
 /**
  * KPI Cards — canonical presentational component.
  * Minimalist luxury style: no icons, no colored left bar.
- * Used by SlideViewPage (via renderKPICards) and KPIMetricsCards.
+ * Used by SlideViewPage (via renderKPICards) and similar callers.
  */
 
 import React from 'react';

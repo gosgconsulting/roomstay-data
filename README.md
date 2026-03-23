@@ -137,6 +137,8 @@ Google Sheets / CSV URL
 ### 4. KPI / Metrics System
 
 - **KPI derivation:** `src/lib/metricsCalculations.ts` — ROAS, CPC, AOV (revenue / bookings), cost-of-sale, etc.
+- **Derived row KPIs:** `src/lib/slideViewHelpers.ts` — `calculateDerivedMetrics`; Performance Model view adds **Commissions Paid**, **Commissions Free**, **Gross Profit** (see below).
+- **Performance Model view only** (saved view name case-insensitive `Performance Model`): Metasearch splits commission by **Link Type** on each raw row — **Paid** (15%): label contains `paid` (and not overridden by free signals); **Free** (3%): contains `free`, `organic`, or **Google + (uni \| universal)** (covers “Google Uni…”, “Google Universal”, free organic–style labels without the word “free”). Other link types → 15% paid. SEM/Social use 15% of channel revenue as paid, 0 free. **Gross profit** = commissions paid + commissions free − cost. Implemented in `computePerformanceModelCommissionSplit` + `SlideViewPage` / `useKPICards` (cards hidden on other views).
 - **Default KPIs:** `getAccountDefaultKPIs()` returns exact KPI names matched case-insensitively from available dimensions.
 - **KPI repair:** default view creation / updates in `usePerformanceTableViews` keep `kpi_order` aligned with account-visible KPIs (`visible_kpis`).
 
