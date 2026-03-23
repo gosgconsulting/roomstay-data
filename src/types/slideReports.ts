@@ -22,6 +22,16 @@ export interface SlideReportConfiguration {
       filterDimensionIds: string[];
     };
   };
+  // Persisted UI settings (restored on page load so nothing resets)
+  groupByDimension?: Record<string, string>;
+  breakdownByDimension?: Record<string, string>;
+  chartMetric?: string;
+  chartGranularity?: string;
+  activeFilterValues?: {
+    [channel: string]: {
+      [dimensionId: string]: string[];
+    };
+  };
   // Child report properties
   parentReportId?: string;
   isChildReport?: boolean;

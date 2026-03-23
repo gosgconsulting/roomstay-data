@@ -956,6 +956,19 @@ export default function SlideViewPage() {
       if (config.selectedValueDimensionIds) {
         setSelectedValueDimensionIds(config.selectedValueDimensionIds);
       }
+      // Restore persisted UI settings so they survive page reload.
+      if (config.groupByDimension) {
+        setGroupByDimensionRaw(prev => ({ ...prev, ...config.groupByDimension }));
+      }
+      if (config.breakdownByDimension) {
+        setBreakdownByDimensionRaw(prev => ({ ...prev, ...config.breakdownByDimension }));
+      }
+      if (config.chartMetric) {
+        setChartMetric(config.chartMetric as ChartMetric);
+      }
+      if (config.chartGranularity) {
+        setChartGranularity(config.chartGranularity as ChartGranularity);
+      }
     }
     const isNewReport = lastSyncedSlideReportIdRef.current !== slideReportId;
     if (isNewReport) {
@@ -964,8 +977,60 @@ export default function SlideViewPage() {
       setSelectedYear(defaultDateState.selectedYear);
       setSelectedMonth(defaultDateState.selectedMonth);
       setCustomDateRange(defaultDateState.range);
+      // Restore persisted filter values for the new report (overrides the default empty state).
+      const savedFilters = config?.activeFilterValues;
+      if (savedFilters) {
+        setFilterValues({
+          metasearch: savedFilters.metasearch || {},
+          sem: savedFilters.sem || {},
+          social: savedFilters.social || {},
+          'price-check': savedFilters['price-check'] || {},
+          booking: savedFilters.booking || {},
+        });
+      }
     }
   }, [slideReport, slideReportId, availableChannels]);
+
+  // Ref that always holds the latest slide report config (used inside debounce to avoid stale closure).
+  const slideReportConfigRef = useRef<any>(null);
+  useEffect(() => {
+    slideReportConfigRef.current = slideReport?.configuration ?? null;
+  }, [slideReport?.configuration]);
+
+  // Debounce-persist UI settings (groupBy, breakdownBy, chartMetric, chartGranularity, filterValues)
+  // so they survive page reload. Uses a 2s debounce to batch rapid changes (e.g. clicking dropdowns).
+  const uiSettingsPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track the reportId for which we've already skipped the first effect run (the initial restore).
+  const uiPersistSkippedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Skip persistence until the slide report has loaded.
+    if (!slideReportId || isSlideReportsLoading) return;
+    // Skip the very first run after this report loads (that run reflects restored values, not user changes).
+    if (uiPersistSkippedForRef.current !== slideReportId) {
+      uiPersistSkippedForRef.current = slideReportId;
+      return;
+    }
+    if (uiSettingsPersistTimerRef.current) clearTimeout(uiSettingsPersistTimerRef.current);
+    uiSettingsPersistTimerRef.current = setTimeout(async () => {
+      try {
+        const prevConfig = (slideReportConfigRef.current || {}) as any;
+        const configuration = {
+          ...prevConfig,
+          groupByDimension,
+          breakdownByDimension,
+          chartMetric,
+          chartGranularity,
+          activeFilterValues: filterValues,
+        };
+        await updateSlideReport.mutateAsync({ id: slideReportId, configuration } as any);
+      } catch {
+        // Non-fatal: UI settings persist silently; user can still interact normally.
+      }
+    }, 2000);
+    return () => {
+      if (uiSettingsPersistTimerRef.current) clearTimeout(uiSettingsPersistTimerRef.current);
+    };
+  }, [groupByDimension, breakdownByDimension, chartMetric, chartGranularity, filterValues, slideReportId, isSlideReportsLoading]);
 
   // Filter option loading is now handled by useDataStudioFilters (derived from rawDataRows in memory).
 

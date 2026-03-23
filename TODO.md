@@ -34,6 +34,16 @@ After coding:
 
 ## Active tasks
 
+### Persist UI settings across page reload (2026-03-23)
+
+- [x] **PS-1** — Extended `SlideReportConfiguration` type (`src/types/slideReports.ts`) with optional fields: `groupByDimension`, `breakdownByDimension`, `chartMetric`, `chartGranularity`, `activeFilterValues`.
+- [x] **PS-2** — Restore persisted UI settings in the existing `slideReport.configuration` sync effect in `SlideViewPage.tsx`: `groupByDimension`, `breakdownByDimension`, `chartMetric`, `chartGranularity` restored on any config change; `activeFilterValues` (applied filter selections) restored only on first load of a new report.
+- [x] **PS-3** — Debounced persist effect (2s) in `SlideViewPage.tsx` writes `groupByDimension`, `breakdownByDimension`, `chartMetric`, `chartGranularity`, and `activeFilterValues` to `slide_reports.configuration` whenever they change. Skips the first render after load to avoid immediately re-writing restored values. Cancels on unmount.
+
+**Verification:** `npm run build` ✅ (exit 0).
+
+---
+
 ### Performance Model view — Commissions + Gross Profit KPIs (2026-03-23)
 
 - [x] **PM-1** — Extended `DerivedMetrics` (`src/types/slideView.ts`) with `commissionsPaid`, `commissionsFree`, `grossProfit`.
