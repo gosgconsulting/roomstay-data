@@ -491,18 +491,15 @@ export const CreateShareLinkModal = ({
     return true;
   };
 
-  const handleNextStep = () => {
-    if (handleStep1Validate()) {
-      // For slide reports with a view selected, skip step 2 (data selector) and submit directly
-      // The view already contains all filter information
-      if (slideReportId && selectedViewId) {
-        handleSubmit();
-      } else {
-        // For regular reports or slide reports without a view, go to step 2 (data selector)
-        setStep(2);
-        setSearchQuery("");
-      }
+  const handlePrimaryStep1 = () => {
+    if (!handleStep1Validate()) return;
+    // Data Studio: one-step flow — share current filters or a saved view; no per-report dimension picker
+    if (slideReportId) {
+      void handleSubmit();
+      return;
     }
+    setStep(2);
+    setSearchQuery("");
   };
 
   const handleSubmit = async () => {
@@ -517,25 +514,28 @@ export const CreateShareLinkModal = ({
     let filtersToStore: DimensionFilters = {};
     
     if (slideReportId) {
-      // For slide reports, store channel-based filters
-      if (currentFilterValues && Object.keys(currentFilterValues).length > 0) {
-        // Use current filter values from SlideViewPage (channel-based format)
-        filtersToStore = currentFilterValues;
-      } else if (selectedViewId) {
-        // Fallback: If view is selected, load filters from view
+      // Prefer saved view filters when a view is selected; otherwise current Data Studio filters
+      if (selectedViewId) {
         try {
           const { data: view } = await supabase
             .from("views")
             .select("filter_values")
             .eq("id", selectedViewId)
             .single();
-          
-          if (view?.filter_values) {
+
+          if (view?.filter_values && typeof view.filter_values === "object") {
             filtersToStore = view.filter_values as DimensionFilters;
           }
         } catch (error) {
-          console.error('[testing] Error loading view filters:', error);
+          console.error("[CreateShareLinkModal] Error loading view filters:", error);
         }
+      }
+      if (
+        Object.keys(filtersToStore).length === 0 &&
+        currentFilterValues &&
+        Object.keys(currentFilterValues).length > 0
+      ) {
+        filtersToStore = currentFilterValues;
       }
     } else {
       // For regular reports, use report-based filters
@@ -791,7 +791,7 @@ export const CreateShareLinkModal = ({
             )}
 
             <Button 
-              onClick={handleNextStep} 
+              onClick={handlePrimaryStep1} 
               className="w-full"
               disabled={loading}
             >
@@ -800,7 +800,7 @@ export const CreateShareLinkModal = ({
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   {editingLink ? "Updating..." : "Creating..."}
                 </>
-              ) : slideReportId && selectedViewId ? (
+              ) : slideReportId ? (
                 editingLink ? "Update Link" : "Create Link"
               ) : (
                 <>

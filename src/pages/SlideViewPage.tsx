@@ -3388,6 +3388,7 @@ export default function SlideViewPage() {
           reportName={slideReport?.name || 'Report'}
           slideReportId={slideReportId}
           accountId={accountId}
+          availableViews={availableViews}
           currentFilterValues={filterValues}
         />
       )}

@@ -34,6 +34,22 @@ After coding:
 
 ## Active tasks
 
+### Share link modal — Data Studio views + single step (2026-03-25)
+
+**Status:** ✅ Complete
+
+**Problems fixed:**
+1. **View dropdown empty:** `SlideViewPage` built `availableViews` but did not pass it to `ShareModal`, so `CreateShareLinkModal` only showed “No view”.
+2. **Unwanted second step:** Data Studio share flow used “Next” → per-report dimension picker; product intent is one step with optional saved view.
+
+**Changes:**
+- `SlideViewPage.tsx` — `availableViews={availableViews}` on `ShareModal`.
+- `CreateShareLinkModal.tsx` — for `slide_reportId`, primary action submits immediately (`Create Link` / `Update Link`); non–Data Studio flow unchanged (Next → step 2). When a view is selected, `dimension_filters` use that view’s `filter_values` first, then current filters if empty.
+
+**Verification:** `npm run build` ✅
+
+---
+
 ### Shared Feature Hardening (2026-03-24)
 
 **Status:** ✅ Complete

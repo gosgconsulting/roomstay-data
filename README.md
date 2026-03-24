@@ -179,7 +179,7 @@ Google Sheets / CSV URL
 - `SharedReport.tsx` — password gate and router; navigates to studio for slide/view shares
 - `SlideViewPage.tsx` — Data Studio UI; supports public share studio mode via path detection and sessionStorage bootstrap
 - `ShareModal.tsx` — lists existing share links
-- `CreateShareLinkModal.tsx` — create/edit share links; automatically populates `locked_dimension_ids` from view's `main_dimension_id`
+- `CreateShareLinkModal.tsx` — create/edit share links; automatically populates `locked_dimension_ids` from view's `main_dimension_id`. **Data Studio** (`slide_report_id`): single-step flow (no per-report dimension picker); optional **View to Share** lists saved views passed from `SlideViewPage` via `ShareModal.availableViews`. Stored filters prefer the selected view’s `filter_values`, then fall back to current Data Studio filters.
 - `SaveViewDialog.tsx` — captures main dimension when saving views; shows dropdown to select Account or Hotel
 - `FiltersBar.tsx` — legacy filter component; supports `lockedDimensionIds` prop; guards views writes when `isSharedView`
 - `FiltersRow.tsx` — canonical Data Studio filter component; supports `lockedDimensionIds` prop for selective read-only
