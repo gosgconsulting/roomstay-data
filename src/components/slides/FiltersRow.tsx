@@ -282,6 +282,7 @@ export function FiltersRow({
   isRefreshInProgress,
   showRefreshButton,
   lockedDimensionIds = [],
+  allowDataFilterChanges = false,
 }: FiltersRowProps) {
   // Build inline filter entries — only on channel tabs (not overview or other tabs)
   const inlineFilters = useMemo(() => {
@@ -337,7 +338,7 @@ export function FiltersRow({
               compareEnabled={comparisonType !== "none"}
               compareType={comparisonType}
               onApply={(payload) => {
-                if (isReadOnlyMode) return;
+                if (isReadOnlyMode && !allowDataFilterChanges) return;
                 onDateApply(payload);
               }}
               presets={[

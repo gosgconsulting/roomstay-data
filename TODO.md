@@ -34,6 +34,29 @@ After coding:
 
 ## Active tasks
 
+### Shared report filters fix (2026-03-25)
+
+**Status:** ✅ Complete
+
+**Problems fixed:**
+1. **Data Studio public studio (`/shared/:slug/studio`):** Date, compare, and inline filter changes were blocked because `isReadOnlyMode` disabled all data filter mutations in `useDataStudioFilters` and `FiltersRow`.
+2. **Classic shared reports (`SharedReport` + `FiltersBar`):** Anonymous users hit "User not authenticated" errors in `loadDimensions`/`loadAllDimensions`, causing fallback placeholder dimension IDs that didn't match real `dimension_data` keys. Dimension filters from the share link were overwritten by the owner's default view.
+
+**Changes:**
+- **`SlideViewPage.tsx`:** Added `viewerMayAdjustDataFilters` flag (true for public studio or legacy share preview). Pass `isReadOnly: isReadOnlyMode && !viewerMayAdjustDataFilters` to `useDataStudioFilters` so shared viewers can change date/compare/filter values locally while structural changes remain locked.
+- **`FiltersRow.tsx`:** Added `allowDataFilterChanges` prop; date `onApply` guard now checks `isReadOnlyMode && !allowDataFilterChanges` instead of `isReadOnlyMode` alone.
+- **`FiltersBar.tsx`:** Added `getReportOwnerId()` helper; `loadDimensions` and `loadAllDimensions` resolve report owner's `user_id` when `isSharedView && !user`. Added `sharedDimensionFilters` prop; `loadFilterSettings` prefers link filters over owner's default view for shared reports.
+- **`SharedReport.tsx`:** Pass `sharedDimensionFilters={shareLink.dimension_filters[reportId]}` to `FiltersBar`.
+- **`README.md`:** Updated Sharing System behavior to clarify viewers may change date/compare/filter values locally; structural edits remain disabled. Noted anonymous access dimension resolution.
+
+**Verification:** `npm run build` ✅, `npm run lint` ✅
+
+**Manual tests:**
+- [ ] Data Studio share: password → studio → change date (Apply), toggle compare, change a non-locked inline filter — KPIs/charts update
+- [ ] Classic single-report share: dimension filters from link apply; date picker updates metrics
+
+---
+
 ### Share link modal — Data Studio views + single step (2026-03-25)
 
 **Status:** ✅ Complete

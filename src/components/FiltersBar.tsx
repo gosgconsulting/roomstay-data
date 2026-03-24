@@ -53,6 +53,7 @@ interface FiltersBarProps {
   onReportSelectionChange?: (reportIds: string[]) => void;
   isEditMode?: boolean;
   lockedDimensionIds?: string[];
+  sharedDimensionFilters?: Record<string, string[]>;
 }
 
 interface Dimension {
@@ -76,6 +77,7 @@ export const FiltersBar = ({
   onReportSelectionChange,
   isEditMode = false,
   lockedDimensionIds = [],
+  sharedDimensionFilters = {},
 }: FiltersBarProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [allDimensions, setAllDimensions] = useState<Dimension[]>([]); // All available dimensions for settings modal
@@ -130,10 +132,15 @@ export const FiltersBar = ({
   const loadAllDimensions = async () => {
     if (!reportId && !accountId) return;
     try {
-      if (!user) throw new Error("User not authenticated");
+      // For shared views, resolve report owner's user_id; otherwise use current user
+      let userId = user?.id;
+      if (isSharedView && reportId && !userId) {
+        userId = await getReportOwnerId();
+      }
+      if (!userId) throw new Error("User not authenticated");
 
       // Use the centralized dimension loader to get ALL dimensions
-      const allAvailableDimensions = await loadDimensionsForUser(user.id, reportId);
+      const allAvailableDimensions = await loadDimensionsForUser(userId, reportId);
       
       // Filter to only text and date types (same as PerformanceSettingsModal expects)
       const textDateDimensions = allAvailableDimensions.filter(d => 
@@ -290,6 +297,22 @@ export const FiltersBar = ({
     }
   };
 
+  // Helper: fetch report owner's user_id for shared views (anonymous users need this)
+  const getReportOwnerId = async (): Promise<string | null> => {
+    if (!reportId) return null;
+    try {
+      const { data, error } = await supabase
+        .from("reports")
+        .select("user_id")
+        .eq("id", reportId)
+        .maybeSingle();
+      if (error) return null;
+      return data?.user_id || null;
+    } catch {
+      return null;
+    }
+  };
+
   // Helper: Find best default filter dimension that actually has data
   const getAccountDimensionId = async (): Promise<string | null> => {
     if (!reportId) return await getDateDimensionId();
@@ -372,7 +395,17 @@ export const FiltersBar = ({
           }
         } else if (validDims.length) {
           setActiveDimensions(validDims);
-          if (data.filter_values && Object.keys(data.filter_values).length) {
+          
+          // For shared views, prefer sharedDimensionFilters over owner's default view
+          if (isSharedView && Object.keys(sharedDimensionFilters).length > 0) {
+            const normalized: Record<string, string[]> = {};
+            Object.entries(sharedDimensionFilters).forEach(([key, value]) => {
+              if (validDims.includes(key) && !key.startsWith("__")) {
+                normalized[key] = Array.isArray(value) ? value : [value];
+              }
+            });
+            setSelectedFilters(normalized);
+          } else if (data.filter_values && Object.keys(data.filter_values).length) {
             const fv = data.filter_values as Record<string, string | string[]>;
             const normalized: Record<string, string[]> = {};
             Object.entries(fv).forEach(([key, value]) => {
@@ -565,13 +598,18 @@ export const FiltersBar = ({
   const loadDimensions = async () => {
     if (!reportId && !accountId) return;
     try {
-      if (!user) throw new Error("User not authenticated");
+      // For shared views, resolve report owner's user_id; otherwise use current user
+      let userId = user?.id;
+      if (isSharedView && reportId && !userId) {
+        userId = await getReportOwnerId();
+      }
+      if (!userId) throw new Error("User not authenticated");
 
       console.log('[FiltersBar] Loading dimensions for filtering - being more permissive...');
 
       // Use centralized dimension loader to get ALL dimensions (no data filtering for filters)
       const allAvailableDimensions = await loadDimensionsForUser(
-        user.id, 
+        userId, 
         reportId,
         {
           filterByDataAvailability: false,  // DON'T filter by data availability for filters

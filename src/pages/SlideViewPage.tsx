@@ -133,6 +133,11 @@ export default function SlideViewPage() {
   // Detect public share studio mode from path
   const isPublicShareStudio = location.pathname.startsWith('/shared/') && location.pathname.includes('/studio');
   const effectiveSlug = shareSlug || searchParams.get('slug');
+  
+  // Shared viewers may adjust data filters (date, compare, filter values) locally,
+  // but structural changes (save view, share, refresh, dimension config) remain locked.
+  const isSharedPreview = searchParams.get('shared') === 'true' && !!searchParams.get('slug');
+  const viewerMayAdjustDataFilters = isPublicShareStudio || isSharedPreview;
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -424,7 +429,7 @@ export default function SlideViewPage() {
     initialFilterConfigs,
     onPersistFilterConfigs: persistFilterConfigs,
     views,
-    isReadOnly: isReadOnlyMode,
+    isReadOnly: isReadOnlyMode && !viewerMayAdjustDataFilters,
     // Pass externally-declared state so useSlideReportPage keeps working.
     externalFilterValues: filterValues,
     setExternalFilterValues: setFilterValues as any,
@@ -3137,6 +3142,7 @@ export default function SlideViewPage() {
             isRefreshInProgress={isRefreshModalOpen}
             showRefreshButton={!slideReport?.configuration?.isChildReport}
             lockedDimensionIds={isPublicShareStudio ? shareLockedDimensionIds : undefined}
+            allowDataFilterChanges={viewerMayAdjustDataFilters}
           />
         </div>
 

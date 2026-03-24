@@ -441,6 +441,7 @@ export default function SharedReport() {
         accountId={account?.id}
         refreshTrigger={loadingGeneration}
         lockedDimensionIds={lockedDimensionIds}
+        sharedDimensionFilters={reportId && shareLink?.dimension_filters?.[reportId] ? shareLink.dimension_filters[reportId] : {}}
       />
       
       <main className="container mx-auto px-6 py-6 space-y-6">
