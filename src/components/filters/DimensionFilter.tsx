@@ -24,6 +24,7 @@ interface DimensionFilterProps {
   onSelectAll: () => void;
   onDeselectAll: () => void;
   onToggleValue: (value: string) => void;
+  disabled?: boolean;
 }
 
 export const DimensionFilter: React.FC<DimensionFilterProps> = ({
@@ -38,6 +39,7 @@ export const DimensionFilter: React.FC<DimensionFilterProps> = ({
   onSelectAll,
   onDeselectAll,
   onToggleValue,
+  disabled = false,
 }) => {
   const filteredValues = searchTerm
     ? values.filter(v => v.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -55,7 +57,10 @@ export const DimensionFilter: React.FC<DimensionFilterProps> = ({
 
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{dimension.name}:</label>
+      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+        {disabled && <Lock className="h-3 w-3" />}
+        {dimension.name}:
+      </label>
       <Popover open={open} onOpenChange={(o) => {
         onOpenChange(o);
         if (!o) onSearchTermChange("");
@@ -64,6 +69,8 @@ export const DimensionFilter: React.FC<DimensionFilterProps> = ({
           <Button
             variant="outline"
             className="w-[160px] justify-between bg-background border-input"
+            disabled={disabled}
+            title={disabled ? "This filter is locked and cannot be changed" : undefined}
           >
             {selectedCount === 0 ? (
               <span>All</span>

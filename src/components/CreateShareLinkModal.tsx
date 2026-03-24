@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/lib/auth";
 import { ArrowLeft, ArrowRight, Search, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isChannelBasedFormat } from "@/lib/filterFormatUtils";
 
 interface CreateShareLinkModalProps {
   open: boolean;
@@ -83,11 +84,7 @@ export const CreateShareLinkModal = ({
         setPassword("");
         // For slide reports, use channel-based filters if available, otherwise use report-based
         if (slideReportId && editingLink.dimension_filters) {
-          // Check if filters are in channel-based format (has 'metasearch', 'sem', 'social' keys)
-          const hasChannelKeys = Object.keys(editingLink.dimension_filters).some(key => 
-            ['metasearch', 'sem', 'social'].includes(key)
-          );
-          if (hasChannelKeys) {
+          if (isChannelBasedFormat(editingLink.dimension_filters)) {
             // Already in channel-based format
             setDimensionFilters(editingLink.dimension_filters);
           } else {
@@ -563,6 +560,23 @@ export const CreateShareLinkModal = ({
         if (selectedViewId !== undefined) {
           updateData.view_id = selectedViewId;
         }
+        
+        // Set locked dimensions from view's main_dimension_id
+        if (selectedViewId) {
+          try {
+            const { data: view } = await supabase
+              .from("views")
+              .select("main_dimension_id")
+              .eq("id", selectedViewId)
+              .maybeSingle();
+            
+            if (view?.main_dimension_id) {
+              updateData.locked_dimension_ids = [view.main_dimension_id];
+            }
+          } catch (error) {
+            console.error('Error loading view main dimension:', error);
+          }
+        }
       } else if (slideReportId !== undefined && selectedViewId !== undefined) {
         // Legacy: keep view_id for backward compatibility
         updateData.view_id = selectedViewId;
@@ -605,6 +619,24 @@ export const CreateShareLinkModal = ({
         if (selectedViewId) {
           insertData.view_id = selectedViewId;
         }
+        
+        // Set locked dimensions from view's main_dimension_id
+        if (selectedViewId) {
+          try {
+            const { data: view } = await supabase
+              .from("views")
+              .select("main_dimension_id")
+              .eq("id", selectedViewId)
+              .maybeSingle();
+            
+            if (view?.main_dimension_id) {
+              insertData.locked_dimension_ids = [view.main_dimension_id];
+            }
+          } catch (error) {
+            console.error('Error loading view main dimension:', error);
+          }
+        }
+        
         console.log('[testing] Creating share link with slide_report_id', {
           slide_report_id: slideReportId,
           account_id: accountId,

@@ -52,6 +52,7 @@ interface FiltersBarProps {
   selectedReportIds?: string[];
   onReportSelectionChange?: (reportIds: string[]) => void;
   isEditMode?: boolean;
+  lockedDimensionIds?: string[];
 }
 
 interface Dimension {
@@ -74,6 +75,7 @@ export const FiltersBar = ({
   selectedReportIds = [],
   onReportSelectionChange,
   isEditMode = false,
+  lockedDimensionIds = [],
 }: FiltersBarProps) => {
   const [dimensions, setDimensions] = useState<Dimension[]>([]);
   const [allDimensions, setAllDimensions] = useState<Dimension[]>([]); // All available dimensions for settings modal
@@ -847,6 +849,7 @@ export const FiltersBar = ({
               activeDimensions.map((dimId) => {
                 const dimension = dimensions.find(d => d.id === dimId);
                 if (!dimension) return null;
+                const isLocked = lockedDimensionIds.includes(dimId);
                 return (
                   <DimensionFilter
                     key={dimId}
@@ -856,11 +859,12 @@ export const FiltersBar = ({
                     searchTerm={searchTerms[dimId] || ""}
                     selectedValues={selectedFilters[dimId] || []}
                     open={!!openPopovers[dimId]}
-                    onOpenChange={(o) => setOpenPopovers({ ...openPopovers, [dimId]: o })}
+                    onOpenChange={(o) => !isLocked && setOpenPopovers({ ...openPopovers, [dimId]: o })}
                     onSearchTermChange={(term) => setSearchTerms({ ...searchTerms, [dimId]: term })}
-                    onSelectAll={() => handleSelectAll(dimId)}
-                    onDeselectAll={() => handleDeselectAll(dimId)}
-                    onToggleValue={(value) => handleFilterChange(dimId, value)}
+                    onSelectAll={() => !isLocked && handleSelectAll(dimId)}
+                    onDeselectAll={() => !isLocked && handleDeselectAll(dimId)}
+                    onToggleValue={(value) => !isLocked && handleFilterChange(dimId, value)}
+                    disabled={isLocked}
                   />
                 );
               })

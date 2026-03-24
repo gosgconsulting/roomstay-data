@@ -2287,8 +2287,46 @@ export default function SlideViewPage() {
     ];
   }, [views]);
 
+  // Get available main dimensions for view saving (Account for SEM/Social, Hotel for Metasearch)
+  const availableMainDimensions = useMemo(() => {
+    const dims: Array<{ id: string; name: string; channel: string }> = [];
+    
+    // For each active channel, find the primary dimension
+    const channelPrimaryDims: Record<string, string> = {
+      metasearch: 'Hotel',
+      sem: 'Account',
+      social: 'Account',
+    };
+
+    for (const [channel, primaryDimName] of Object.entries(channelPrimaryDims)) {
+      const channelDims = breakdownDimensions[channel] || [];
+      const primaryDim = channelDims.find(d => d.name.toLowerCase() === primaryDimName.toLowerCase());
+      if (primaryDim) {
+        dims.push({
+          id: primaryDim.id,
+          name: primaryDim.name,
+          channel: channel.charAt(0).toUpperCase() + channel.slice(1),
+        });
+      }
+    }
+
+    return dims;
+  }, [breakdownDimensions]);
+
+  // Infer default main dimension based on active tab/filters
+  const defaultMainDimensionId = useMemo(() => {
+    if (selectedTab === 'metasearch' || selectedTab === 'sem' || selectedTab === 'social') {
+      const channelDims = breakdownDimensions[selectedTab] || [];
+      const primaryName = selectedTab === 'metasearch' ? 'Hotel' : 'Account';
+      const primaryDim = channelDims.find(d => d.name.toLowerCase() === primaryName.toLowerCase());
+      return primaryDim?.id;
+    }
+    // Default to first available if on overview or other tab
+    return availableMainDimensions[0]?.id;
+  }, [selectedTab, breakdownDimensions, availableMainDimensions]);
+
   // Save current filter configuration as a view
-  const handleSaveView = useCallback(async (viewName: string) => {
+  const handleSaveView = useCallback(async (viewName: string, mainDimensionId?: string, mainDimensionName?: string) => {
     if (!slideReportId || !slideReport || !user) {
       toast({
         title: "Error",
@@ -2309,6 +2347,8 @@ export default function SlideViewPage() {
         comparison_type: comparisonType as any,
         price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues }, // Deep copy to avoid mutations
+        main_dimension_id: mainDimensionId || null,
+        main_dimension_name: mainDimensionName || null,
       });
 
       // The view will be automatically refetched by the query
@@ -3289,6 +3329,9 @@ export default function SlideViewPage() {
         open={isSaveViewDialogOpen}
         onOpenChange={setIsSaveViewDialogOpen}
         onSave={handleSaveView}
+        existingViewNames={views.map(v => v.name)}
+        availableMainDimensions={availableMainDimensions}
+        defaultMainDimensionId={defaultMainDimensionId}
       />
 
       <SaveOrUpdateViewDialog

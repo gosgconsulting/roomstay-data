@@ -14,6 +14,7 @@ import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { LoadingToast } from "@/components/LoadingToast";
+import { isChannelBasedFormat, convertReportToChannelFormat } from "@/lib/filterFormatUtils";
 
 export default function SharedReport() {
   const { slug } = useParams();
@@ -29,6 +30,7 @@ export default function SharedReport() {
   const [sharedDimensionFilters, setSharedDimensionFilters] = useState<Record<string, Record<string, string[]>>>({});
   const [authenticated, setAuthenticated] = useState(false);
   const [slideReportShare, setSlideReportShare] = useState<{ slideReportId: string; accountId: string } | null>(null);
+  const [lockedDimensionIds, setLockedDimensionIds] = useState<string[]>([]);
   
   // Report dashboard state
   const [reportId, setReportId] = useState<string | null>(null);
@@ -184,17 +186,11 @@ export default function SharedReport() {
         // Store filters in sessionStorage for SlideViewPage to pick up
         // Use channel-based format: { "metasearch": { "dimensionId": ["value1"] }, ... }
         if (Object.keys(channelFilters).length > 0) {
-          // Check if filters are already in channel-based format
-          const hasChannelKeys = Object.keys(channelFilters).some(key => 
-            ['metasearch', 'sem', 'social'].includes(key)
-          );
-          
-          if (hasChannelKeys) {
+          if (isChannelBasedFormat(channelFilters)) {
             // Already in channel-based format
             sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(channelFilters));
           } else {
             // Convert from report-based to channel-based format
-            // This requires the slide report's report_ids mapping
             try {
               const { data: slideReport } = await supabase
                 .from("slide_reports")
@@ -204,14 +200,7 @@ export default function SharedReport() {
               
               if (slideReport?.report_ids) {
                 const reportIds = slideReport.report_ids as Record<string, string>;
-                const convertedFilters: Record<string, Record<string, string[]>> = {};
-                
-                // Map report IDs to channels
-                for (const [channel, reportId] of Object.entries(reportIds)) {
-                  if (channelFilters[reportId]) {
-                    convertedFilters[channel] = channelFilters[reportId];
-                  }
-                }
+                const convertedFilters = convertReportToChannelFormat(channelFilters, reportIds);
                 
                 if (Object.keys(convertedFilters).length > 0) {
                   sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(convertedFilters));
@@ -240,6 +229,9 @@ export default function SharedReport() {
         // Shared links should stay on /shared/:slug (public view). We no longer redirect into /tools/*.
         // Keep the resolved slide_report_id/account_id so we can show an explicit message.
         setSlideReportShare({ slideReportId: finalSlideReportId, accountId });
+        
+        // Set locked dimensions from share link
+        setLockedDimensionIds(linkData.locked_dimension_ids || []);
       } catch (error) {
         console.error('Error handling slide report view:', error);
         toast({
@@ -450,12 +442,13 @@ export default function SharedReport() {
         allowedReportIds={shareLink?.report_ids || []}
       />
       
-      <FiltersBar 
-        reportId={reportId} 
-        onFiltersChange={handleFiltersChange} 
-        isSharedView={true} 
-        accountId={account?.id} 
+      <FiltersBar
+        reportId={reportId}
+        onFiltersChange={handleFiltersChange}
+        isSharedView={true}
+        accountId={account?.id}
         refreshTrigger={loadingGeneration}
+        lockedDimensionIds={lockedDimensionIds}
       />
       
       <main className="container mx-auto px-6 py-6 space-y-6">

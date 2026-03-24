@@ -34,6 +34,56 @@ After coding:
 
 ## Active tasks
 
+### Shared Report Selective Read-Only Filters (2026-03-24)
+
+**Status:** ✅ Complete
+
+**Implemented:**
+- Added `main_dimension_id` and `main_dimension_name` to `views` table (migration `20260324000000_add_main_dimension_to_views.sql`)
+- Added `locked_dimension_ids` to `share_links` table (migration `20260324000001_add_locked_dimensions_to_share_links.sql`)
+- Updated `SaveViewDialog` to capture main dimension with dropdown selector and smart defaults
+- Updated `SlideViewPage` view saving handlers (`handleSaveView`) to store `main_dimension_id` and `main_dimension_name`
+- Implemented selective read-only filters in `FiltersRow` via `lockedDimensionIds` prop
+- Updated `InlineFilterDropdown` to render locked state with lock icon and disabled button
+- Updated `DimensionFilter` component (used by `FiltersBar`) to support `disabled` prop with lock icon
+- Updated `FiltersBar` to accept and pass `lockedDimensionIds` to dimension filters
+- Updated `CreateShareLinkModal` to populate `locked_dimension_ids` from view's `main_dimension_id` on both create and update
+- Updated `SharedReport` to load and pass `lockedDimensionIds` to `FiltersBar`
+- Updated `SlideReportView` type with `main_dimension_id` and `main_dimension_name` fields
+- Updated README.md Sharing System section with new architecture
+
+**Behavior:**
+- Users select a main dimension (Account/Hotel) when saving a view
+- Smart defaults: Metasearch → Hotel, SEM/Social → Account (inferred from active tab)
+- When sharing a view, the main dimension is automatically locked for viewers
+- Viewers can change date range and non-locked filters (Device, Market, Link Type, Campaign, Ad Group)
+- Locked filters show a lock icon and are disabled with tooltip
+
+**Refactor cleanup:**
+- [x] Extracted duplicate filter format detection to `src/lib/filterFormatUtils.ts`
+- [x] Unified `isChannelBasedFormat()` utility (replaces inline `hasChannelKeys` checks)
+- [x] Unified `convertReportToChannelFormat()` utility (replaces inline conversion loops)
+- [x] Updated `SharedReport.tsx` and `CreateShareLinkModal.tsx` to use shared utilities
+- [x] Verified no duplicate filter components (DimensionFilter canonical, InlineFilterDropdown canonical)
+
+**Verification:**
+- [x] Run migrations: Applied via Supabase MCP (`apply_migration`)
+- [x] Schema verified: `views.main_dimension_id` (uuid, nullable), `views.main_dimension_name` (text, nullable)
+- [x] Schema verified: `share_links.locked_dimension_ids` (uuid[], nullable)
+- [x] TypeScript types regenerated: `types.gen.ts` includes new columns
+- [x] Build: `npm run build` ✅ (exit 0, 12.56s, 3584 modules)
+- [x] Type check: `npx tsc --noEmit` ✅ (0 errors)
+- [x] Linter: `npm run lint` ✅ (0 errors, warnings only - pre-existing)
+- [x] No duplicate logic introduced
+- [x] Filter format utilities extracted and unified
+- [ ] Manual test: Save a new view with main dimension selection
+- [ ] Manual test: Create a share link from a view with main dimension
+- [ ] Manual test: Access shared report - verify locked dimension is disabled
+- [ ] Manual test: Verify date range and non-locked filters are editable
+- [ ] Manual test: Verify lock icon appears on locked filters
+
+---
+
 ### Persist UI settings across page reload (2026-03-23)
 
 - [x] **PS-1** — Extended `SlideReportConfiguration` type (`src/types/slideReports.ts`) with optional fields: `groupByDimension`, `breakdownByDimension`, `chartMetric`, `chartGranularity`, `activeFilterValues`.

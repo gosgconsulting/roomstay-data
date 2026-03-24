@@ -151,9 +151,44 @@ Google Sheets / CSV URL
 
 ### 6. Sharing System
 
-- **Public links:** `/shared/:slug`.
-- **Shared report:** `SharedReport.tsx` — no auth required.
-- **Slug contract:** shared links do **not** redirect into `/tools/*` routes.
+**Table:** `share_links`
+
+- `slug` (text, unique) — public URL path (e.g. `/shared/my-report`)
+- `password_hash` (text, nullable) — optional password protection
+- `report_ids` (uuid[], nullable) — array of report IDs to share
+- `dimension_filters` (jsonb) — pre-applied dimension filters
+- `view_id` (uuid, nullable) — references `views` table for saved filter configuration
+- `slide_report_id` (uuid, nullable) — references `slide_reports` for Data Studio shares
+- `account_id` (uuid, nullable) — account context for the share link
+- `locked_dimension_ids` (uuid[]) — array of dimension IDs that viewers cannot change (typically the main dimension)
+
+**Table:** `views` (unified view storage)
+
+- `main_dimension_id` (uuid, nullable) — primary dimension for this view (e.g., Account for SEM/Social, Hotel for Metasearch)
+- `main_dimension_name` (text, nullable) — display name of the main dimension
+- When a view is shared, its `main_dimension_id` is copied to `share_links.locked_dimension_ids`
+
+**Routes:**
+- `/shared/:slug` — public shared report view (password-protected if set)
+- `/:slug` — catch-all alias for share links
+
+**Components:**
+- `SharedReport.tsx` — renders shared report view with authentication
+- `ShareModal.tsx` — lists existing share links
+- `CreateShareLinkModal.tsx` — create/edit share links; automatically populates `locked_dimension_ids` from view's `main_dimension_id`
+- `SaveViewDialog.tsx` — captures main dimension when saving views; shows dropdown to select Account or Hotel
+- `FiltersBar.tsx` — legacy filter component; supports `lockedDimensionIds` prop
+- `FiltersRow.tsx` — canonical Data Studio filter component; supports `lockedDimensionIds` prop for selective read-only
+- `DimensionFilter.tsx` — filter dropdown; supports `disabled` prop to render locked state with lock icon
+
+**Behavior:**
+- Share links can be password-protected (base64 encoded)
+- **Main dimension is locked:** When saving a view, users select a main dimension (Account/Hotel). This dimension is locked when the view is shared publicly.
+- **Selective read-only:** Viewers can change date range and non-locked filters (Device, Market, Link Type, Campaign, Ad Group), but cannot change locked dimensions (Account/Hotel).
+- **Smart defaults:** Metasearch → Hotel, SEM/Social → Account (inferred from active tab when saving view)
+- Locked filters render with a lock icon and disabled state
+- Slide report shares use `slide_report_id` + `view_id` for configuration
+- Date range is always editable by viewers
 
 ### 7. Integrations
 

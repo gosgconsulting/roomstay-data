@@ -22,6 +22,7 @@ interface InlineFilterDropdownProps {
   selected?: string[]; // undefined = All (no filter), [] = None (exclude all)
   onToggle: (values: string[]) => void;
   onClear: () => void;
+  isLocked?: boolean;
 }
 
 function InlineFilterDropdown({
@@ -30,6 +31,7 @@ function InlineFilterDropdown({
   selected,
   onToggle,
   onClear,
+  isLocked = false,
 }: InlineFilterDropdownProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -254,6 +256,8 @@ interface FiltersRowProps {
   onRefreshData: () => void;
   isRefreshInProgress: boolean;
   showRefreshButton: boolean;
+  /** Array of dimension IDs that are locked (read-only) for viewers in shared reports */
+  lockedDimensionIds?: string[];
 }
 
 export function FiltersRow({
@@ -277,6 +281,7 @@ export function FiltersRow({
   onRefreshData,
   isRefreshInProgress,
   showRefreshButton,
+  lockedDimensionIds = [],
 }: FiltersRowProps) {
   // Build inline filter entries — only on channel tabs (not overview or other tabs)
   const inlineFilters = useMemo(() => {
@@ -293,7 +298,10 @@ export function FiltersRow({
       label: string;
       options: string[];
       selected?: string[];
+      isLocked: boolean;
     }> = [];
+
+    const lockedSet = new Set(lockedDimensionIds);
 
     for (const ch of channelsToShow) {
       const enabledIds = filterConfigs[ch]?.filterDimensionIds ?? [];
@@ -308,12 +316,13 @@ export function FiltersRow({
           label: dimensionNames[dimId] || dimId,
           options,
           selected: chSelected[dimId], // undefined means "All"
+          isLocked: lockedSet.has(dimId),
         });
       }
     }
 
     return entries;
-  }, [selectedTab, filterConfigs, filterOptions, filterValues, dimensionNames]);
+  }, [selectedTab, filterConfigs, filterOptions, filterValues, dimensionNames, lockedDimensionIds]);
 
   return (
     <div className="flex flex-nowrap items-center justify-between gap-3">
@@ -352,7 +361,7 @@ export function FiltersRow({
         {inlineFilters.length > 0 && (
           <div className="flex items-center gap-2 flex-nowrap overflow-x-auto">
             <div className="w-px h-5 bg-border shrink-0" />
-            {inlineFilters.map(({ channel, dimId, label, options, selected }) => (
+            {inlineFilters.map(({ channel, dimId, label, options, selected, isLocked }) => (
               <InlineFilterDropdown
                 key={`${channel}-${dimId}`}
                 label={label}
@@ -361,6 +370,7 @@ export function FiltersRow({
                 selected={selected}
                 onToggle={(vals) => onToggleFilterValue?.(channel, dimId, vals)}
                 onClear={() => onClearFilter?.(channel, dimId)}
+                isLocked={isLocked}
               />
             ))}
             {/* Reset all — only shown when at least one filter has a non-empty selection */}
