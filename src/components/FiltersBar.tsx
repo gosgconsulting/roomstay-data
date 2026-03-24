@@ -359,14 +359,17 @@ export const FiltersBar = ({
         if (existingDims.length === 1 && dateDimensionId && existingDims[0] === dateDimensionId && defaultAccountDimId) {
           setActiveDimensions([defaultAccountDimId]);
 
-          await supabase
-            .from("views")
-            .update({
-              filter_dimensions: [defaultAccountDimId],
-              filter_values: {},
-            })
-            .eq("mode", "performance_table")
-            .eq("id", data.id);
+          // Only update views if not in shared mode
+          if (!isSharedView) {
+            await supabase
+              .from("views")
+              .update({
+                filter_dimensions: [defaultAccountDimId],
+                filter_values: {},
+              })
+              .eq("mode", "performance_table")
+              .eq("id", data.id);
+          }
         } else if (validDims.length) {
           setActiveDimensions(validDims);
           if (data.filter_values && Object.keys(data.filter_values).length) {
@@ -380,7 +383,7 @@ export const FiltersBar = ({
             setSelectedFilters(normalized);
           }
           
-          if (validDims.length < existingDims.length) {
+          if (validDims.length < existingDims.length && !isSharedView) {
             console.log('[FiltersBar] Updating saved view with valid dimensions only');
             await supabase
               .from("views")

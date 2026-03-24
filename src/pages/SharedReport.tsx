@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useLocation, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,6 @@ import { isChannelBasedFormat, convertReportToChannelFormat } from "@/lib/filter
 
 export default function SharedReport() {
   const { slug } = useParams();
-  const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -27,9 +26,7 @@ export default function SharedReport() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [shareLink, setShareLink] = useState<any>(null);
-  const [sharedDimensionFilters, setSharedDimensionFilters] = useState<Record<string, Record<string, string[]>>>({});
   const [authenticated, setAuthenticated] = useState(false);
-  const [slideReportShare, setSlideReportShare] = useState<{ slideReportId: string; accountId: string } | null>(null);
   const [lockedDimensionIds, setLockedDimensionIds] = useState<string[]>([]);
   
   // Report dashboard state
@@ -73,57 +70,7 @@ export default function SharedReport() {
     });
   };
 
-  useEffect(() => {
-    loadShareLink();
-  }, [slug]);
-
-  useEffect(() => {
-    // Check if already authenticated for this slug
-    const authKey = `share_auth_${slug}`;
-    const storedAuth = sessionStorage.getItem(authKey);
-    if (storedAuth === "true") {
-      const storedData = sessionStorage.getItem(`share_data_${slug}`);
-      if (storedData) {
-        const linkData = JSON.parse(storedData);
-        setShareLink(linkData);
-        setAuthenticated(true);
-        initializeReport(linkData);
-      }
-    }
-  }, [slug]);
-
-  const loadShareLink = async () => {
-    if (!slug) return;
-
-    const { data, error } = await supabase
-      .from("share_links")
-      .select("*")
-      .eq("slug", slug)
-      .single();
-
-    if (error || !data) {
-      toast({
-        title: "Not found",
-        description: "This share link does not exist",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setShareLink(data);
-    
-    // If already authenticated, initialize the report
-    const authKey = `share_auth_${slug}`;
-    const storedAuth = sessionStorage.getItem(authKey);
-    if (storedAuth === "true") {
-      setAuthenticated(true);
-      initializeReport(data);
-    }
-  };
-
-  const initializeReport = async (linkData: any) => {
-    setSlideReportShare(null);
-    
+  const initializeReport = useCallback(async (linkData: any) => {
     // Check if this is a slide report share link (has slide_report_id or view_id)
     const slideReportId = linkData.slide_report_id;
     const hasViewId = linkData.view_id;
@@ -216,6 +163,9 @@ export default function SharedReport() {
         sessionStorage.setItem(`share_slide_report_id_${slug}`, finalSlideReportId);
         sessionStorage.setItem(`share_account_id_${slug}`, accountId);
         
+        // Store locked dimension IDs for Data Studio embed
+        sessionStorage.setItem(`share_locked_dimension_ids_${slug}`, JSON.stringify(linkData.locked_dimension_ids || []));
+        
         // Legacy: Store view_id if it exists (for backward compatibility)
         if (hasViewId) {
           sessionStorage.setItem(`share_view_id_${finalSlideReportId}`, linkData.view_id);
@@ -226,12 +176,8 @@ export default function SharedReport() {
         sessionStorage.setItem(authKey, "true");
         sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(linkData));
 
-        // Shared links should stay on /shared/:slug (public view). We no longer redirect into /tools/*.
-        // Keep the resolved slide_report_id/account_id so we can show an explicit message.
-        setSlideReportShare({ slideReportId: finalSlideReportId, accountId });
-        
-        // Set locked dimensions from share link
-        setLockedDimensionIds(linkData.locked_dimension_ids || []);
+        // Navigate to Data Studio embed for slide/view shares
+        navigate(`/shared/${slug}/studio`, { replace: true });
       } catch (error) {
         console.error('Error handling slide report view:', error);
         toast({
@@ -241,11 +187,6 @@ export default function SharedReport() {
         });
       }
       return;
-    }
-    
-    // Store dimension filters from the share link
-    if (linkData.dimension_filters) {
-      setSharedDimensionFilters(linkData.dimension_filters);
     }
     
     // For shared links with multiple reports, set reportId to null to show "All Reports" view
@@ -275,7 +216,7 @@ export default function SharedReport() {
         }
       } else {
         // Multiple reports - show "All Reports" view
-        setReportId(null); // null reportId triggers All Reports view in DashboardHeader
+        setReportId(null);
       }
       
       // Load account information if account_id is available
@@ -295,7 +236,58 @@ export default function SharedReport() {
         }
       }
     }
-  };
+  }, [slug, navigate, toast, setLockedDimensionIds, setLoadingGeneration, setLoadingComponents, setIsDataLoading, markComponentLoading, setReportId, setFilters, setAccount]);
+
+  // Consolidated bootstrap: check session auth first, then load from DB if needed
+  useEffect(() => {
+    if (!slug) return;
+    
+    let mounted = true;
+    
+    const bootstrap = async () => {
+      const authKey = `share_auth_${slug}`;
+      const storedAuth = sessionStorage.getItem(authKey);
+      
+      if (storedAuth === "true") {
+        // Already authenticated - restore from session
+        const storedData = sessionStorage.getItem(`share_data_${slug}`);
+        if (storedData && mounted) {
+          const linkData = JSON.parse(storedData);
+          setShareLink(linkData);
+          setAuthenticated(true);
+          await initializeReport(linkData);
+        }
+      } else {
+        // Not authenticated - load share link from DB
+        const { data, error } = await supabase
+          .from("share_links")
+          .select("*")
+          .eq("slug", slug)
+          .single();
+
+        if (error || !data) {
+          if (mounted) {
+            toast({
+              title: "Not found",
+              description: "This share link does not exist",
+              variant: "destructive",
+            });
+          }
+          return;
+        }
+
+        if (mounted) {
+          setShareLink(data);
+        }
+      }
+    };
+    
+    bootstrap();
+    
+    return () => {
+      mounted = false;
+    };
+  }, [slug, toast, initializeReport]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -391,7 +383,7 @@ export default function SharedReport() {
     );
   }
 
-  // If authenticated but no account loaded yet (for multi-report shares), show loading
+  // If authenticated but no account loaded yet (for classic multi-report shares), show loading
   if (authenticated && !account && shareLink?.account_id) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">

@@ -34,6 +34,66 @@ After coding:
 
 ## Active tasks
 
+### Shared Feature Hardening (2026-03-24)
+
+**Status:** ✅ Complete
+
+**Problems Fixed:**
+1. **Infinite loading for Data Studio shares:** Slide/view branch returned early without loading account, but UI gate required `account` when `shareLink.account_id` was set
+2. **No Data Studio embed:** Slide shares showed placeholder card instead of real Data Studio UI
+3. **Anonymous access blocked:** SlideViewPage behind ProtectedRoute; no public studio route
+4. **Missing account context:** Anonymous users couldn't load dimensions/KPIs because components gated on `user` existence
+5. **FiltersBar side effects:** Views writes not consistently guarded by `isSharedView`
+6. **Duplicate bootstrap:** Two useEffects could both call `initializeReport`
+
+**Solution:**
+
+**Phase A - Loading and bootstrap:**
+- Removed `sharedDimensionFilters` unused state
+- Consolidated two bootstrap effects into single effect with session-first logic
+- Fixed loading gate to skip account requirement for slide shares (`!slideReportShare` guard)
+- Persisted `locked_dimension_ids` to sessionStorage for Data Studio embed
+- Removed `slideReportShare` state (now navigates away immediately)
+
+**Phase B - Data Studio embed:**
+- Added public `/shared/:slug/studio` route in `App.tsx` (no ProtectedRoute)
+- SharedReport navigates to studio route for slide/view shares after auth
+- SlideViewPage detects public share studio mode from path (`/shared/*/studio`)
+- Bootstrap from sessionStorage: `share_account_id_${slug}`, `share_slide_report_id_${slug}`, `share_locked_dimension_ids_${slug}`
+- Pass `lockedDimensionIds` to `FiltersRow` when in public studio mode
+- Hide share/save modals for public studio viewers
+
+**Phase C - Anonymous correctness:**
+- `KPIMetricsCards`: Load dimensions without requiring `user`; fetch owner `user_id` from report for settings
+- `KPIChart`: Load dimensions without requiring `user`
+- `FiltersBar`: Guard all views writes with `isSharedView` check (lines 362-369, 385-391)
+
+**Files Modified:**
+- `src/pages/SharedReport.tsx` - Consolidated bootstrap, fixed loading gate, navigation to studio
+- `src/App.tsx` - Added `/shared/:slug/studio` public route
+- `src/pages/SlideViewPage.tsx` - Public share studio detection, sessionStorage bootstrap, locked dimensions
+- `src/components/KPIMetricsCards.tsx` - Anonymous dimension loading, owner settings
+- `src/components/KPIChart.tsx` - Anonymous dimension loading
+- `src/components/FiltersBar.tsx` - Guard views writes when shared
+- `README.md` - Updated Sharing System section with new routes and security notes
+- `TODO.md` - This entry
+
+**Verification:**
+- ✅ Build passes (`npm run build`)
+- ✅ TypeScript check passes (`npx tsc --noEmit`)
+- [ ] Manual test: Data Studio share → password → lands on `/shared/:slug/studio` with data
+- [ ] Manual test: Date range changes work in studio
+- [ ] Manual test: Locked dimensions stay disabled in studio
+- [ ] Manual test: Classic single-report share loads KPI/chart/table for anon
+- [ ] Manual test: No views write attempts in browser console when shared
+
+**Security notes documented:**
+- Password "hash" is base64 encoding (not secure)
+- Public read-all RLS on core tables (slug + password is main gate)
+- Consider proper hashing + share-scoped RLS policies
+
+---
+
 ### Shared Report Selective Read-Only Filters (2026-03-24)
 
 **Status:** ✅ Complete

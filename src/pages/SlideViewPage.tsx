@@ -122,13 +122,17 @@ const CHANNEL_DIMENSION_NAMES: Record<string, string[]> = {
 };
 
 export default function SlideViewPage() {
-  const { accountId: urlAccountId, slideId } = useParams<{ accountId?: string; slideId?: string }>();
+  const { accountId: urlAccountId, slideId, slug: shareSlug } = useParams<{ accountId?: string; slideId?: string; slug?: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const { data: userData, isLoading: isUserLoading } = useUser();
   const user = userData?.user || null;
   const userLabel = user?.email?.split("@")[0] || user?.email || "user";
+  
+  // Detect public share studio mode from path
+  const isPublicShareStudio = location.pathname.startsWith('/shared/') && location.pathname.includes('/studio');
+  const effectiveSlug = shareSlug || searchParams.get('slug');
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -139,10 +143,61 @@ export default function SlideViewPage() {
       navigate("/auth", { replace: true });
     }
   }, [navigate]);
+  
+  // Bootstrap public share studio mode
+  useEffect(() => {
+    if (!isPublicShareStudio || !effectiveSlug) return;
+    
+    // Verify authentication
+    const authKey = `share_auth_${effectiveSlug}`;
+    const storedAuth = sessionStorage.getItem(authKey);
+    
+    if (storedAuth !== "true") {
+      // Not authenticated - redirect to password page
+      navigate(`/shared/${effectiveSlug}`, { replace: true });
+      return;
+    }
+    
+    // Load account and slide IDs from sessionStorage
+    const storedAccountId = sessionStorage.getItem(`share_account_id_${effectiveSlug}`);
+    const storedSlideReportId = sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`);
+    const storedLockedDimensions = sessionStorage.getItem(`share_locked_dimension_ids_${effectiveSlug}`);
+    
+    if (storedAccountId) setShareAccountId(storedAccountId);
+    if (storedSlideReportId) setShareSlideReportId(storedSlideReportId);
+    if (storedLockedDimensions) {
+      try {
+        setShareLockedDimensionIds(JSON.parse(storedLockedDimensions));
+      } catch (e) {
+        setShareLockedDimensionIds([]);
+      }
+    }
+    
+    // Enable read-only mode for public shares
+    setIsReadOnlyMode(true);
+    
+    // Load filters from sessionStorage if available
+    const storedFilters = sessionStorage.getItem(`share_filters_${effectiveSlug}`);
+    if (storedFilters) {
+      try {
+        const channelFilters = JSON.parse(storedFilters);
+        setFilterValues(channelFilters);
+      } catch (e) {
+        console.error('Error parsing share filters:', e);
+      }
+    }
+  }, [isPublicShareStudio, effectiveSlug, navigate]);
 
   // Resolve account from URL param or from auth context (short-entry route support).
+  // For public share studio, use account from sessionStorage
   const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
-  const accountId = urlAccountId ?? resolvedAccount?.id;
+  const [shareAccountId, setShareAccountId] = useState<string | null>(null);
+  const [shareSlideReportId, setShareSlideReportId] = useState<string | null>(null);
+  const [shareLockedDimensionIds, setShareLockedDimensionIds] = useState<string[]>([]);
+  
+  const accountId = isPublicShareStudio 
+    ? shareAccountId 
+    : (urlAccountId ?? resolvedAccount?.id);
 
   // If this page is mounted on legacy /tools/reports routes, redirect to an account-scoped
   // URL once resolved. When mounted on index (/), keep the clean URL.
@@ -293,7 +348,7 @@ export default function SlideViewPage() {
     configuredDimensionNames,
   });
   const {
-    slideReportId,
+    slideReportId: hookSlideReportId,
     setSlideReportId,
     slideReport,
     effectivePivotData,
@@ -317,6 +372,17 @@ export default function SlideViewPage() {
     updateView,
     deleteView,
   } = reportPage;
+  
+  // Override slideReportId for public share studio
+  const slideReportId = isPublicShareStudio && shareSlideReportId ? shareSlideReportId : hookSlideReportId;
+  
+  // Set slideReportId from share session on mount for public studio
+  useEffect(() => {
+    if (isPublicShareStudio && shareSlideReportId && !hookSlideReportId) {
+      setSlideReportId(shareSlideReportId);
+    }
+  }, [isPublicShareStudio, shareSlideReportId, hookSlideReportId, setSlideReportId]);
+  
   const queryClient = useQueryClient();
 
   // ── Canonical Data Studio filter state ───────────────────────────────────────
@@ -613,8 +679,8 @@ export default function SlideViewPage() {
       // Check if viewId exists in views
       const view = views.find(v => v.id === viewIdToUse);
       if (view) {
-        // Apply the view (do NOT enable read-only mode for regular views)
-        if (isReadOnlyMode) setIsReadOnlyMode(false);
+        // Apply the view (do NOT enable read-only mode for regular views, unless in public share studio)
+        if (isReadOnlyMode && !isPublicShareStudio) setIsReadOnlyMode(false);
         setSelectedViewId(viewIdToUse);
         if (selectedViewId !== viewIdToUse) {
           handleApplyView(viewIdToUse);
@@ -635,12 +701,12 @@ export default function SlideViewPage() {
           sessionStorage.removeItem(`share_view_id_${slideReportId}`);
         }
       }
-    } else if (!viewIdToUse && isReadOnlyMode && !isShared) {
-      // If viewId is removed from URL and not from share link, disable read-only mode
+    } else if (!viewIdToUse && isReadOnlyMode && !isShared && !isPublicShareStudio) {
+      // If viewId is removed from URL and not from share link, disable read-only mode (unless in public share studio)
       setIsReadOnlyMode(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, views.length, isReadOnlyMode, slideReportId, selectedViewId]);
+  }, [searchParams, views.length, isReadOnlyMode, slideReportId, selectedViewId, isPublicShareStudio]);
 
   // monthlyDataRecords, isLoadingMonthlyData from reportPage
 
@@ -3070,6 +3136,7 @@ export default function SlideViewPage() {
             onRefreshData={handleRefreshDataWithModal}
             isRefreshInProgress={isRefreshModalOpen}
             showRefreshButton={!slideReport?.configuration?.isChildReport}
+            lockedDimensionIds={isPublicShareStudio ? shareLockedDimensionIds : undefined}
           />
         </div>
 
@@ -3313,7 +3380,7 @@ export default function SlideViewPage() {
         />
       )}
 
-      {isShareModalOpen && (
+      {!isPublicShareStudio && isShareModalOpen && (
         <ShareModal
           open={isShareModalOpen}
           onOpenChange={setIsShareModalOpen}
@@ -3325,26 +3392,30 @@ export default function SlideViewPage() {
         />
       )}
 
-      <SaveViewDialog
-        open={isSaveViewDialogOpen}
-        onOpenChange={setIsSaveViewDialogOpen}
-        onSave={handleSaveView}
-        existingViewNames={views.map(v => v.name)}
-        availableMainDimensions={availableMainDimensions}
-        defaultMainDimensionId={defaultMainDimensionId}
-      />
+      {!isPublicShareStudio && (
+        <>
+          <SaveViewDialog
+            open={isSaveViewDialogOpen}
+            onOpenChange={setIsSaveViewDialogOpen}
+            onSave={handleSaveView}
+            existingViewNames={views.map(v => v.name)}
+            availableMainDimensions={availableMainDimensions}
+            defaultMainDimensionId={defaultMainDimensionId}
+          />
 
-      <SaveOrUpdateViewDialog
-        open={isSaveOrUpdateViewDialogOpen}
-        onOpenChange={setIsSaveOrUpdateViewDialogOpen}
-        onSaveNew={() => {
-          setIsSaveOrUpdateViewDialogOpen(false);
-          setIsSaveViewDialogOpen(true);
-        }}
-        onUpdate={handleUpdateView}
-        availableViews={availableViews}
-        currentViewId={selectedViewId}
-      />
+          <SaveOrUpdateViewDialog
+            open={isSaveOrUpdateViewDialogOpen}
+            onOpenChange={setIsSaveOrUpdateViewDialogOpen}
+            onSaveNew={() => {
+              setIsSaveOrUpdateViewDialogOpen(false);
+              setIsSaveViewDialogOpen(true);
+            }}
+            onUpdate={handleUpdateView}
+            availableViews={availableViews}
+            currentViewId={selectedViewId}
+          />
+        </>
+      )}
     </div>
   );
 }

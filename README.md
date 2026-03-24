@@ -170,25 +170,37 @@ Google Sheets / CSV URL
 
 **Routes:**
 - `/shared/:slug` — public shared report view (password-protected if set)
+  - Classic dashboard (KPI cards, chart, table) for `report_ids`-only shares
+  - Redirects to `/shared/:slug/studio` for Data Studio shares (when `slide_report_id` or `view_id` is set)
+- `/shared/:slug/studio` — public Data Studio embed (anonymous access, read-only)
 - `/:slug` — catch-all alias for share links
 
 **Components:**
-- `SharedReport.tsx` — renders shared report view with authentication
+- `SharedReport.tsx` — password gate and router; navigates to studio for slide/view shares
+- `SlideViewPage.tsx` — Data Studio UI; supports public share studio mode via path detection and sessionStorage bootstrap
 - `ShareModal.tsx` — lists existing share links
 - `CreateShareLinkModal.tsx` — create/edit share links; automatically populates `locked_dimension_ids` from view's `main_dimension_id`
 - `SaveViewDialog.tsx` — captures main dimension when saving views; shows dropdown to select Account or Hotel
-- `FiltersBar.tsx` — legacy filter component; supports `lockedDimensionIds` prop
+- `FiltersBar.tsx` — legacy filter component; supports `lockedDimensionIds` prop; guards views writes when `isSharedView`
 - `FiltersRow.tsx` — canonical Data Studio filter component; supports `lockedDimensionIds` prop for selective read-only
 - `DimensionFilter.tsx` — filter dropdown; supports `disabled` prop to render locked state with lock icon
+- `KPIMetricsCards.tsx`, `KPIChart.tsx` — load dimensions and owner settings for anonymous users
 
 **Behavior:**
-- Share links can be password-protected (base64 encoded)
+- Share links can be password-protected (base64 encoded - NOTE: not cryptographically secure, consider proper hashing)
 - **Main dimension is locked:** When saving a view, users select a main dimension (Account/Hotel). This dimension is locked when the view is shared publicly.
 - **Selective read-only:** Viewers can change date range and non-locked filters (Device, Market, Link Type, Campaign, Ad Group), but cannot change locked dimensions (Account/Hotel).
 - **Smart defaults:** Metasearch → Hotel, SEM/Social → Account (inferred from active tab when saving view)
 - Locked filters render with a lock icon and disabled state
 - Slide report shares use `slide_report_id` + `view_id` for configuration
 - Date range is always editable by viewers
+- **SessionStorage contract for public studio:**
+  - `share_auth_${slug}` — "true" when authenticated
+  - `share_account_id_${slug}` — account UUID
+  - `share_slide_report_id_${slug}` — slide report UUID
+  - `share_locked_dimension_ids_${slug}` — JSON array of locked dimension UUIDs
+  - `share_filters_${slug}` — JSON channel-based filter values
+- **Security note:** Public read-all RLS policies on `reports`, `dimension_data`, `dimensions` (migration `20251030184608`) mean slug + password is the primary gate. Consider tightening with share-scoped policies or SECURITY DEFINER functions.
 
 ### 7. Integrations
 

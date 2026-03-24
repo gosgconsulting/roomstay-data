@@ -54,13 +54,13 @@ export function KPIMetricsCards({
     accountId: accountId || undefined,
   });
 
-  // Trigger dimension loading when reportId, accountId, or user changes
-  // Important: user needs to be in deps because loadDimensions depends on it
+  // Trigger dimension loading when reportId or accountId changes
+  // Load dimensions even for anonymous users (shared reports)
   useEffect(() => {
-    if ((reportId || accountId) && user) {
+    if (reportId || accountId) {
       loadDimensions();
     }
-  }, [reportId, accountId, loadDimensions, user]);
+  }, [reportId, accountId, loadDimensions]);
 
   // Fetch data source config for direct source loading
   useEffect(() => {
@@ -95,14 +95,27 @@ export function KPIMetricsCards({
   // Load KPI visibility settings
   useEffect(() => {
     const loadKPISettings = async () => {
-      if (!user?.id || !reportId) return;
+      if (!reportId) return;
+      
+      // For anonymous users, get report owner's settings
+      let userId = user?.id;
+      if (!userId) {
+        const { data: report } = await supabase
+          .from("reports")
+          .select("user_id")
+          .eq("id", reportId)
+          .single();
+        if (report) userId = report.user_id;
+      }
+      
+      if (!userId) return;
 
       const { data: viewSettings } = await supabase
         .from("views")
         .select("visible_kpis, kpi_order")
         .eq("mode", "performance_table")
         .eq("report_id", reportId)
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("is_default", true)
         .maybeSingle();
 

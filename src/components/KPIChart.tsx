@@ -62,13 +62,13 @@ export function KPIChart({
     accountId: accountId || undefined,
   });
 
-  // Trigger dimension loading when reportId, accountId, or user changes
-  // Important: user needs to be in deps because loadDimensions depends on it
+  // Trigger dimension loading when reportId or accountId changes
+  // Load dimensions even for anonymous users (shared reports)
   useEffect(() => {
-    if ((reportId || accountId) && user) {
+    if (reportId || accountId) {
       loadDimensions();
     }
-  }, [reportId, accountId, loadDimensions, user]);
+  }, [reportId, accountId, loadDimensions]);
 
   // Fetch data source config for direct source loading
   useEffect(() => {

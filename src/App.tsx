@@ -30,6 +30,7 @@ const App = () => (
           {/* Public routes */}
           <Route path="/auth" element={<Auth />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
+          <Route path="/shared/:slug/studio" element={<SlideViewPage />} />
 
           {/* Protected routes — redirect to /auth if not logged in */}
           <Route path="/" element={<ProtectedRoute><SlideViewPage /></ProtectedRoute>} />

@@ -400,16 +400,18 @@ export function FiltersRow({
           <Filter className="h-3.5 w-3.5" />
           Filters
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5"
-          onClick={onShare}
-        >
-          <Share2 className="h-3.5 w-3.5" />
-          Share
-        </Button>
-        {showRefreshButton && (
+        {!isReadOnlyMode && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={onShare}
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            Share
+          </Button>
+        )}
+        {!isReadOnlyMode && showRefreshButton && (
           <Button
             variant="default"
             size="sm"
