@@ -2846,7 +2846,7 @@ export default function SlideViewPage() {
         return { ...derived, label };
       }
 
-      const chData = (effectivePivotData?.channels as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[channel];
+      const chData = (effectivePivotData?.channels as unknown as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[channel];
       const rows = getFilteredPivotRowsForChannel(
         chData,
         channel,
