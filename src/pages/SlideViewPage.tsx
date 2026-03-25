@@ -291,7 +291,11 @@ export default function SlideViewPage() {
 
     // Apply share-link channel filters (date already initialized via buildInitialDateStateForSharedStudio)
     const channelFilters = readShareFiltersFromSession(effectiveSlug);
-    if (channelFilters) setFilterValues(channelFilters);
+    if (channelFilters) {
+      setFilterValues(channelFilters);
+      // Store as base filters so "Reset" restores to these instead of clearing all
+      setShareBaseFilters(channelFilters);
+    }
   }, [isPublicShareStudio, effectiveSlug, navigate, shareAccountId, shareSlideReportId]);
 
   // ALWAYS fetch report_ids from DB for shared views (URL is source of truth).
