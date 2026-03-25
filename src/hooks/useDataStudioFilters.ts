@@ -247,6 +247,7 @@ export function useDataStudioFilters({
   selectedMonth,
   setSelectedMonth,
   configuredDimensionNames = {},
+  shareBaseFilterValues = null,
 }: UseDataStudioFiltersParams): UseDataStudioFiltersReturn {
   const [_internalCustomDateRange, _setInternalCustomDateRange] = useState<DateRange | undefined>(undefined);
   const [_internalComparisonType, _setInternalComparisonType] = useState('none');
