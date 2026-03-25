@@ -259,8 +259,7 @@ export default function SlideViewPage() {
   });
 
   // Bootstrap public share studio mode: verify auth, enable read-only, apply filters.
-  // IDs are already set via lazy useState above — no need to call setShareAccountId etc. here
-  // unless the session recovers a stale mount (e.g. HMR).
+  // IDs are already set via lazy useState above from URL params — no sessionStorage dependency.
   useEffect(() => {
     if (!isPublicShareStudio || !effectiveSlug) return;
 
@@ -272,13 +271,17 @@ export default function SlideViewPage() {
       return;
     }
 
-    // Re-read IDs in case the effect fires after a session recovery (lazy init already covers
-    // the first render, but a second mount — e.g. Strict Mode double-invoke — may have cleared them).
-    const storedAccountId = sessionStorage.getItem(`share_account_id_${effectiveSlug}`);
-    const storedSlideReportId = sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`);
+    // URL params are the source of truth for IDs (set in lazy useState).
+    // Only fall back to sessionStorage if URL params were missing (legacy links).
+    if (!shareAccountId) {
+      const storedAccountId = sessionStorage.getItem(`share_account_id_${effectiveSlug}`);
+      if (storedAccountId) setShareAccountId(storedAccountId);
+    }
+    if (!shareSlideReportId) {
+      const storedSlideReportId = sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`);
+      if (storedSlideReportId) setShareSlideReportId(storedSlideReportId);
+    }
     const storedLockedDimensions = sessionStorage.getItem(`share_locked_dimension_ids_${effectiveSlug}`);
-    if (storedAccountId) setShareAccountId(storedAccountId);
-    if (storedSlideReportId) setShareSlideReportId(storedSlideReportId);
     if (storedLockedDimensions) {
       try { setShareLockedDimensionIds(JSON.parse(storedLockedDimensions)); } catch { setShareLockedDimensionIds([]); }
     }
@@ -289,7 +292,33 @@ export default function SlideViewPage() {
     // Apply share-link channel filters (date already initialized via buildInitialDateStateForSharedStudio)
     const channelFilters = readShareFiltersFromSession(effectiveSlug);
     if (channelFilters) setFilterValues(channelFilters);
-  }, [isPublicShareStudio, effectiveSlug, navigate]);
+  }, [isPublicShareStudio, effectiveSlug, navigate, shareAccountId, shareSlideReportId]);
+
+  // When report_ids are not in sessionStorage (e.g. page refresh with only URL params),
+  // fetch them from the slide_reports table so useDataStudioRawRows can fire.
+  useEffect(() => {
+    if (!isPublicShareStudio || shareReportIds || !shareSlideReportId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: sr } = await supabase
+          .from("slide_reports")
+          .select("report_ids")
+          .eq("id", shareSlideReportId)
+          .maybeSingle();
+        if (!cancelled && sr?.report_ids && typeof sr.report_ids === 'object') {
+          setShareReportIds(sr.report_ids as Record<string, string>);
+          // Also cache for future use
+          if (effectiveSlug) {
+            sessionStorage.setItem(`share_report_ids_${effectiveSlug}`, JSON.stringify(sr.report_ids));
+          }
+        }
+      } catch (err) {
+        console.error('[SharedStudio] Failed to fetch report_ids from DB:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isPublicShareStudio, shareReportIds, shareSlideReportId, effectiveSlug]);
   
   const accountId = isPublicShareStudio 
     ? shareAccountId 
