@@ -85,7 +85,9 @@ import { DEFAULT_CHART_METRIC, parseChartMetric } from "@/lib/chartMetric";
 import type { RawDataRow, MetricData, ChartGranularity, ChartMetric } from "@/types/slideView";
 
 // Default groupBy / breakdownBy dimension name hints per channel.
-// These are resolved to actual IDs by BreakdownTableSection once dimensions load.
+// Metasearch → Hotel; SEM / Social → Account. Aligned with dimensionDefaults.ts.
+// These are name-hints resolved to actual IDs by BreakdownTableSection once dimensions load.
+// For public share studio the locked dimension IDs override these via a dedicated effect.
 const DEFAULT_GROUPBY: Record<string, string> = { metasearch: 'hotel', sem: 'account', social: 'account' };
 const DEFAULT_BREAKDOWNBY: Record<string, string> = { metasearch: 'link_type', sem: 'campaign', social: 'campaign' };
 
@@ -221,6 +223,19 @@ export default function SlideViewPage() {
       return raw ? JSON.parse(raw) : [];
     } catch {
       return [];
+    }
+  });
+
+  // Eagerly read report_ids stored by SharedReport during initialization.
+  // This seeds effectiveReportIdsForFetch on the very first render so useDataStudioRawRows
+  // can fire before useSlideReport (RLS-gated DB query) resolves — preventing 0 KPI.
+  const [shareReportIds] = useState<Record<string, string> | null>(() => {
+    if (!isPublicShareStudio || !effectiveSlug) return null;
+    try {
+      const raw = sessionStorage.getItem(`share_report_ids_${effectiveSlug}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
     }
   });
 
@@ -1936,6 +1951,26 @@ export default function SlideViewPage() {
     });
   }, [breakdownConfigs, breakdownDimensions]);
 
+  // For public share studio: resolve locked dimension IDs to name-hint strings and
+  // update groupByDimension so the breakdown table uses the owner's chosen dimension.
+  // Runs once breakdownDimensions are loaded; only fires in shared studio mode.
+  useEffect(() => {
+    if (!isPublicShareStudio || shareLockedDimensionIds.length === 0) return;
+    const channels: ('metasearch' | 'sem' | 'social')[] = ['metasearch', 'sem', 'social'];
+    const updates: Record<string, string> = {};
+    for (const channel of channels) {
+      const dims = breakdownDimensions[channel] ?? [];
+      if (dims.length === 0) continue;
+      const lockedDim = dims.find((d) => shareLockedDimensionIds.includes(d.id));
+      if (lockedDim) {
+        updates[channel] = lockedDim.name.toLowerCase();
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      setGroupByDimensionRaw((prev) => ({ ...prev, ...updates }));
+    }
+  }, [isPublicShareStudio, shareLockedDimensionIds, breakdownDimensions]);
+
   // Handle dimension change
   const handleDimensionChange = (channel: 'metasearch' | 'sem' | 'social', dimensionId: string) => {
     setChannelConfigs(prev => ({
@@ -3377,6 +3412,7 @@ export default function SlideViewPage() {
             customDateRange,
             datePreset: dsFilters.datePreset,
           }}
+          channelReportIds={accountReportIds}
         />
       )}
 

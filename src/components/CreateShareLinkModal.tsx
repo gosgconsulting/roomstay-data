@@ -1,18 +1,23 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/lib/auth";
-import { ArrowLeft, ArrowRight, Search, Loader2, Sparkles } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ArrowLeft, ArrowRight, Loader2, Lock } from "lucide-react";
 import { isChannelBasedFormat } from "@/lib/filterFormatUtils";
 import { formatDateToLocalIso } from "@/lib/monthUtils";
+import {
+  getChannelDefaultMainDimension,
+  flattenLockedDimensionIds,
+  type Channel,
+  type MinimalDimension,
+} from "@/lib/dimensionDefaults";
+import { loadDimensionsForUser } from "@/lib/dimensionLoader";
+import { Badge } from "@/components/ui/badge";
 
 interface CreateShareLinkModalProps {
   open: boolean;
@@ -25,35 +30,35 @@ interface CreateShareLinkModalProps {
     dimension_filters?: Record<string, Record<string, string[]>>;
     view_id?: string | null;
     slide_report_id?: string | null;
+    locked_dimension_ids?: string[];
     selected_year?: string;
     selected_month?: string;
     custom_date_range?: { from: string; to: string };
     date_preset?: string;
   } | null;
   accountId?: string;
-  slideReportId?: string | null; // For slide reports
-  availableViews?: Array<{ id: string | null; name: string }>; // Available views for slide reports
-  currentFilterValues?: Record<string, Record<string, string[]>>; // Current channel-based filter values from SlideViewPage
+  slideReportId?: string | null;
+  availableViews?: Array<{ id: string | null; name: string }>;
+  currentFilterValues?: Record<string, Record<string, string[]>>;
   currentDateSelection?: {
     selectedYear: string;
     selectedMonth: string;
     customDateRange?: import("react-day-picker").DateRange;
     datePreset?: string;
   };
-}
-
-interface Report {
-  id: string;
-  name: string;
-}
-
-interface Dimension {
-  id: string;
-  name: string;
-  type: string;
+  /** Channel → report ID map for the account (from useSlideReportPage / accountReportIds) */
+  channelReportIds?: Partial<Record<Channel, string | null>>;
 }
 
 type DimensionFilters = Record<string, Record<string, string[]>>;
+
+const CHANNELS: Channel[] = ['metasearch', 'sem', 'social'];
+
+const CHANNEL_LABELS: Record<Channel, string> = {
+  metasearch: 'Metasearch',
+  sem: 'SEM',
+  social: 'Social',
+};
 
 export const CreateShareLinkModal = ({
   open,
@@ -64,704 +69,316 @@ export const CreateShareLinkModal = ({
   slideReportId,
   availableViews = [],
   currentFilterValues,
-  currentDateSelection
+  currentDateSelection,
+  channelReportIds,
 }: CreateShareLinkModalProps) => {
+  // ─── Step 1 state ─────────────────────────────────────────────────────────
   const [step, setStep] = useState<1 | 2>(1);
   const [slug, setSlug] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedReports, setSelectedReports] = useState<string[]>([]);
-  const [reports, setReports] = useState<Report[]>([]);
-  const [loading, setLoading] = useState(false);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // ─── Step 2 state ─────────────────────────────────────────────────────────
+  // Dimensions available per channel (loaded from DB)
+  const [channelDimensions, setChannelDimensions] = useState<Partial<Record<Channel, MinimalDimension[]>>>({});
+  const [loadingDimensions, setLoadingDimensions] = useState(false);
+  // Per-channel selected locked dimension ID
+  const [lockedDimByChannel, setLockedDimByChannel] = useState<Partial<Record<Channel, string>>>({});
+
   const { toast } = useToast();
   const { data: userResult } = useUser();
   const user = userResult?.user;
 
-  // Step 2 state
-  const [activeReportId, setActiveReportId] = useState<string | null>(null);
-  const [reportDimensions, setReportDimensions] = useState<Record<string, Dimension[]>>({});
-  const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
-  const [selectedDimensionId, setSelectedDimensionId] = useState<Record<string, string>>({});
-  const [dimensionFilters, setDimensionFilters] = useState<DimensionFilters>({});
-  const [loadingDimensions, setLoadingDimensions] = useState(false);
-  const [loadingValues, setLoadingValues] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  // Channels that have a report configured for this account
+  const activeChannels = CHANNELS.filter(
+    (ch) => channelReportIds && channelReportIds[ch]
+  );
 
+  // ─── Reset on open ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (open) {
-      setStep(1);
-      loadReportsAndAutoSelect();
-      if (editingLink) {
-        setSlug(editingLink.slug);
-        setPassword("");
-        // For slide reports, use channel-based filters if available, otherwise use report-based
-        if (slideReportId && editingLink.dimension_filters) {
-          if (isChannelBasedFormat(editingLink.dimension_filters)) {
-            // Already in channel-based format
-            setDimensionFilters(editingLink.dimension_filters);
-          } else {
-            // Convert from report-based to channel-based (for backward compatibility)
-            setDimensionFilters({});
+    if (!open) return;
+    setStep(1);
+    setChannelDimensions({});
+    setLockedDimByChannel({});
+
+    if (editingLink) {
+      setSlug(editingLink.slug);
+      setPassword("");
+      setSelectedViewId(editingLink.view_id ?? null);
+    } else {
+      setSlug("");
+      setPassword("");
+      setSelectedViewId(null);
+    }
+  }, [open]);
+
+  // ─── Load dimensions when entering Step 2 ─────────────────────────────────
+  const loadDimensionsForAllChannels = useCallback(async () => {
+    if (!accountId) return;
+    setLoadingDimensions(true);
+    try {
+      const results: Partial<Record<Channel, MinimalDimension[]>> = {};
+
+      await Promise.all(
+        activeChannels.map(async (channel) => {
+          const reportId = channelReportIds?.[channel] ?? undefined;
+          try {
+            // Use the canonical loader (account → custom → global precedence)
+            const dims = await loadDimensionsForUser(
+              user?.id ?? '',
+              reportId,
+              { accountId, typeFilter: 'text' }
+            );
+            results[channel] = dims.map((d) => ({ id: d.id, name: d.name }));
+          } catch (err) {
+            console.error(`[CreateShareLinkModal] Error loading dimensions for ${channel}:`, err);
+            results[channel] = [];
           }
-        } else {
-          setDimensionFilters(editingLink.dimension_filters || {});
+        })
+      );
+
+      setChannelDimensions(results);
+
+      // Apply defaults: if editing, pre-fill from existing locked_dimension_ids;
+      // otherwise, apply product defaults (Hotel for metasearch, Account for sem/social).
+      const defaults: Partial<Record<Channel, string>> = {};
+      const existingLocked = editingLink?.locked_dimension_ids ?? [];
+
+      for (const channel of activeChannels) {
+        const dims = results[channel] ?? [];
+        if (existingLocked.length > 0) {
+          // Try to find the existing locked dim in this channel's dims
+          const match = dims.find((d) => existingLocked.includes(d.id));
+          if (match) {
+            defaults[channel] = match.id;
+            continue;
+          }
         }
-        setSelectedViewId(editingLink.view_id || null);
-      } else {
-        setSlug("");
-        setPassword("");
-        setDimensionFilters({});
-        setSelectedViewId(null);
+        // Fallback: apply product default
+        const defaultDim = getChannelDefaultMainDimension(channel, dims);
+        if (defaultDim) defaults[channel] = defaultDim.id;
       }
+      setLockedDimByChannel(defaults);
+    } finally {
+      setLoadingDimensions(false);
     }
-  }, [open, editingLink, accountId]);
+  }, [accountId, user?.id, activeChannels, channelReportIds, editingLink?.locked_dimension_ids]);
 
-  // Load dimensions when entering step 2 or changing active report
   useEffect(() => {
-    if (step === 2 && activeReportId) {
-      loadDimensionsForReport(activeReportId);
+    if (step === 2) {
+      void loadDimensionsForAllChannels();
     }
-  }, [step, activeReportId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, loadDimensionsForAllChannels]);
 
-  // Load values when dimension is selected
-  useEffect(() => {
-    if (step === 2 && activeReportId && selectedDimensionId[activeReportId]) {
-      loadValuesForDimension(activeReportId, selectedDimensionId[activeReportId]);
+  // ─── Validation ───────────────────────────────────────────────────────────
+  const validateStep1 = (): boolean => {
+    if (!slug.trim() || slug.length < 3) {
+      toast({
+        title: "Slug required",
+        description: "Slug must be at least 3 characters (lowercase letters, numbers, hyphens).",
+        variant: "destructive",
+      });
+      return false;
     }
-  }, [step, activeReportId, selectedDimensionId]);
+    if (!editingLink && !password) {
+      toast({
+        title: "Password required",
+        description: "Please enter a password for the share link.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    if (password && password.length < 6) {
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 6 characters.",
+        variant: "destructive",
+      });
+      return false;
+    }
+    return true;
+  };
 
-  // Load view filters and convert to report-based format when a view is selected (for slide reports)
-  useEffect(() => {
-    const loadViewFiltersAndLinkReports = async () => {
-      if (!slideReportId || !selectedViewId || !user) {
-        // If view is cleared, reset filters but keep selectedReports as is
-        if (slideReportId && !selectedViewId) {
-          setDimensionFilters({});
-        }
-        return;
-      }
+  const handleSlugChange = (value: string) => {
+    if (/^[a-z0-9-]*$/.test(value)) setSlug(value);
+  };
 
+  const handleNextToStep2 = () => {
+    if (!validateStep1()) return;
+    setStep(2);
+  };
+
+  // ─── Build filters to store ───────────────────────────────────────────────
+  const buildFiltersToStore = async (): Promise<DimensionFilters> => {
+    if (!slideReportId) return {};
+
+    // Prefer saved view filters when a view is selected
+    if (selectedViewId) {
       try {
-        console.log("[testing] Loading view filters for view:", selectedViewId);
-        
-        // Load the view from the canonical views table
-        const { data: view, error: viewError } = await supabase
+        const { data: view } = await supabase
           .from("views")
           .select("filter_values")
           .eq("id", selectedViewId)
           .single();
-
-        if (viewError || !view) {
-          console.error("[testing] Error loading view:", viewError);
-          toast({
-            title: "Error",
-            description: "Failed to load view filters",
-            variant: "destructive",
-          });
-          return;
+        if (view?.filter_values && typeof view.filter_values === "object") {
+          return view.filter_values as DimensionFilters;
         }
-
-        // Load the slide report to get report_ids mapping
-        const { data: slideReport, error: reportError } = await supabase
-          .from("slide_reports")
-          .select("report_ids")
-          .eq("id", slideReportId)
-          .single();
-
-        if (reportError || !slideReport) {
-          console.error("[testing] Error loading slide report:", reportError);
-          toast({
-            title: "Error",
-            description: "Failed to load slide report",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        // Convert view filter_values (channel-based) to dimension_filters (report-based)
-        // View format: { "metasearch": { "dimensionId": ["value1"] }, "sem": {...}, "social": {...} }
-        // Share link format: { "reportId1": { "dimensionId": ["value1"] }, "reportId2": {...} }
-        const reportIds = slideReport.report_ids as Record<string, string>;
-        const viewFilters = (view.filter_values || {}) as Record<string, Record<string, string[]>>;
-        
-        const convertedFilters: DimensionFilters = {};
-        const linkedReportIds: string[] = [];
-
-        // Map each channel to its report ID and convert filters
-        for (const [channel, channelFilters] of Object.entries(viewFilters)) {
-          const reportId = reportIds[channel];
-          if (reportId) {
-            // Add this report ID to the linked reports
-            linkedReportIds.push(reportId);
-            
-            // Convert channel filters to report filters
-            if (channelFilters && Object.keys(channelFilters).length > 0) {
-              convertedFilters[reportId] = channelFilters;
-            }
-          }
-        }
-
-        console.log("[testing] Converted view filters:", convertedFilters);
-        console.log("[testing] Linked report IDs:", linkedReportIds);
-
-        // Update dimension filters with converted view filters
-        setDimensionFilters(convertedFilters);
-        
-        // Update selectedReports to only include reports that are in the view
-        if (linkedReportIds.length > 0) {
-          setSelectedReports(linkedReportIds);
-        }
-      } catch (error) {
-        console.error("[testing] Error loading view filters:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load view filters",
-          variant: "destructive",
-        });
+      } catch (err) {
+        console.error("[CreateShareLinkModal] Error loading view filters:", err);
       }
-    };
+    }
 
-    loadViewFiltersAndLinkReports();
-  }, [slideReportId, selectedViewId, user, toast]);
-
-  const loadReportsAndAutoSelect = async () => {
-    if (!user) return;
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("email")
-      .eq("id", user.id)
-      .single();
-
-    const isMaster = profile?.email === "contact@gosgconsulting.com";
-
-    let allReports: Report[] = [];
-
-    if (isMaster) {
-      let query = supabase
-        .from("reports")
-        .select("id, name");
-
-      if (accountId) {
-        query = query.eq("account_id", accountId);
+    // Fall back to current Data Studio filters
+    if (currentFilterValues && Object.keys(currentFilterValues).length > 0) {
+      if (isChannelBasedFormat(currentFilterValues)) {
+        return currentFilterValues;
       }
-
-      const { data, error } = await query.order("name");
-
-      if (error) {
-        console.error("Error loading reports:", error);
-        return;
-      }
-
-      allReports = data || [];
-    } else {
-      let query = supabase
-        .from("reports")
-        .select("id, name")
-        .eq("user_id", user.id);
-
-      if (accountId) {
-        query = query.eq("account_id", accountId);
-      }
-
-      const { data: ownReports, error: ownError } = await query.order("name");
-
-      if (ownError) {
-        console.error("Error loading own reports:", ownError);
-        return;
-      }
-
-      allReports = ownReports || [];
     }
 
-    setReports(allReports);
-    const allReportIds = allReports.map(r => r.id);
-    setSelectedReports(allReportIds);
-    
-    if (allReports.length > 0) {
-      setActiveReportId(allReports[0].id);
-    }
+    return {};
   };
 
-  const loadDimensionsForReport = async (reportId: string) => {
-    if (reportDimensions[reportId]) return; // Already loaded
-    
-    setLoadingDimensions(true);
-    try {
-      const { data, error } = await supabase
-        .from("dimensions")
-        .select("id, name, type")
-        .eq("report_id", reportId)
-        .eq("type", "text")
-        .order("name");
-
-      if (error) throw error;
-      
-      setReportDimensions(prev => ({ ...prev, [reportId]: data || [] }));
-      
-      // Auto-select first dimension if not already selected
-      if (data && data.length > 0 && !selectedDimensionId[reportId]) {
-        setSelectedDimensionId(prev => ({ ...prev, [reportId]: data[0].id }));
-      }
-    } catch (error) {
-      console.error("Error loading dimensions:", error);
-    } finally {
-      setLoadingDimensions(false);
-    }
-  };
-
-  const loadValuesForDimension = async (reportId: string, dimensionId: string) => {
-    const cacheKey = `${reportId}_${dimensionId}`;
-    if (dimensionValues[cacheKey]) return; // Already loaded
-    
-    setLoadingValues(true);
-    try {
-      // Get dimension name first
-      const dimension = reportDimensions[reportId]?.find(d => d.id === dimensionId);
-      if (!dimension) return;
-
-      // Get data source for this report
-      const { data: dataSource } = await supabase
-        .from("data_sources")
-        .select("id")
-        .eq("report_id", reportId)
-        .maybeSingle();
-
-      if (!dataSource) return;
-
-      // Extract unique values from dimension_data
-      const { data: dimensionData, error } = await supabase
-        .from("dimension_data")
-        .select("dimension_values")
-        .eq("data_source_id", dataSource.id)
-        .limit(5000);
-
-      if (error) throw error;
-
-      const uniqueValues = new Set<string>();
-      dimensionData?.forEach(row => {
-        const values = row.dimension_values as Record<string, any>;
-        const value = values[dimension.name];
-        if (value && typeof value === 'string' && value.trim()) {
-          uniqueValues.add(value.trim());
-        }
-      });
-
-      setDimensionValues(prev => ({ 
-        ...prev, 
-        [cacheKey]: Array.from(uniqueValues).sort() 
-      }));
-    } catch (error) {
-      console.error("Error loading dimension values:", error);
-    } finally {
-      setLoadingValues(false);
-    }
-  };
-
-  const validateSlug = (value: string) => {
-    return /^[a-z0-9-]*$/.test(value);
-  };
-
-  const handleSlugChange = (value: string) => {
-    if (validateSlug(value)) {
-      setSlug(value);
-    }
-  };
-
-  const handleValueToggle = (value: string) => {
-    if (!activeReportId) return;
-    const dimId = selectedDimensionId[activeReportId];
-    if (!dimId) return;
-
-    setDimensionFilters(prev => {
-      const reportFilters = prev[activeReportId] || {};
-      const currentValues = reportFilters[dimId] || [];
-      
-      const newValues = currentValues.includes(value)
-        ? currentValues.filter(v => v !== value)
-        : [...currentValues, value];
-
-      return {
-        ...prev,
-        [activeReportId]: {
-          ...reportFilters,
-          [dimId]: newValues
-        }
-      };
-    });
-  };
-
-  const handleSelectAll = () => {
-    if (!activeReportId) return;
-    const dimId = selectedDimensionId[activeReportId];
-    if (!dimId) return;
-    
-    const cacheKey = `${activeReportId}_${dimId}`;
-    const allValues = dimensionValues[cacheKey] || [];
-
-    setDimensionFilters(prev => ({
-      ...prev,
-      [activeReportId]: {
-        ...(prev[activeReportId] || {}),
-        [dimId]: [...allValues]
-      }
-    }));
-  };
-
-  const handleDeselectAll = () => {
-    if (!activeReportId) return;
-    const dimId = selectedDimensionId[activeReportId];
-    if (!dimId) return;
-
-    setDimensionFilters(prev => ({
-      ...prev,
-      [activeReportId]: {
-        ...(prev[activeReportId] || {}),
-        [dimId]: []
-      }
-    }));
-  };
-
-  const getSelectedValuesForReport = (reportId: string) => {
-    const dimId = selectedDimensionId[reportId];
-    if (!dimId) return [];
-    return dimensionFilters[reportId]?.[dimId] || [];
-  };
-
-  const getFilterCountForReport = (reportId: string) => {
-    const filters = dimensionFilters[reportId];
-    if (!filters) return 0;
-    return Object.values(filters).reduce((sum, values) => sum + values.length, 0);
-  };
-
-  const currentValues = useMemo(() => {
-    if (!activeReportId) return [];
-    const dimId = selectedDimensionId[activeReportId];
-    if (!dimId) return [];
-    const cacheKey = `${activeReportId}_${dimId}`;
-    return dimensionValues[cacheKey] || [];
-  }, [activeReportId, selectedDimensionId, dimensionValues]);
-
-  const filteredValues = useMemo(() => {
-    if (!searchQuery.trim()) return currentValues;
-    return currentValues.filter(v => 
-      v.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [currentValues, searchQuery]);
-
-  const currentSelectedValues = useMemo(() => {
-    if (!activeReportId) return [];
-    return getSelectedValuesForReport(activeReportId);
-  }, [activeReportId, dimensionFilters, selectedDimensionId]);
-
-  const handleStep1Validate = () => {
-    if (!slug.trim()) {
-      toast({
-        title: "Slug required",
-        description: "Please enter a slug for the share link",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (slug.length < 3) {
-      toast({
-        title: "Slug too short",
-        description: "Slug must be at least 3 characters long",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (!editingLink && !password) {
-      toast({
-        title: "Password required",
-        description: "Please enter a password",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (password && password.length < 6) {
-      toast({
-        title: "Password too short",
-        description: "Password must be at least 6 characters long",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    if (selectedReports.length === 0) {
-      toast({
-        title: "No reports available",
-        description: "No reports found for this account.",
-        variant: "destructive",
-      });
-      return false;
-    }
-
-    return true;
-  };
-
-  const handlePrimaryStep1 = () => {
-    if (!handleStep1Validate()) return;
-    // Data Studio: one-step flow — share current filters or a saved view; no per-report dimension picker
-    if (slideReportId) {
-      void handleSubmit();
-      return;
-    }
-    setStep(2);
-    setSearchQuery("");
-  };
-
+  // ─── Submit ───────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
+    if (!user) return;
     setLoading(true);
 
-    if (!user) return;
+    try {
+      const passwordHash = btoa(password || editingLink?.slug || "");
+      const filtersToStore = await buildFiltersToStore();
 
-    const passwordHash = btoa(password || editingLink?.slug || "");
+      // Collect locked dimension IDs from step 2 selections
+      const lockedDimensionIds = flattenLockedDimensionIds(lockedDimByChannel);
 
-    // For slide reports, use channel-based filters from currentFilterValues
-    // Otherwise, use dimensionFilters (report-based format for regular reports)
-    let filtersToStore: DimensionFilters = {};
-    
-    if (slideReportId) {
-      // Prefer saved view filters when a view is selected; otherwise current Data Studio filters
-      if (selectedViewId) {
-        try {
-          const { data: view } = await supabase
-            .from("views")
-            .select("filter_values")
-            .eq("id", selectedViewId)
-            .single();
-
-          if (view?.filter_values && typeof view.filter_values === "object") {
-            filtersToStore = view.filter_values as DimensionFilters;
-          }
-        } catch (error) {
-          console.error("[CreateShareLinkModal] Error loading view filters:", error);
-        }
-      }
-      if (
-        Object.keys(filtersToStore).length === 0 &&
-        currentFilterValues &&
-        Object.keys(currentFilterValues).length > 0
-      ) {
-        filtersToStore = currentFilterValues;
-      }
-    } else {
-      // For regular reports, use report-based filters
-      filtersToStore = dimensionFilters;
-    }
-
-    if (editingLink) {
-      const updateData: any = {
-        report_ids: selectedReports,
+      const baseData: Record<string, unknown> = {
         dimension_filters: filtersToStore,
-      };
-      
-      if (password) {
-        updateData.password_hash = passwordHash;
-      }
-
-      // For slide reports, store slide_report_id and account_id directly
-      if (slideReportId) {
-        updateData.slide_report_id = slideReportId;
-        updateData.account_id = accountId;
-        // Keep view_id for backward compatibility, but prefer slide_report_id
-        if (selectedViewId !== undefined) {
-          updateData.view_id = selectedViewId;
-        }
-
-        // Store current date selection
-        if (currentDateSelection) {
-          updateData.selected_year = currentDateSelection.selectedYear;
-          updateData.selected_month = currentDateSelection.selectedMonth;
-          updateData.date_preset = currentDateSelection.datePreset;
-          if (currentDateSelection.customDateRange?.from && currentDateSelection.customDateRange?.to) {
-            updateData.custom_date_range = {
-              from: formatDateToLocalIso(currentDateSelection.customDateRange.from),
-              to: formatDateToLocalIso(currentDateSelection.customDateRange.to),
-            };
-          }
-        }
-
-        // Set locked dimensions from view's main_dimension_id
-        if (selectedViewId) {
-          try {
-            const { data: view } = await supabase
-              .from("views")
-              .select("main_dimension_id")
-              .eq("id", selectedViewId)
-              .maybeSingle();
-
-            if (view?.main_dimension_id) {
-              updateData.locked_dimension_ids = [view.main_dimension_id];
-            }
-          } catch (error) {
-            console.error('Error loading view main dimension:', error);
-          }
-        }
-      } else if (slideReportId !== undefined && selectedViewId !== undefined) {
-        // Legacy: keep view_id for backward compatibility
-        updateData.view_id = selectedViewId;
-      }
-
-      const { error } = await supabase
-        .from("share_links")
-        .update(updateData)
-        .eq("id", editingLink.id);
-
-      setLoading(false);
-
-      if (error) {
-        toast({
-          title: "Error",
-          description: "Failed to update share link",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      toast({
-        title: "Share link updated",
-        description: `/${slug} has been updated`,
-      });
-    } else {
-      const insertData: any = {
-        slug: slug.toLowerCase().trim(),
-        password_hash: passwordHash,
-        report_ids: selectedReports,
-        created_by: user.id,
+        slide_report_id: slideReportId,
         account_id: accountId,
-        dimension_filters: filtersToStore,
+        locked_dimension_ids: lockedDimensionIds,
+        view_id: selectedViewId ?? null,
       };
 
-      // For slide reports, store slide_report_id directly
-      if (slideReportId) {
-        insertData.slide_report_id = slideReportId;
-        // Keep view_id for backward compatibility if provided
-        if (selectedViewId) {
-          insertData.view_id = selectedViewId;
+      // Include current date selection
+      if (currentDateSelection) {
+        baseData.selected_year = currentDateSelection.selectedYear;
+        baseData.selected_month = currentDateSelection.selectedMonth;
+        baseData.date_preset = currentDateSelection.datePreset;
+        if (
+          currentDateSelection.customDateRange?.from &&
+          currentDateSelection.customDateRange?.to
+        ) {
+          baseData.custom_date_range = {
+            from: formatDateToLocalIso(currentDateSelection.customDateRange.from),
+            to: formatDateToLocalIso(currentDateSelection.customDateRange.to),
+          };
         }
-        
-        // Store current date selection
-        if (currentDateSelection) {
-          insertData.selected_year = currentDateSelection.selectedYear;
-          insertData.selected_month = currentDateSelection.selectedMonth;
-          insertData.date_preset = currentDateSelection.datePreset;
-          if (currentDateSelection.customDateRange?.from && currentDateSelection.customDateRange?.to) {
-            insertData.custom_date_range = {
-              from: formatDateToLocalIso(currentDateSelection.customDateRange.from),
-              to: formatDateToLocalIso(currentDateSelection.customDateRange.to),
-            };
-          }
-        }
-        
-        // Set locked dimensions from view's main_dimension_id
-        if (selectedViewId) {
-          try {
-            const { data: view } = await supabase
-              .from("views")
-              .select("main_dimension_id")
-              .eq("id", selectedViewId)
-              .maybeSingle();
-            
-            if (view?.main_dimension_id) {
-              insertData.locked_dimension_ids = [view.main_dimension_id];
-            }
-          } catch (error) {
-            console.error('Error loading view main dimension:', error);
-          }
-        }
-        
-        console.log('[testing] Creating share link with slide_report_id', {
-          slide_report_id: slideReportId,
-          account_id: accountId,
-          has_filters: Object.keys(filtersToStore).length > 0
-        });
-      } else if (selectedViewId) {
-        // Legacy: keep view_id for backward compatibility
-        insertData.view_id = selectedViewId;
       }
 
-      const { error } = await supabase
-        .from("share_links")
-        .insert(insertData);
+      if (editingLink) {
+        const updateData: Record<string, unknown> = { ...baseData };
+        if (password) updateData.password_hash = passwordHash;
 
-      setLoading(false);
+        const { error } = await supabase
+          .from("share_links")
+          .update(updateData)
+          .eq("id", editingLink.id);
 
-      if (error) {
-        if (error.code === "23505") {
-          toast({
-            title: "Slug already exists",
-            description: "This slug is already in use. Please choose another one.",
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Error",
-            description: "Failed to create share link",
-            variant: "destructive",
-          });
+        if (error) throw error;
+        toast({ title: "Share link updated", description: `/${slug} has been updated` });
+      } else {
+        const insertData: Record<string, unknown> = {
+          ...baseData,
+          slug: slug.toLowerCase().trim(),
+          password_hash: passwordHash,
+          created_by: user.id,
+          // report_ids kept for backward compatibility (resolved from slideReport)
+          report_ids: channelReportIds
+            ? Object.values(channelReportIds).filter(Boolean)
+            : [],
+        };
+
+        const { error } = await supabase.from("share_links").insert(insertData);
+        if (error) {
+          if (error.code === "23505") {
+            toast({
+              title: "Slug already exists",
+              description: "Please choose a different slug.",
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+          throw error;
         }
-        return;
+        toast({ title: "Share link created", description: `Access at /${slug}` });
       }
 
+      onSuccess();
+    } catch (err) {
+      console.error("[CreateShareLinkModal] Submit error:", err);
       toast({
-        title: "Share link created",
-        description: `Access your reports at /${slug}`,
+        title: "Error",
+        description: editingLink ? "Failed to update share link" : "Failed to create share link",
+        variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
-
-    onSuccess();
   };
 
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-[520px]">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {step === 2 && <Sparkles className="h-5 w-5 text-primary" />}
-            {step === 1 
-              ? (editingLink ? "Edit Share Link" : "Create Share Link")
-              : "Data Source"
-            }
+          <DialogTitle>
+            {editingLink ? "Edit Share Link" : "Create Share Link"}
           </DialogTitle>
           <DialogDescription>
-            {step === 1 
-              ? (editingLink 
-                  ? "Update the password for this share link."
-                  : "Create a password-protected link to share all reports from this account publicly"
-                )
-              : 'Select dimension values to filter data for each report. Only selected values will be visible in the shared link.'
-            }
+            {step === 1
+              ? "Configure a password-protected link to share this report."
+              : "Choose which dimension viewers cannot change per channel."}
           </DialogDescription>
         </DialogHeader>
 
+        {/* Step indicator */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className={step === 1 ? "font-semibold text-foreground" : ""}>
+            1. Link settings
+          </span>
+          <span>/</span>
+          <span className={step === 2 ? "font-semibold text-foreground" : ""}>
+            2. Dimension locks
+          </span>
+        </div>
+
         {step === 1 ? (
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-2">
+            {/* Slug */}
             <div className="space-y-2">
               <Label htmlFor="slug">Slug</Label>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">/</span>
                 <Input
                   id="slug"
-                  placeholder="roomstay"
+                  placeholder="my-report"
                   value={slug}
                   onChange={(e) => handleSlugChange(e.target.value)}
                   disabled={!!editingLink}
-                  className="flex-1 focus-visible:ring-primary"
+                  className="flex-1"
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Only lowercase letters, numbers, and hyphens (min. 3 characters)
+                Lowercase letters, numbers, hyphens — min. 3 characters.
               </p>
             </div>
 
+            {/* Password */}
             <div className="space-y-2">
               <Label htmlFor="password">
-                Password {editingLink && "(leave empty to keep current)"}
+                Password{editingLink ? " (leave empty to keep current)" : ""}
               </Label>
               <Input
                 id="password"
@@ -770,25 +387,24 @@ export const CreateShareLinkModal = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Minimum 6 characters
-              </p>
+              <p className="text-xs text-muted-foreground">Minimum 6 characters.</p>
             </div>
 
-            {slideReportId ? (
+            {/* Optional view */}
+            {slideReportId && availableViews.length > 0 && (
               <div className="space-y-2">
                 <Label>View to Share (Optional)</Label>
-                <Select 
-                  value={selectedViewId || 'none'} 
-                  onValueChange={(value) => setSelectedViewId(value === 'none' ? null : value)}
+                <Select
+                  value={selectedViewId ?? "none"}
+                  onValueChange={(v) => setSelectedViewId(v === "none" ? null : v)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a view (optional)" />
+                    <SelectValue placeholder="No view (default filters)" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No view (default filters)</SelectItem>
                     {availableViews
-                      .filter(v => v.id !== null && v.id !== 'unsaved')
+                      .filter((v) => v.id !== null && v.id !== "unsaved")
                       .map((view) => (
                         <SelectItem key={view.id} value={view.id!}>
                           {view.name}
@@ -797,219 +413,108 @@ export const CreateShareLinkModal = ({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {selectedViewId 
-                    ? "Selected view's filters will be locked for viewers"
-                    : "Viewers can change filters freely"}
+                  {selectedViewId
+                    ? "Selected view's filters will be applied for viewers."
+                    : "Viewers can change filters freely."}
                 </p>
               </div>
-            ) : (
-              <div className="space-y-2">
-                <Label>Reports to Share</Label>
-                <div className="rounded-md border p-4 bg-muted/50">
-                  <p className="text-sm text-muted-foreground mb-2">
-                    All reports from this account will be shared automatically:
-                  </p>
-                  <ul className="text-sm space-y-1">
-                    {reports.length > 0 ? (
-                      reports.map((report) => (
-                        <li key={report.id} className="flex items-center gap-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-primary"></span>
-                          {report.name}
-                        </li>
-                      ))
-                    ) : (
-                      <li className="text-muted-foreground">No reports available for this account</li>
-                    )}
-                  </ul>
-                  <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
-                    💡 This includes the "All Reports" view
-                  </p>
+            )}
+
+            {/* Active channels summary */}
+            {activeChannels.length > 0 && (
+              <div className="rounded-md border bg-muted/30 p-3 space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Channels included in this share:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {activeChannels.map((ch) => (
+                    <Badge key={ch} variant="secondary">
+                      {CHANNEL_LABELS[ch]}
+                    </Badge>
+                  ))}
                 </div>
               </div>
             )}
 
-            <Button 
-              onClick={handlePrimaryStep1} 
-              className="w-full"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {editingLink ? "Updating..." : "Creating..."}
-                </>
-              ) : slideReportId ? (
-                editingLink ? "Update Link" : "Create Link"
-              ) : (
-                <>
-                  Next
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </>
-              )}
+            <Button onClick={handleNextToStep2} className="w-full" disabled={loading}>
+              Next
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col min-h-0">
-            <div className="flex flex-1 gap-4 min-h-0">
-              {/* Left sidebar - Report tabs */}
-              <div className="w-48 flex-shrink-0">
-                <div className="space-y-1">
-                  {reports.map((report) => {
-                    const filterCount = getFilterCountForReport(report.id);
-                    return (
-                      <button
-                        key={report.id}
-                        onClick={() => {
-                          setActiveReportId(report.id);
-                          setSearchQuery("");
-                        }}
-                        className={cn(
-                          "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors text-left",
-                          activeReportId === report.id
-                            ? "bg-primary text-primary-foreground"
-                            : "hover:bg-muted text-foreground"
-                        )}
-                      >
-                        <span className="truncate">{report.name}</span>
-                        {filterCount > 0 && (
-                          <span className={cn(
-                            "ml-2 px-1.5 py-0.5 text-xs rounded-full",
-                            activeReportId === report.id
-                              ? "bg-primary-foreground/20 text-primary-foreground"
-                              : "bg-primary/10 text-primary"
-                          )}>
-                            {filterCount}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              The selected dimension will be locked for viewers — they cannot change it.
+              Other filters remain editable.
+            </p>
+
+            {loadingDimensions ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                <span className="text-sm">Loading dimensions…</span>
               </div>
-
-              {/* Right content - Dimension filter */}
-              <div className="flex-1 flex flex-col gap-4 min-h-0">
-                {/* Dimension selector */}
-                <div className="space-y-2">
-                  <Label>Dimension</Label>
-                  <Select
-                    value={activeReportId ? selectedDimensionId[activeReportId] || "" : ""}
-                    onValueChange={(value) => {
-                      if (activeReportId) {
-                        setSelectedDimensionId(prev => ({ ...prev, [activeReportId]: value }));
-                        setSearchQuery("");
-                      }
-                    }}
-                    disabled={loadingDimensions}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={loadingDimensions ? "Loading..." : "Select dimension"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {activeReportId && reportDimensions[activeReportId]?.map((dim) => (
-                        <SelectItem key={dim.id} value={dim.id}>
-                          {dim.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search values..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-
-                {/* Select/Deselect All */}
-                {filteredValues.length > 0 && !loadingValues && (
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSelectAll}
-                      className="flex-1"
-                    >
-                      Select All
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleDeselectAll}
-                      className="flex-1"
-                    >
-                      Deselect All
-                    </Button>
-                  </div>
-                )}
-
-                {/* Values list */}
-                <ScrollArea className="flex-1 border rounded-md min-h-[300px]">
-                  <div className="p-2 space-y-1">
-                    {loadingValues ? (
-                      <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                        <Loader2 className="h-6 w-6 animate-spin mb-2" />
-                        <p className="text-sm">Loading dimension values...</p>
+            ) : (
+              <div className="space-y-3">
+                {activeChannels.map((channel) => {
+                  const dims = channelDimensions[channel] ?? [];
+                  const selectedId = lockedDimByChannel[channel] ?? "";
+                  return (
+                    <div key={channel} className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                        <Label className="text-sm font-medium">
+                          {CHANNEL_LABELS[channel]}
+                        </Label>
                       </div>
-                    ) : filteredValues.length > 0 ? (
-                      filteredValues.map((value) => (
-                        <div
-                          key={value}
-                          className={cn(
-                            "flex items-center gap-3 p-2 rounded cursor-pointer transition-colors",
-                            currentSelectedValues.includes(value)
-                              ? "bg-primary/10"
-                              : "hover:bg-muted/50"
-                          )}
-                          onClick={() => handleValueToggle(value)}
-                        >
-                          <Checkbox
-                            checked={currentSelectedValues.includes(value)}
-                            onCheckedChange={() => handleValueToggle(value)}
-                          />
-                          <span className="text-sm">{value}</span>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-center text-muted-foreground py-8">
-                        {activeReportId && selectedDimensionId[activeReportId] 
-                          ? "No values found for this dimension."
-                          : "Select a dimension to view values."
+                      <Select
+                        value={selectedId || "none"}
+                        onValueChange={(v) =>
+                          setLockedDimByChannel((prev) => ({
+                            ...prev,
+                            [channel]: v === "none" ? undefined : v,
+                          }))
                         }
-                      </p>
-                    )}
-                  </div>
-                </ScrollArea>
+                        disabled={dims.length === 0}
+                      >
+                        <SelectTrigger>
+                          <SelectValue
+                            placeholder={
+                              dims.length === 0
+                                ? "No dimensions available"
+                                : "Select locked dimension"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No lock (viewers can change)</SelectItem>
+                          {dims.map((d) => (
+                            <SelectItem key={d.id} value={d.id}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            )}
 
-            {/* Footer */}
-            <div className="flex items-center justify-between pt-4 border-t mt-4">
-              <Button
-                variant="outline"
-                onClick={() => setStep(1)}
-              >
+            <div className="flex items-center justify-between pt-2 border-t">
+              <Button variant="outline" onClick={() => setStep(1)}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
-              <Button 
-                onClick={handleSubmit} 
-                disabled={loading}
-              >
+              <Button onClick={handleSubmit} disabled={loading || loadingDimensions}>
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating...
+                    {editingLink ? "Updating…" : "Creating…"}
                   </>
+                ) : editingLink ? (
+                  "Update Link"
                 ) : (
-                  editingLink ? "Update Link" : "Create Link"
+                  "Create Link"
                 )}
               </Button>
             </div>

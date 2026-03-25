@@ -34,6 +34,48 @@ After coding:
 
 ## Active tasks
 
+### Shared view 2-step flow + loading parity (2026-03-26)
+
+**Status:** ✅ Complete
+
+**Changes:**
+
+1. **New `src/lib/dimensionDefaults.ts`:** canonical helpers for channel → default main dimension. `getChannelDefaultMainDimension(channel, dims)` returns Hotel for Metasearch, Account for SEM/Social. Used by `CreateShareLinkModal` Step 2 and shareable as single source of truth.
+
+2. **`CreateShareLinkModal.tsx` rewritten as 2-step wizard:**
+   - Step 1: slug, password, optional view selector, channel summary badge.
+   - Step 2: per-channel dimension lock dropdown, populated via `loadDimensionsForUser` (canonical loader, account → custom → global precedence). Defaults: Metasearch → Hotel, SEM/Social → Account. Edit mode pre-fills from existing `locked_dimension_ids`. Stores final IDs in `share_links.locked_dimension_ids`.
+   - Removed all old report-picker UI (no longer needed; Data Studio shares always include all channels).
+
+3. **`ShareModal.tsx`:** added `channelReportIds` prop, forwarded to `CreateShareLinkModal` so Step 2 can load dimensions per active channel.
+
+4. **`SlideViewPage.tsx`:**
+   - Passes `channelReportIds={accountReportIds}` to `ShareModal`.
+   - Added effect to resolve `shareLockedDimensionIds` → dimension name hints → `groupByDimension` update for public share studio (once `breakdownDimensions` load). This ensures the breakdown table groups by the owner's locked dimension instead of the hardcoded default string.
+   - Added clarifying comment on `DEFAULT_GROUPBY` / `DEFAULT_BREAKDOWNBY` constants.
+
+5. **Loading parity verified:** shared studio already uses the exact same `useDataStudioRawRows` + `useSlideReportPage` pipeline as the owner view. No separate caching logic exists for shared views — both paths call `fetchChannelRows` → `get-cached-report-data` edge function. The cache guard `useEffect` in `useDataStudioRawRows` handles stale 0-row results in both modes.
+
+**Verification:**
+- `npm run build`: ✅ 1,765.28 kB, 0 errors
+- `npm run lint`: ✅ 0 errors, 71 warnings (all pre-existing)
+
+---
+
+### Shared view: cache guard + always-MTD date (2026-03-26)
+
+**Status:** ✅ Complete
+
+**Changes:**
+
+1. **Always MTD on shared views** (`src/pages/SharedReport.tsx`): removed the three-branch date priority logic (pinned `selected_year`, `custom_date_range`, `date_preset` from `share_links`). Date is now always set to the current month-to-date range — identical to master view behaviour. Viewers always see current data.
+
+2. **Cache verification guard** (`src/hooks/useDataStudioRawRows.ts`): added a `useEffect` that checks the query result after each render. If the query is enabled with real IDs but all channels returned 0 rows (stale empty cache from a prior null-ID mount), it calls `queryClient.invalidateQueries` once to force a fresh fetch, preventing the 5-minute `staleTime` from locking in a zero result.
+
+**Verification:** `npm run build` — exit 0, zero errors. Shared studio loads with current MTD range on fresh session.
+
+---
+
 ### Shared studio zero-data QA and fix (2026-03-26)
 
 **Status:** ✅ Complete

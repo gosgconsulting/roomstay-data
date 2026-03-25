@@ -39,8 +39,21 @@ export default function SharedReport() {
       const hasViewId = linkData.view_id;
 
       // If we have slide_report_id directly, use it (new format)
+      // Also fetch report_ids so SlideViewPage can seed effectiveReportIdsForFetch without
+      // waiting for the RLS-gated useSlideReport query to resolve (prevents 0 KPI on first load).
       if (finalSlideReportId) {
-        // Already have slide_report_id, no-op
+        try {
+          const { data: sr } = await supabase
+            .from("slide_reports")
+            .select("report_ids")
+            .eq("id", finalSlideReportId)
+            .maybeSingle();
+          if (sr?.report_ids && typeof sr.report_ids === 'object') {
+            sessionStorage.setItem(`share_report_ids_${slug}`, JSON.stringify(sr.report_ids));
+          }
+        } catch {
+          // Non-fatal — SlideViewPage falls back to useSlideReport query
+        }
       } else if (hasViewId) {
         // Legacy: Use view_id to look up slide_report_id via the canonical `views` table
         try {
@@ -181,42 +194,16 @@ export default function SharedReport() {
       // Store locked dimension IDs for Data Studio embed
       sessionStorage.setItem(`share_locked_dimension_ids_${slug}`, JSON.stringify(linkData.locked_dimension_ids || []));
       
-      // Store date selection for Data Studio embed
-      // Priority: share_links date fields > view date fields > default month-to-date
-      let dateSelection: ShareDateSelection;
-      
-      if (linkData.selected_year || linkData.selected_month || linkData.custom_date_range) {
-        // Use date from share_links (new format)
-        dateSelection = {
-          selectedYear: linkData.selected_year || new Date().getFullYear().toString(),
-          selectedMonth: linkData.selected_month || 'Month to Date',
-          customDateRange: linkData.custom_date_range 
-            ? { from: linkData.custom_date_range.from, to: linkData.custom_date_range.to }
-            : undefined,
-          datePreset: linkData.date_preset,
-        };
-      } else if (hasViewId) {
-        // view_id drives filters / layout via applyView(skipDateRestore); date must match **master default**
-        // (month-to-date), not the view row's selected_year/month (often a stale calendar month).
-        // To pin a date on a share, set share_links.selected_year / custom_date_range / date_preset when creating the link.
-        const mtd = getCurrentMonthToDateRange();
-        dateSelection = {
-          selectedYear: mtd.to!.getFullYear().toString(),
-          selectedMonth: 'Month to Date',
-          customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
-          datePreset: DEFAULT_REPORT_DATE_PRESET,
-        };
-      } else {
-        // No date info available, use default month-to-date
-        const mtd = getCurrentMonthToDateRange();
-        dateSelection = {
-          selectedYear: mtd.to!.getFullYear().toString(),
-          selectedMonth: 'Month to Date',
-          customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
-          datePreset: DEFAULT_REPORT_DATE_PRESET,
-        };
-      }
-      
+      // Always use month-to-date on shared views — identical default to master view.
+      // Pinned dates stored on share_links (selected_year, custom_date_range, date_preset)
+      // are intentionally ignored so viewers always see current, up-to-date data.
+      const mtd = getCurrentMonthToDateRange();
+      const dateSelection: ShareDateSelection = {
+        selectedYear: mtd.to!.getFullYear().toString(),
+        selectedMonth: 'Month to Date',
+        customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
+        datePreset: DEFAULT_REPORT_DATE_PRESET,
+      };
       writeShareDateToSession(slug, dateSelection);
       
       // Store view_id from share_links if it exists so SlideViewPage can apply the saved view once.

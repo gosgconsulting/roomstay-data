@@ -4,8 +4,8 @@
  * across users.
  */
 
-import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getUser } from '@/lib/auth';
 import type { CachedDataRow } from '@/hooks/dataSources/useCachedSourceData';
@@ -228,6 +228,8 @@ export function useDataStudioRawRows(
   selectedYear: string = 'all',
   reportIdsOverride?: Record<string, string> | null,
 ) {
+  const queryClient = useQueryClient();
+
   const reportIds = useMemo((): Record<string, string> => {
     const base = (reportIdsOverride != null && Object.keys(reportIdsOverride).length > 0)
       ? reportIdsOverride
@@ -237,7 +239,7 @@ export function useDataStudioRawRows(
     ) as Record<string, string>;
   }, [slideReport?.report_ids, reportIdsOverride]);
 
-  return useQuery({
+  const queryResult = useQuery({
     // Key includes selectedYear so switching years refetches the correct data.
     // Month is NOT in the key — we always fetch the full year and let the
     // client-side useFilteredSlideData narrow to the selected month for KPI totals.
@@ -282,4 +284,22 @@ export function useDataStudioRawRows(
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
+
+  // Cache verification guard: if the query is enabled with real IDs but the cached result
+  // has zero rows across all channels, the previous query likely ran before IDs were ready
+  // and cached an empty response. Invalidate once to force a fresh fetch.
+  const { data, isLoading, isFetching } = queryResult;
+  const allChannelsEmpty = data != null &&
+    Object.values(data.rawRows).every((rows) => rows.length === 0);
+
+  useEffect(() => {
+    if (enabled && !!slideReport?.id && !isLoading && !isFetching && allChannelsEmpty) {
+      console.warn('[DataStudio] Cached result has 0 rows but query is enabled — invalidating cache to force refetch');
+      queryClient.invalidateQueries({
+        queryKey: ['data-studio-raw-rows', slideReport?.id, selectedYear],
+      });
+    }
+  }, [enabled, slideReport?.id, isLoading, isFetching, allChannelsEmpty, queryClient, selectedYear]);
+
+  return queryResult;
 }
