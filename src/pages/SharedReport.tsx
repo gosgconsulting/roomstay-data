@@ -219,16 +219,11 @@ export default function SharedReport() {
       
       writeShareDateToSession(slug, dateSelection);
       
-      // Legacy: Store view_id if it exists (for backward compatibility)
+      // Store view_id from share_links if it exists so SlideViewPage can apply the saved view once.
+      // Note: ?viewId= query-string sync is intentionally NOT supported — master and shared both
+      // use session storage exclusively so the view application path is identical.
       if (hasViewId) {
         sessionStorage.setItem(`share_view_id_${finalSlideReportId}`, linkData.view_id);
-      }
-      
-      // Read viewId from URL query string (passed by share links like /shared/brady/studio?viewId=...)
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlViewId = urlParams.get('viewId');
-      if (urlViewId) {
-        sessionStorage.setItem(`share_view_id_${finalSlideReportId}`, urlViewId);
       }
       
       // Store share link data for authentication persistence

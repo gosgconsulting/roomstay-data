@@ -200,58 +200,62 @@ export default function SlideViewPage() {
     }
   }, [navigate]);
   
-  // Bootstrap public share studio mode
+  // Resolve account from URL param or from auth context (short-entry route support).
+  // For public share studio, read IDs synchronously from sessionStorage in lazy useState so
+  // useSlideReportPage always receives the correct accountId/slideReportId on its very first render.
+  // This prevents an uncacheable empty React Query result being locked in for staleTime (5 min).
+  const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
+
+  const [shareAccountId, setShareAccountId] = useState<string | null>(() => {
+    if (!isPublicShareStudio || !effectiveSlug) return null;
+    return sessionStorage.getItem(`share_account_id_${effectiveSlug}`) ?? null;
+  });
+  const [shareSlideReportId, setShareSlideReportId] = useState<string | null>(() => {
+    if (!isPublicShareStudio || !effectiveSlug) return null;
+    return sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`) ?? null;
+  });
+  const [shareLockedDimensionIds, setShareLockedDimensionIds] = useState<string[]>(() => {
+    if (!isPublicShareStudio || !effectiveSlug) return [];
+    try {
+      const raw = sessionStorage.getItem(`share_locked_dimension_ids_${effectiveSlug}`);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Bootstrap public share studio mode: verify auth, enable read-only, apply filters.
+  // IDs are already set via lazy useState above — no need to call setShareAccountId etc. here
+  // unless the session recovers a stale mount (e.g. HMR).
   useEffect(() => {
     if (!isPublicShareStudio || !effectiveSlug) return;
-    
-    const studioBootstrapStart = performance.now();
-    console.log('[SlideViewPage] Public share studio bootstrap starting');
-    
-    // Verify authentication
+
+    // Verify authentication — redirect to password page if not set
     const authKey = `share_auth_${effectiveSlug}`;
     const storedAuth = sessionStorage.getItem(authKey);
-    
     if (storedAuth !== "true") {
-      // Not authenticated - redirect to password page
       navigate(`/shared/${effectiveSlug}`, { replace: true });
       return;
     }
-    
-    // Load account and slide IDs from sessionStorage
+
+    // Re-read IDs in case the effect fires after a session recovery (lazy init already covers
+    // the first render, but a second mount — e.g. Strict Mode double-invoke — may have cleared them).
     const storedAccountId = sessionStorage.getItem(`share_account_id_${effectiveSlug}`);
     const storedSlideReportId = sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`);
     const storedLockedDimensions = sessionStorage.getItem(`share_locked_dimension_ids_${effectiveSlug}`);
-    
     if (storedAccountId) setShareAccountId(storedAccountId);
     if (storedSlideReportId) setShareSlideReportId(storedSlideReportId);
     if (storedLockedDimensions) {
-      try {
-        setShareLockedDimensionIds(JSON.parse(storedLockedDimensions));
-      } catch (e) {
-        setShareLockedDimensionIds([]);
-      }
+      try { setShareLockedDimensionIds(JSON.parse(storedLockedDimensions)); } catch { setShareLockedDimensionIds([]); }
     }
-    
+
     // Enable read-only mode for public shares
     setIsReadOnlyMode(true);
-    
-    // Date is already initialized from sessionStorage in useState (see buildInitialDateStateForSharedStudio)
-    // No need to restore it here - that would cause a race condition
-    
-    // Load filters from sessionStorage if available
+
+    // Apply share-link channel filters (date already initialized via buildInitialDateStateForSharedStudio)
     const channelFilters = readShareFiltersFromSession(effectiveSlug);
     if (channelFilters) setFilterValues(channelFilters);
-    
-    const studioBootstrapEnd = performance.now();
-    console.log(`[SlideViewPage] Public share studio bootstrap complete in ${(studioBootstrapEnd - studioBootstrapStart).toFixed(2)}ms`);
   }, [isPublicShareStudio, effectiveSlug, navigate]);
-
-  // Resolve account from URL param or from auth context (short-entry route support).
-  // For public share studio, use account from sessionStorage
-  const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
-  const [shareAccountId, setShareAccountId] = useState<string | null>(null);
-  const [shareSlideReportId, setShareSlideReportId] = useState<string | null>(null);
-  const [shareLockedDimensionIds, setShareLockedDimensionIds] = useState<string[]>([]);
   
   const accountId = isPublicShareStudio 
     ? shareAccountId 
