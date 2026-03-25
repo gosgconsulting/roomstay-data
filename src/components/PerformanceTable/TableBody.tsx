@@ -15,7 +15,7 @@ import { formatValue } from "@/lib/performanceTable/formatters";
 import { TableRow } from "./TableRow";
 import type { Dimension } from "@/hooks/performanceTable/usePerformanceTableDimensions";
 import type { TableRow as TableRowType } from "@/hooks/performanceTable/usePerformanceTableData";
-import type { FilterState } from "@/components/FiltersBar";
+import type { FilterState } from "@/types/filters";
 
 interface TableBodyProps {
   filteredTableData: TableRowType[];

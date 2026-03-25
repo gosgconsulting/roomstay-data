@@ -80,6 +80,7 @@ import {
   getMetricKeys,
   ensureMinimumChartData,
 } from "@/lib/slideViewHelpers";
+import { DEFAULT_CHART_METRIC, parseChartMetric } from "@/lib/chartMetric";
 import type { RawDataRow, MetricData, ChartGranularity, ChartMetric } from "@/types/slideView";
 
 // Default groupBy / breakdownBy dimension name hints per channel.
@@ -98,6 +99,53 @@ function buildDefaultDataStudioDateState(): {
     range,
     selectedYear: selection.year,
     selectedMonth: selection.month,
+  };
+}
+
+/**
+ * Build initial date state for shared studio mode.
+ * Reads from sessionStorage BEFORE first render to avoid race condition.
+ * Returns default month-to-date if no shared date is stored.
+ */
+function buildInitialDateStateForSharedStudio(slug: string | null | undefined): {
+  range: import("react-day-picker").DateRange;
+  selectedYear: string;
+  selectedMonth: string;
+} {
+  if (!slug) {
+    console.log('[SharedStudio] No slug, using default date state');
+    return buildDefaultDataStudioDateState();
+  }
+  
+  const sharedDate = readShareDateFromSession(slug);
+  if (!sharedDate) {
+    console.log('[SharedStudio] No date in sessionStorage for slug:', slug, '- using default');
+    return buildDefaultDataStudioDateState();
+  }
+  
+  console.log('[SharedStudio] Initializing date from sessionStorage:', JSON.stringify(sharedDate));
+  
+  let range: import("react-day-picker").DateRange;
+  if (sharedDate.customDateRange) {
+    range = {
+      from: new Date(sharedDate.customDateRange.from),
+      to: new Date(sharedDate.customDateRange.to),
+    };
+  } else {
+    // Fallback to building range from year/month
+    const yearNum = parseInt(sharedDate.selectedYear);
+    if (sharedDate.selectedMonth === 'Month to Date') {
+      range = getCurrentMonthToDateRange();
+    } else {
+      // Use first day of month as fallback
+      range = { from: new Date(yearNum, 0, 1), to: new Date(yearNum, 11, 31) };
+    }
+  }
+  
+  return {
+    range,
+    selectedYear: sharedDate.selectedYear,
+    selectedMonth: sharedDate.selectedMonth,
   };
 }
 
@@ -182,18 +230,8 @@ export default function SlideViewPage() {
     // Enable read-only mode for public shares
     setIsReadOnlyMode(true);
     
-    // Load date selection from sessionStorage if available
-    const sharedDate = readShareDateFromSession(effectiveSlug);
-    if (sharedDate) {
-      setSelectedYear(sharedDate.selectedYear);
-      setSelectedMonth(sharedDate.selectedMonth);
-      if (sharedDate.customDateRange) {
-        setCustomDateRange({
-          from: new Date(sharedDate.customDateRange.from),
-          to: new Date(sharedDate.customDateRange.to),
-        });
-      }
-    }
+    // Date is already initialized from sessionStorage in useState (see buildInitialDateStateForSharedStudio)
+    // No need to restore it here - that would cause a race condition
     
     // Load filters from sessionStorage if available
     const channelFilters = readShareFiltersFromSession(effectiveSlug);
@@ -230,13 +268,33 @@ export default function SlideViewPage() {
       navigate(`/tools/reports`, { replace: true });
     }
   }, [accountId, slideId, location.pathname, navigate]);
-  const initialDateState = useMemo(() => buildDefaultDataStudioDateState(), []);
-
-  const [selectedYear, setSelectedYear] = useState(initialDateState.selectedYear);
-  const [selectedMonth, setSelectedMonth] = useState(initialDateState.selectedMonth);
+  
+  // Initialize date state - for shared studio, read from sessionStorage BEFORE first render
+  // to avoid race condition where default state triggers wrong year fetch
+  // Use lazy initialization (function form) so it only runs once on mount
+  const [selectedYear, setSelectedYear] = useState(() => {
+    const state = isPublicShareStudio 
+      ? buildInitialDateStateForSharedStudio(effectiveSlug)
+      : buildDefaultDataStudioDateState();
+    return state.selectedYear;
+  });
+  
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const state = isPublicShareStudio 
+      ? buildInitialDateStateForSharedStudio(effectiveSlug)
+      : buildDefaultDataStudioDateState();
+    return state.selectedMonth;
+  });
+  
   // These are declared here so useSlideReportPage (called below) can receive them.
   // useDataStudioFilters receives them as controlled state so it becomes the single manager.
-  const [customDateRange, setCustomDateRange] = useState<import("react-day-picker").DateRange | undefined>(initialDateState.range);
+  const [customDateRange, setCustomDateRange] = useState<import("react-day-picker").DateRange | undefined>(() => {
+    const state = isPublicShareStudio 
+      ? buildInitialDateStateForSharedStudio(effectiveSlug)
+      : buildDefaultDataStudioDateState();
+    return state.range;
+  });
+  
   const [comparisonType, setComparisonType] = useState("none");
   const [filterValues, setFilterValues] = useState<Record<string, Record<string, string[]>>>({
     metasearch: {},
@@ -246,7 +304,7 @@ export default function SlideViewPage() {
     booking: {},
   });
   const [selectedTab, setSelectedTab] = useState("overview");
-  const [chartMetric, setChartMetric] = useState<ChartMetric>('revenue');
+  const [chartMetric, setChartMetric] = useState<ChartMetric>(DEFAULT_CHART_METRIC);
   const [chartGranularity, setChartGranularity] = useState<ChartGranularity>('week');
   const [priceCheckChartTimeRange, setPriceCheckChartTimeRange] = useState<'this_year' | 'last_12_months' | 'last_6_months' | 'last_3_months'>('last_6_months');
   // Per-channel breakdown table dimensions.
@@ -562,6 +620,7 @@ export default function SlideViewPage() {
           channelConfigs,
           breakdownConfigs: breakdownConfigsAuto,
           filterConfigs: filterConfigsAuto,
+          chartMetric: DEFAULT_CHART_METRIC,
         };
 
         const dateRange = buildDefaultSlideReportDateRange();
@@ -590,86 +649,28 @@ export default function SlideViewPage() {
   }, [accountId, user, slideReportId, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social, slideReport?.configuration?.selectedChannels]);
 
   // Check for share authentication when user is not authenticated (moved after slideReportId declaration)
+  // Legacy ?shared=true path removed — all shares now use /shared/:slug/studio
+  // This effect is kept for backward compatibility in case old links exist,
+  // but it just redirects to the new path.
   useEffect(() => {
     if (isUserLoading) return;
 
     if (!user) {
-      // Check if we're accessing via a share link
       const isShared = searchParams.get('shared') === 'true';
       const slug = searchParams.get('slug');
 
       if (isShared && slug) {
-        // Check if share authentication exists in sessionStorage
-        const authKey = `share_auth_${slug}`;
-        const shareAuth = sessionStorage.getItem(authKey);
-
-        if (shareAuth === "true") {
-          setIsSharedAccess(true);
-
-          // Load filters from share link if available
-          const filtersKey = `share_filters_${slug}`;
-          const storedFilters = sessionStorage.getItem(filtersKey);
-          if (storedFilters) {
-            try {
-              const channelFilters = JSON.parse(storedFilters);
-              // Apply filters immediately
-              setFilterValues(channelFilters);
-            } catch (error) {
-              console.error('[testing] Error parsing share link filters:', error);
-            }
-          }
-
-          // Load slide_report_id and account_id from share link if available
-          const storedSlideReportId = sessionStorage.getItem(`share_slide_report_id_${slug}`);
-          const storedAccountId = sessionStorage.getItem(`share_account_id_${slug}`);
-
-          if (storedSlideReportId && storedAccountId) {
-            // Set slide report ID if not already set
-            if (!slideReportId) {
-              setSlideReportId(storedSlideReportId);
-            }
-            // Verify accountId matches
-            if (accountId !== storedAccountId) {
-              console.warn('[testing] Account ID mismatch:', { accountId, storedAccountId });
-            }
-          }
-        } else {
-          // No share auth found, redirect to public share route (not /:slug alone — that collides with app paths)
-          navigate(`/shared/${slug}`, { replace: true });
-        }
+        // Redirect to new share path
+        navigate(`/shared/${slug}`, { replace: true });
       }
     } else {
       setIsSharedAccess(false);
     }
-  }, [user, isUserLoading, searchParams, navigate, slideReportId, accountId]);
+  }, [user, isUserLoading, searchParams, navigate]);
 
   // Check for viewId in URL params or share link on mount and when views load
-  // Also check if we're accessing via a share link (shared=true)
   useEffect(() => {
-    const isShared = searchParams.get('shared') === 'true';
-    const slug = searchParams.get('slug');
-
-    // If accessing via share link, enable read-only mode
-    if (isShared && slug) {
-      setIsReadOnlyMode(true);
-
-      // Load filters from share link if not already loaded
-      const channelFilters = readShareFiltersFromSession(slug);
-      if (channelFilters) setFilterValues(channelFilters);
-
-      // Legacy: Check for view_id from share link (backward compatibility)
-      const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
-      if (shareViewId && views.length > 0) {
-        const view = views.find(v => v.id === shareViewId);
-        if (view) {
-          setSelectedViewId(shareViewId);
-          handleApplyView(shareViewId);
-          // Clear the session storage after using it
-          sessionStorage.removeItem(`share_view_id_${slideReportId}`);
-        }
-      }
-      return;
-    }
+    // Legacy ?shared=true path removed — all shares now use /shared/:slug/studio
 
     // Regular view handling (not from share link)
     const urlViewId = searchParams.get('viewId');
@@ -684,7 +685,8 @@ export default function SlideViewPage() {
         if (isReadOnlyMode && !isPublicShareStudio) setIsReadOnlyMode(false);
         setSelectedViewId(viewIdToUse);
         if (selectedViewId !== viewIdToUse) {
-          handleApplyView(viewIdToUse);
+          // For public share studio, skip date restoration from view (date comes from share_links)
+          handleApplyView(viewIdToUse, isPublicShareStudio ? { skipDateRestore: true } : undefined);
         }
 
         // Clear the session storage after using it
@@ -1030,9 +1032,7 @@ export default function SlideViewPage() {
       if (config.breakdownByDimension) {
         setBreakdownByDimensionRaw(prev => ({ ...prev, ...config.breakdownByDimension }));
       }
-      if (config.chartMetric) {
-        setChartMetric(config.chartMetric as ChartMetric);
-      }
+      setChartMetric(parseChartMetric(config.chartMetric));
       if (config.chartGranularity) {
         setChartGranularity(config.chartGranularity as ChartGranularity);
       }
@@ -1040,10 +1040,15 @@ export default function SlideViewPage() {
     const isNewReport = lastSyncedSlideReportIdRef.current !== slideReportId;
     if (isNewReport) {
       lastSyncedSlideReportIdRef.current = slideReportId;
-      const defaultDateState = buildDefaultDataStudioDateState();
-      setSelectedYear(defaultDateState.selectedYear);
-      setSelectedMonth(defaultDateState.selectedMonth);
-      setCustomDateRange(defaultDateState.range);
+      
+      // For public share studio, date is already initialized from sessionStorage - don't reset it
+      if (!isPublicShareStudio) {
+        const defaultDateState = buildDefaultDataStudioDateState();
+        setSelectedYear(defaultDateState.selectedYear);
+        setSelectedMonth(defaultDateState.selectedMonth);
+        setCustomDateRange(defaultDateState.range);
+      }
+      
       // Restore persisted filter values for the new report (overrides the default empty state).
       const savedFilters = config?.activeFilterValues;
       if (savedFilters) {
@@ -1056,7 +1061,7 @@ export default function SlideViewPage() {
         });
       }
     }
-  }, [slideReport, slideReportId, availableChannels]);
+  }, [slideReport, slideReportId, availableChannels, isPublicShareStudio]);
 
   // Ref that always holds the latest slide report config (used inside debounce to avoid stale closure).
   const slideReportConfigRef = useRef<any>(null);
@@ -2405,6 +2410,10 @@ export default function SlideViewPage() {
         name: viewName,
         selected_year: selectedYear,
         selected_month: selectedMonth,
+        custom_date_range: customDateRange ? {
+          from: formatDateToLocalIso(customDateRange.from!),
+          to: formatDateToLocalIso(customDateRange.to || customDateRange.from!)
+        } : null,
         comparison_type: comparisonType as any,
         price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues }, // Deep copy to avoid mutations
@@ -2429,7 +2438,7 @@ export default function SlideViewPage() {
       // Error toast is handled by the mutation
       console.error('Error saving view:', error);
     }
-  }, [slideReportId, slideReport, user, accountId, selectedYear, selectedMonth, comparisonType, priceCheckChartTimeRange, filterValues, createView, queryClient]);
+  }, [slideReportId, slideReport, user, accountId, selectedYear, selectedMonth, customDateRange, comparisonType, priceCheckChartTimeRange, filterValues, createView, queryClient]);
 
   // Update an existing view with current filter configuration
   const handleUpdateView = useCallback(async (viewId: string) => {
@@ -2439,6 +2448,10 @@ export default function SlideViewPage() {
         id: viewId,
         selected_year: selectedYear,
         selected_month: selectedMonth,
+        custom_date_range: customDateRange ? {
+          from: formatDateToLocalIso(customDateRange.from!),
+          to: formatDateToLocalIso(customDateRange.to || customDateRange.from!)
+        } : null,
         comparison_type: comparisonType as any,
         price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues },
@@ -2447,11 +2460,13 @@ export default function SlideViewPage() {
     } catch (error) {
       console.error('Error updating view:', error);
     }
-  }, [slideReportId, user, selectedYear, selectedMonth, comparisonType, priceCheckChartTimeRange, filterValues, updateView, queryClient]);
+  }, [slideReportId, user, selectedYear, selectedMonth, customDateRange, comparisonType, priceCheckChartTimeRange, filterValues, updateView, queryClient]);
 
   // Apply a saved view (or reset to Master when viewId is null)
-  const handleApplyView = useCallback((viewId: string | null) => {
+  const handleApplyView = useCallback((viewId: string | null, options?: { skipDateRestore?: boolean }) => {
     if (!slideReportId) return;
+
+    console.log('[DEBUG] handleApplyView called:', { viewId, skipDateRestore: options?.skipDateRestore });
 
     isApplyingViewRef.current = true;
 
@@ -2469,7 +2484,7 @@ export default function SlideViewPage() {
     setSelectedViewId(viewId);
 
     // Delegate filter value + date restore to the canonical hook
-    dsFilters.applyView(view);
+    dsFilters.applyView(view, options);
 
     // Chart-level settings not owned by dsFilters
     setPriceCheckChartTimeRange(view?.price_check_chart_time_range || 'last_6_months');

@@ -275,58 +275,15 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   try {
-    // Opportunistic cleanup.
-    await supabase.from('query_cache').delete().lt('expires_at', new Date().toISOString());
-
-    if (forceRefresh) {
-      await supabase.from('query_cache').delete().eq('cache_key', cacheKey);
-    } else {
-      const { data: cachedEntry, error: cacheReadError } = await supabase
-        .from('query_cache')
-        .select('payload, expires_at')
-        .eq('cache_key', cacheKey)
-        .gt('expires_at', new Date().toISOString())
-        .maybeSingle();
-
-      if (!cacheReadError && cachedEntry?.payload) {
-        const payload = cachedEntry.payload as CachedPayload;
-        return jsonResponse({
-          success: true,
-          cache: {
-            key: cacheKey,
-            hit: true,
-            forceRefresh: false,
-            expiresAt: cachedEntry.expires_at,
-          },
-          rows: payload.rows || [],
-          dimMap: payload.dimMap || {},
-        });
-      }
-    }
-
+    // Cache removed - always compute fresh payload from database
     const payload = await computePayload(supabase, reportId, selectedYear, selectedMonth);
-    const expiresAt = new Date(Date.now() + CACHE_TTL_MINUTES * 60 * 1000).toISOString();
-
-    const { error: upsertError } = await supabase.from('query_cache').upsert({
-      cache_key: cacheKey,
-      report_id: reportId,
-      payload,
-      cache_version: cacheVersion,
-      created_at: new Date().toISOString(),
-      expires_at: expiresAt,
-    });
-
-    if (upsertError) {
-      console.error('[get-cached-report-data] cache upsert failed:', upsertError.message);
-    }
 
     return jsonResponse({
       success: true,
       cache: {
         key: cacheKey,
         hit: false,
-        forceRefresh,
-        expiresAt,
+        forceRefresh: true,
       },
       rows: payload.rows,
       dimMap: payload.dimMap,

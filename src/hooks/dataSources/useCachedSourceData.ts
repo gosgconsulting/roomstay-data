@@ -1,5 +1,5 @@
 /**
- * Fetches dimension_data from Supabase for a report (used by PerformanceTable, KPIChart, FiltersBar).
+ * Fetches dimension_data from Supabase for a report (used by PerformanceTable).
  * Cache is disabled (staleTime/gcTime 0, refetch on mount) so Data Studio always shows fresh data
  * and KPIs (e.g. metasearch cost) are not stuck on stale cached values.
  */

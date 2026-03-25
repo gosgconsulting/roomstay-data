@@ -1,33 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
-// Cache for dimension data availability results
-const dimensionDataCache = new Map<string, Record<string, boolean>>();
-const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
-const cacheTimestamps = new Map<string, number>();
-
-
 /**
- * Checks if cache is valid for a report
- * @param reportId - The report ID to check
- * @returns boolean - true if cache is valid and not expired
- */
-function isCacheValid(reportId: string): boolean {
-  const timestamp = cacheTimestamps.get(reportId);
-  if (!timestamp) return false;
-  
-  const isExpired = Date.now() - timestamp > CACHE_EXPIRY_MS;
-  if (isExpired) {
-    dimensionDataCache.delete(reportId);
-    cacheTimestamps.delete(reportId);
-    return false;
-  }
-  
-  return dimensionDataCache.has(reportId);
-}
-
-
-/**
- * Checks if multiple dimensions have data for a specific report using source data (with caching)
+ * Checks if multiple dimensions have data for a specific report using source data (no caching)
  * @param dimensionIds - Array of dimension IDs to check
  * @param reportId - The ID of the report to check data for
  * @param sourceData - Optional source data to check. If not provided, will fetch from source
@@ -43,20 +17,6 @@ export async function checkDimensionsHaveData(
     return {};
   }
 
-  // Check cache first
-  if (isCacheValid(reportId)) {
-    const cachedResult = dimensionDataCache.get(reportId);
-    if (cachedResult) {
-      console.log('[DIMENSION-UTILS] Using cached data for report:', reportId);
-      // Return only the requested dimensions from cache
-      const filteredResult: Record<string, boolean> = {};
-      dimensionIds.forEach(id => {
-        filteredResult[id] = cachedResult[id] || false;
-      });
-      return filteredResult;
-    }
-  }
-
   try {
     console.log('[DIMENSION-UTILS] Checking data for', dimensionIds.length, 'dimensions in report:', reportId);
 
@@ -69,18 +29,12 @@ export async function checkDimensionsHaveData(
       // If sourceData is not provided, we cannot check - return all false
       // The caller should provide sourceData from useSourceData hook
       console.warn('[DIMENSION-UTILS] No sourceData provided. Caller should use useSourceData hook and pass the data.');
-      const result = dimensionIds.reduce((acc, id) => ({ ...acc, [id]: false }), {});
-      dimensionDataCache.set(reportId, result);
-      cacheTimestamps.set(reportId, Date.now());
-      return result;
+      return dimensionIds.reduce((acc, id) => ({ ...acc, [id]: false }), {});
     }
 
     if (rowsToCheck.length === 0) {
       console.log('[DIMENSION-UTILS] No data found for report:', reportId);
-      const result = dimensionIds.reduce((acc, id) => ({ ...acc, [id]: false }), {});
-      dimensionDataCache.set(reportId, result);
-      cacheTimestamps.set(reportId, Date.now());
-      return result;
+      return dimensionIds.reduce((acc, id) => ({ ...acc, [id]: false }), {});
     }
 
     // Initialize all dimensions as false
@@ -119,10 +73,6 @@ export async function checkDimensionsHaveData(
       totalDimensionsInData: Object.keys(hasDataMap).length,
       requestedDimensions: dimensionIds.length
     });
-
-    // Cache the complete result for all dimensions found
-    dimensionDataCache.set(reportId, hasDataMap);
-    cacheTimestamps.set(reportId, Date.now());
 
     // Return only the requested dimensions
     const filteredResult: Record<string, boolean> = {};

@@ -272,9 +272,13 @@ export function useDataStudioRawRows(
       return { rawRows: result, dimensionMaps };
     },
     enabled: enabled && !!slideReport?.id && Object.keys(reportIds).length > 0,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnMount: true,
+    // Smart caching for performance:
+    // - staleTime: Data is fresh for 5 minutes (no refetch)
+    // - gcTime: Keep in memory for 10 minutes after last use
+    // - Refresh Data button invalidates cache via queryClient.invalidateQueries
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnMount: false, // Don't refetch if data is fresh
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });

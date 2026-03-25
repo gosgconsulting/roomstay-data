@@ -123,10 +123,10 @@ Google Sheets / CSV URL
 
 - **Entry point:** `/` renders `SlideViewPage` directly — Data Studio is the app homepage.
 - **Orchestrator hook:** `src/hooks/useSlideReportPage.ts` — composes sub-hooks for report identity, raw rows, filtered data, views, budgets, and mutations.
-- **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads via `get-cached-report-data` edge function. The canonical source remains `dimension_data`; query results are cache-aside stored in `query_cache` (30m TTL) and React Query uses `staleTime` (5m) + `gcTime` (10m) to reduce repeated fetches. **Multi-year fetch:** when `customDateRange` spans multiple calendar years (e.g. Nov 2025 → Feb 2026), `useSlideReportPage` fetches each intersecting year in parallel (up to 3 years via fixed hook slots) and merges the rows before filtering. Helper: `getYearsInDateRange()` in `monthUtils.ts`.
+- **Raw rows:** `src/hooks/useDataStudioRawRows.ts` — reads via `get-cached-report-data` edge function. The canonical source is `dimension_data`; **smart caching enabled** (React Query `staleTime: 5min`, `gcTime: 10min`) for fast subsequent loads while keeping data fresh. **Multi-year fetch:** when `customDateRange` spans multiple calendar years (e.g. Nov 2025 → Feb 2026), `useSlideReportPage` fetches each intersecting year in parallel (up to 3 years via fixed hook slots) and merges the rows before filtering. Helper: `getYearsInDateRange()` in `monthUtils.ts`.
 - **Filtered data:** `src/hooks/useFilteredSlideData.ts` — pure client-side filtering and aggregation. Single source of truth for KPI totals, monthly chart data, and filtered raw rows.
 - **Filter state:** `src/hooks/useDataStudioFilters.ts` — canonical owner of `filterValues`, `customDateRange`, `comparisonType`, `filterConfigs`. Restores view filters via `applyView`. All consumers (KPI cards, charts, breakdown tables) read from the same `filterValues` and use a shared `configuredDimensionNames` map for global-to-report dimension ID resolution. Exact custom date ranges stay page-controlled even when the initial value is `undefined`, so applying a sub-month range updates KPI cards, charts, and tables together. The default top date filter is **month to date** (1st of current month → today) via `getCurrentMonthToDateRange()` and preset id `DEFAULT_REPORT_DATE_PRESET` (`month_to_date`) in `monthUtils.ts`. The UI labels that preset **“This Month”**; **“Full month”** (`this_month`) selects the entire calendar month.
-- **Filter flow:** saved view → `applyView` → top date filter + `filterValues` → `useFilteredSlideData` (KPI totals + monthly data) + `useChannelChartDataFromRawRows` (overview/channel charts) + `BreakdownTableSection` (breakdown tables). All paths resolve filter IDs via `filterRawDataRows(..., combinedDimNames)`, and charts now use the same top date range as KPI cards/tables.
+- **Filter flow:** saved view → `applyView` → top date filter + `filterValues` → `useFilteredSlideData` (KPI totals + monthly data) + `useChannelChartDataFromRawRows` (overview/channel charts) + `BreakdownTableSection` (breakdown tables). All paths resolve filter IDs via `filterRawDataRows(..., combinedDimNames)`, and charts now use the same top date range as KPI cards/tables. **Filter format:** `filterValues` is ALWAYS channel-based (`{ metasearch: {}, sem: {}, social: {} }`), never report-based (`{ [reportId]: {} }` — deprecated format auto-converted in `SharedReport.tsx`).
 - **Same-named dimension IDs:** If a channel has multiple data sources, `dimension_values` may use **different UUIDs** for the same column label (e.g. two “Hotel” dimensions). Filter dropdown options and `filterRawDataRows` read every key that shares the same display name in the merged map (`getRowKeysForSameNamedDimension` / `readRowTextDimensionValue` in `slideViewHelpers.ts`) so metasearch Hotel lists and applied filters stay aligned with breakdown rows.
 - **Performance table:** `src/components/PerformanceTable/` + `src/hooks/performanceTable/`.
 - **View settings:** stored in `views` table (canonical, replaces legacy `report_views` + `slide_report_views`).
@@ -192,7 +192,7 @@ Google Sheets / CSV URL
 
 **Behavior:**
 - Share links can be password-protected (base64 encoded - NOTE: not cryptographically secure, consider proper hashing)
-- **Main dimension is locked:** When saving a view, users select a main dimension (Account/Hotel). This dimension is locked when the view is shared publicly.
+- **Main dimension is locked:** When saving a view, users select a main dimension (Account/Hotel). This dimension is locked when the view is shared publicly. Locked filters show a lock icon, are disabled (cannot be changed), and display a tooltip: "This filter is locked by the report owner". Filter options are still derived from rawDataRows so viewers can see available values.
 - **Selective read-only:** Viewers can change date range, comparison period, and non-locked filter values (Device, Market, Link Type, Campaign, Ad Group) locally. Locked dimensions (Account/Hotel) remain disabled. Structural changes (save view, share, refresh, dimension configuration) are disabled.
 - **Default date filter:** Owner and shared reports default to **month to date** (preset `month_to_date`, UI label “This Month”) on initial load; **Full month** remains a separate preset for the full calendar month.
 - **Smart defaults:** Metasearch → Hotel, SEM/Social → Account (inferred from active tab when saving view)
@@ -209,7 +209,7 @@ Google Sheets / CSV URL
   - `share_date_${slug}` — JSON date selection (year, month, customRange, preset)
 - **Loading: owner (master) vs shared (first load):**
   - **Owner `/` (Data Studio):** `ProtectedRoute` → `useUser` + `useUserAccount` → `useSlideReportPage` resolves or creates the account’s `slide_reports` row, then `useDataStudioRawRows` + filtered aggregates. Primary loading signal for the tab surface is `isFetchingRawRows` (top-edge pulse in `SlideViewPage`). Filter options come from in-memory raw rows via `useDataStudioFilters` (no separate “filter values” network round-trip for dropdowns).
-  - **Shared studio `/shared/:slug/studio`:** Not behind `ProtectedRoute`. `SharedReport` (or returning session) writes session keys and `navigate`s here. `SlideViewPage` checks `share_auth_${slug}` first; missing auth redirects to `/shared/:slug`. It then reads `share_account_id_*`, `share_slide_report_id_*`, `share_filters_*`, `share_date_*` in an effect — **one paint can run with `accountId` null** before session hydration. `slide_report_id` drives `useSlideReport` + `useDataStudioRawRows` (same pipeline as owner once IDs exist). Anonymous users skip `loadOrCreateSlideReport` in `useSlideReportPage` (`user` is null). **UI/filter state is local-only:** debounced persistence of `groupByDimension`, `breakdownByDimension`, chart settings, and filter values is skipped when `!user || isPublicShareStudio` (guards against RLS-rejected `slide_reports` UPDATEs from anonymous viewers). **Date restoration:** `SharedReport.tsx` reads date from `share_links` (or fallback to view if `view_id` exists), stores in `share_date_${slug}` sessionStorage, and `SlideViewPage` bootstrap effect restores `selectedYear`, `selectedMonth`, `customDateRange` from session so shared viewers see the same date range as when the link was created.
+  - **Shared studio `/shared/:slug/studio`:** Not behind `ProtectedRoute`. `SharedReport` (or returning session) writes session keys and `navigate`s here. `SlideViewPage` checks `share_auth_${slug}` first; missing auth redirects to `/shared/:slug`. It then reads `share_account_id_*`, `share_slide_report_id_*`, `share_filters_*`, `share_date_*` in an effect — **one paint can run with `accountId` null** before session hydration. `slide_report_id` drives `useSlideReport` + `useDataStudioRawRows` (same pipeline as owner once IDs exist). Anonymous users skip `loadOrCreateSlideReport` in `useSlideReportPage` (`user` is null). **UI/filter state is local-only:** debounced persistence of `groupByDimension`, `breakdownByDimension`, chart settings, and filter values is skipped when `!user || isPublicShareStudio` (guards against RLS-rejected `slide_reports` UPDATEs from anonymous viewers). **Date restoration (cross-year safe):** `SharedReport.tsx` reads date from `share_links` (or fallback to view if `view_id` exists) and stores in `share_date_${slug}` sessionStorage. `SlideViewPage` uses **lazy state initialization** (function-based `useState`) to read from sessionStorage before the first render, ensuring the correct date is set immediately. View application uses `skipDateRestore: true` to prevent view dates from overriding the share link date. The `slideReportId` change effect skips date reset when `isPublicShareStudio` is true. This ensures cross-year date ranges (e.g., Dec 2025 - Mar 2026) persist correctly and trigger multi-year parallel fetches via `useSlideReportPage`.
   - **Classic shared `/shared/:slug`:** `FiltersBar` + `KPIMetricsCards` + `KPIChart` + `PerformanceTable` each fetch/load independently; parent tracks `loadingComponents` / `isDataLoading` (global loading toast is currently disabled). First load depends on owner-id resolution for dimensions when the viewer is anonymous.
   - **Passwordless links:** Treat empty / null `password_hash` as open access: auto-persist session and call `initializeReport` so visitors are not stuck behind the password card (see `SharedReport.tsx`).
   - **Session recovery:** On return to `/shared/:slug` with `share_auth` set but `share_data` missing or corrupt, `SharedReport` re-fetches `share_links` from Supabase and rewrites the session (bootstrap uses `bootstrapDoneRef` to prevent double-invocation). On DB failure, stale auth is cleared and the user sees the password card with a "Session expired" toast.
@@ -249,7 +249,6 @@ Google Sheets / CSV URL
 | Table | Purpose |
 |---|---|
 | `dimension_data` | Canonical fact store (post-mapping, dimension-id keyed rows) |
-| `query_cache` | Server-side cache for report/year query payloads (TTL via `expires_at`) |
 | `dimensions` | Dimension registry (account, custom, global scopes) |
 | `data_sources` | Google Sheets / CSV source configs |
 | `reports` | Report identity per account; optional `channel` (`metasearch` / `sem` / `social`) — migration `20260319010000_add_reports_channel.sql`; `accountReportIds.ts` prefers `channel` then name heuristics; `DashboardHeader` sets `channel` on create from `inferReportChannelFromName()` (`src/lib/reportChannel.ts`); renames only update `channel` when the new name implies one (generic renames keep the existing value); after create/update/delete, `DashboardHeader` calls `clearAccountReportIdsCache(accountId)` so `getAccountReportIds` refetches |
@@ -420,15 +419,27 @@ Supabase anon key and project URL are hardcoded in `src/integrations/supabase/cl
 
 **Duplicate mapping (canonical vs retired):**
 
-| Area | Canonical |
-|------|-----------|
-| Data Studio filters | `FiltersRow` + `useDataStudioFilters` |
-| Shared/public report filters | `FiltersBar` (different context) |
-| Sync | `refreshWorkflow.ts` / Edge only |
-| Raw rows | `useDataStudioRawRows` → `get-cached-report-data` / `dimension_data` |
-| Charts | `useChannelChartDataFromRawRows` |
-| Saved views | `views` table |
-| Channel report lookup | `reports.channel` first, then name heuristics (`accountReportIds`) |
+| Area | Canonical | Retired |
+|------|-----------|---------|
+| Data Studio filters | `FiltersRow` + `useDataStudioFilters` | ✅ `FiltersBar` removed (Phase 6) |
+| Raw data fetch | `useDataStudioRawRows` → `get-cached-report-data` | ⏭️ `useCachedSourceData`, `useSourceData` (PerformanceTable only) |
+| KPI display | `KPICardsSection` (Data Studio) | ✅ `KPIMetricsCards` removed (Phase 6) |
+| Charts | `useChannelChartDataFromRawRows` → `OverviewTab` / `ChannelTab` | ✅ `KPIChart` removed (Phase 6) |
+| Multi-year fetch | `getYearsInDateRange` → parallel `useDataStudioRawRows` | ✅ Single-year removed (Phase 6) |
+| Shared reports | `/shared/:slug/studio` (Data Studio) | ✅ Classic dashboard removed (Phase 6) |
+| Sync | `refreshWorkflow.ts` / Edge only | ✅ Client sync removed (Phase 5) |
+| Saved views | `views` table | ✅ `report_views` / `slide_report_views` removed (Phase 5) |
+| Channel report lookup | `reports.channel` first, then name heuristics (`accountReportIds`) | - |
+
+**Phase 6 (2026-03-25) — Data fetching unification** ✅ **COMPLETE:**
+- **Goal:** Remove duplicate data fetching systems by migrating classic shared reports to use the Data Studio pipeline.
+- **What was done:**
+  1. **Unified pipeline**: ALL share links (`/shared/:slug`) now redirect to Data Studio (`/shared/:slug/studio`)
+  2. **Auto-migration**: Legacy `report_ids`-only links automatically create/find Data Studio slide reports
+  3. **Removed duplicates**: Deleted FiltersBar (38 KB), KPIMetricsCards (17 KB), KPIChart (29 KB)
+  4. **Bundle reduction**: 2029 KB → 1768 KB (-261 KB, -13%)
+- **Result:** Single data pipeline, cross-year dates everywhere, multi-year parallel fetch for all shares, consistent behavior
+- **Deferred:** `PerformanceTable` still uses classic hooks; can be migrated in future refactor
 
 **Looker Studio refactor (2026-03-18) — major removals:** AI summary and legacy pivot cache tables dropped; `views` replaces `report_views` / `slide_report_views`; retired edge functions (AI, pivot cache, vlookup, sheet migration); ~30 dead frontend files removed; `useSlideReportPage` uses `useFilteredSlideData` directly.
 
@@ -449,9 +460,9 @@ RPCs such as `get_dimension_data_by_report_and_date` support year-scoped fetches
 
 **Metasearch Cost (or other metrics) under-counted:** Prefer **Data Studio → Refresh Data → Full Refresh**. That clears `dimension_data` for the report(s) and re-syncs from sources with correct column → dimension mapping. **Optional DB fix without re-fetch:** run `supabase/scripts/fix_metasearch_cost_dimension_data.sql` via Supabase SQL Editor, `npm run fix:metasearch-cost` (linked CLI), or MCP `execute_sql` with the script body. Currency strings in sheets are normalized via `parseNumericValue` / `transformSourceData` — wrong totals are usually dimension ID / multi-source issues, not formatting.
 
-**Supabase MCP (linked project):** Cursor has a linked Supabase MCP connection (`user-supabase-modelisation`). Use `apply_migration` for all DDL changes (schema migrations) — this applies changes directly to the linked project without creating `.sql` files in the repo. Use `execute_sql` for one-off queries/scripts, `deploy_edge_function` to ship functions from `supabase/functions/`, `list_tables` / `list_migrations` for inspection. **Migration workflow:** Always use MCP `apply_migration` instead of writing migration files; this keeps the repo clean and applies changes immediately.
+**Supabase MCP (linked project):** Use the Supabase MCP server in Cursor (`plugin-supabase-supabase`: `list_projects`, `apply_migration`, `execute_sql`, `list_migrations`, `generate_typescript_types`, etc.). **Project ref** matches `project_id` in `supabase/config.toml` (e.g. `zcxxwpwheevwavdcgfht` for Sparti Data). Use `apply_migration` for DDL on the linked database; after applying, add a matching file under `supabase/migrations/<version>_<name>.sql` when you want the same change reproducible from git / local `supabase db`. Use `execute_sql` for read-only inspection or one-off data fixes. Use `list_migrations` to confirm `supabase_migrations.schema_migrations` before assuming the DB is behind the repo.
 
-**Legacy tables removed from the active linked project (2026-03-25, via MCP):** `ai_summary_*`, `slide_report_summaries`, `cluster_dimensions`, `cluster_mappings`, `slides`, `booking_statuses`, `master_filter_settings`. App code never queried these; `src/integrations/supabase/types.ts` matches the live schema.
+**Legacy tables removed from the active linked project (Sparti Data, via MCP):** `ai_summary_*`, `slide_report_summaries`, `cluster_dimensions`, `cluster_mappings`, `slides`, `booking_statuses`, `master_filter_settings` (2026-03-25); plus `report_daily_metrics`, `master_report_configs`, `master_report_global_configs` (2026-03-26). App code never queried the Master Report / daily-metrics tables; `src/integrations/supabase/types.ts` matches the live schema.
 
 **Local MCP refresh server:** see `mcp/README.md` for the optional `run_refresh_workflow` MCP tool package.
 

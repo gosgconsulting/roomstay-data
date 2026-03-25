@@ -1,5 +1,5 @@
 /**
- * Filter dimensions by view settings (FiltersBar, performance table).
+ * Filter dimensions by view settings (performance table).
  * Uses filter_dimensions or visible_dimensions from canonical views table.
  */
 
@@ -7,7 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 type SupabaseLike = SupabaseClient;
 
 /**
- * Filter dimensions by filter settings (for FiltersBar).
+ * Filter dimensions by filter settings (for performance table).
  * Uses filter_dimensions instead of visible_dimensions.
  */
 export const filterDimensionsByFilterSettings = async (

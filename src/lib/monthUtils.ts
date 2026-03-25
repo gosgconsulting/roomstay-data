@@ -418,7 +418,10 @@ export const DEFAULT_REPORT_DATE_PRESET = 'month_to_date' as const;
  * Returns [currentYear] when range is undefined.
  */
 export function getYearsInDateRange(range: DateRange | undefined): number[] {
-  if (!range?.from) return [new Date().getFullYear()];
+  if (!range?.from) {
+    const currentYear = new Date().getFullYear();
+    return [currentYear];
+  }
   const fromYear = range.from.getFullYear();
   const toYear = (range.to ?? range.from).getFullYear();
   const years: number[] = [];

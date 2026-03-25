@@ -32,7 +32,23 @@ type Channel = 'metasearch' | 'sem' | 'social';
 /** Which dimension IDs are enabled as filter dropdowns per channel. */
 export type FilterConfigs = Record<Channel, { filterDimensionIds: string[] }>;
 
-/** Selected values per channel: channel -> dimensionId -> selectedValues[]. */
+/**
+ * Selected values per channel: channel -> dimensionId -> selectedValues[].
+ * 
+ * ALWAYS channel-based format:
+ * ```typescript
+ * {
+ *   metasearch: { [dimensionId]: string[] },
+ *   sem: { [dimensionId]: string[] },
+ *   social: { [dimensionId]: string[] }
+ * }
+ * ```
+ * 
+ * NEVER report-based format (deprecated):
+ * ```typescript
+ * { [reportId]: { [dimensionId]: string[] } }
+ * ```
+ */
 export type FilterValues = Record<string, Record<string, string[]>>;
 
 /** Options per channel: channel -> dimensionId -> sortedUniqueValues[]. */
@@ -428,16 +444,18 @@ export function useDataStudioFilters({
     }
   }, [isReadOnly, setSelectedYear, setSelectedMonth]);
 
-  const applyView = useCallback((view: SlideReportView | null) => {
+  const applyView = useCallback((view: SlideReportView | null, options?: { skipDateRestore?: boolean }) => {
     if (!view) {
       // Reset to master — clear filters, comparison, and date back to month-to-date.
       setFilterValuesRaw(EMPTY_FILTER_VALUES);
       setComparisonTypeRaw('none');
-      const range = getCurrentMonthToDateRange();
-      const next = dateRangeToSlideSelection(range);
-      setCustomDateRangeRaw(range);
-      setSelectedYear(next.year);
-      setSelectedMonth(next.month);
+      if (!options?.skipDateRestore) {
+        const range = getCurrentMonthToDateRange();
+        const next = dateRangeToSlideSelection(range);
+        setCustomDateRangeRaw(range);
+        setSelectedYear(next.year);
+        setSelectedMonth(next.month);
+      }
       return;
     }
     const vf = view.filter_values || {};
@@ -448,21 +466,32 @@ export function useDataStudioFilters({
       'price-check': vf['price-check'] || {},
       booking: vf.booking || {},
     });
-    if (view.selected_year) setSelectedYear(view.selected_year);
-    if (view.selected_month) setSelectedMonth(view.selected_month);
+    
+    // Skip date restoration if requested (e.g., for public share studio where date comes from share_links)
+    if (!options?.skipDateRestore) {
+      if (view.selected_year) setSelectedYear(view.selected_year);
+      if (view.selected_month) setSelectedMonth(view.selected_month);
+      
+      // PRIORITY: Use custom_date_range if available (preserves exact dates for cross-year ranges)
+      if (view.custom_date_range) {
+        const customRange = view.custom_date_range as { from: string; to: string };
+        setCustomDateRangeRaw({
+          from: new Date(customRange.from),
+          to: new Date(customRange.to)
+        });
+      } else if (view.selected_year) {
+        // FALLBACK: Reconstruct from year/month (legacy views without custom_date_range)
+        const restored = slideSelectionToDateRange(
+          view.selected_year,
+          view.selected_month || 'all'
+        );
+        setCustomDateRangeRaw(restored ?? undefined);
+      }
+    }
+    
     // Always restore comparison_type from the view — including 'none', so switching
     // views doesn't silently keep a comparison active from a previous view.
     setComparisonTypeRaw(view.comparison_type ?? 'none');
-    // Reconstruct customDateRange from the view's year/month so the label, filtering,
-    // and query scope all agree. Without this, a stale customDateRange could override
-    // the year/month restored above.
-    if (view.selected_year) {
-      const restored = slideSelectionToDateRange(
-        view.selected_year,
-        view.selected_month || 'all'
-      );
-      setCustomDateRangeRaw(restored ?? undefined);
-    }
   }, [setSelectedYear, setSelectedMonth]);
 
   const setChannelFilterValue = useCallback((

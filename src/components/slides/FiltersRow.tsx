@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Filter, Share2, RefreshCw, Loader2, ChevronDown, X, RotateCcw } from "lucide-react";
+import { Filter, Share2, RefreshCw, Loader2, ChevronDown, X, RotateCcw, Lock } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { slideSelectionToDateRange, deriveSlideDatePreset, derivePresetFromDateRange } from "@/lib/monthUtils";
 import { DateRangeFilter } from "@/components/filters";
 import type { DateRange } from "react-day-picker";
@@ -96,33 +97,53 @@ function InlineFilterDropdown({
     }
   };
 
+  const triggerButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={isLocked}
+      className={cn(
+        "h-8 gap-1.5 text-sm font-normal bg-background border-input max-w-[200px]",
+        !isAllMode && "border-primary text-primary bg-primary/5",
+        isLocked && "opacity-60 cursor-not-allowed"
+      )}
+    >
+      {/* Dimension name as muted prefix */}
+      <span className="text-muted-foreground font-medium shrink-0">{label}:</span>
+      <span className="truncate">{buttonLabel}</span>
+      {isLocked ? (
+        <Lock className="h-3 w-3 opacity-50 shrink-0" />
+      ) : !isAllMode ? (
+        <Badge
+          variant="secondary"
+          className="h-4 px-1.5 text-[10px] font-semibold shrink-0 bg-primary/10 text-primary"
+        >
+          {activeCount}
+        </Badge>
+      ) : (
+        <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
+      )}
+    </Button>
+  );
+
   return (
     <div className="shrink-0">
-      <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className={cn(
-              "h-8 gap-1.5 text-sm font-normal bg-background border-input max-w-[200px]",
-              !isAllMode && "border-primary text-primary bg-primary/5"
-            )}
-          >
-            {/* Dimension name as muted prefix */}
-            <span className="text-muted-foreground font-medium shrink-0">{label}:</span>
-            <span className="truncate">{buttonLabel}</span>
-            {!isAllMode ? (
-              <Badge
-                variant="secondary"
-                className="h-4 px-1.5 text-[10px] font-semibold shrink-0 bg-primary/10 text-primary"
-              >
-                {activeCount}
-              </Badge>
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5 opacity-50 shrink-0" />
-            )}
-          </Button>
-        </PopoverTrigger>
+      {isLocked ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {triggerButton}
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">This filter is locked by the report owner</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }}>
+          <PopoverTrigger asChild>
+            {triggerButton}
+          </PopoverTrigger>
 
         {/* min-w matches trigger, w-max lets it grow to fit longest label */}
         <PopoverContent
@@ -214,7 +235,8 @@ function InlineFilterDropdown({
             </div>
           )}
         </PopoverContent>
-      </Popover>
+        </Popover>
+      )}
     </div>
   );
 }
@@ -256,7 +278,20 @@ interface FiltersRowProps {
   onRefreshData: () => void;
   isRefreshInProgress: boolean;
   showRefreshButton: boolean;
-  /** Array of dimension IDs that are locked (read-only) for viewers in shared reports */
+  /**
+   * Array of dimension IDs that are locked (read-only) for viewers in shared reports.
+   * 
+   * Locked dimensions:
+   * - Show a lock icon in the filter dropdown
+   * - Are disabled (cannot be changed by the viewer)
+   * - Still show available options (derived from rawDataRows)
+   * - Typically include the main dimension from the saved view:
+   *   - Metasearch: Hotel
+   *   - SEM/Social: Account
+   * 
+   * Populated from `share_links.locked_dimension_ids`, which is copied from
+   * `views.main_dimension_id` when creating a share link.
+   */
   lockedDimensionIds?: string[];
 }
 

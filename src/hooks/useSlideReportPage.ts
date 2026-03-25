@@ -173,6 +173,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
           channelConfigs: Object.fromEntries(validChannels.map(ch => [ch, { dimensionId: null, selectedValues: [] }])),
           breakdownConfigs: Object.fromEntries(validChannels.map(ch => [ch, { breakdownDimensionIds: [] }])),
           filterConfigs: Object.fromEntries(validChannels.map(ch => [ch, { filterDimensionIds: [] }])),
+          chartMetric: 'revenue',
         };
         const mtd = getCurrentMonthToDateRange();
         const dateRange: SlideReportDateRange = {
@@ -226,11 +227,12 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     const exactRange = exactDateRangeFromDayPicker(customDateRange);
     if (exactRange) {
       const years = getYearsInDateRange({ from: exactRange.start, to: exactRange.end });
-      return [
+      const result: [string, string, string] = [
         String(years[0] ?? selectedYear),
         years[1] ? String(years[1]) : '',
         years[2] ? String(years[2]) : '',
       ];
+      return result;
     }
     return [selectedYear, '', ''];
   }, [customDateRange, selectedYear]);
@@ -299,7 +301,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   );
 
   const effectivePivotData = useMemo((): SlideReportPivotData | null => {
-    const base = slideReport?.pivot_data as SlideReportPivotData | null;
     const emptyMetrics: ChannelMetrics = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0, ctr: 0, conversionRate: 0, cpc: 0, roas: 0, costOfSale: 0 };
     const emptyBudget: SlideReportPivotData['budget'] = { monthly: [], totals: { totalBudget: 0, totalActual: 0, variance: 0 } };
 
@@ -322,45 +323,24 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     }
     const hasMergedRows = Object.keys(mergedRawRows).length > 0;
 
-    // When pivot_data is null (post-refactor: canonical data is in dimension_data), build from raw rows
-    // so that tabs and charts get data instead of a blank page.
-    if (!base && hasMergedRows) {
-      const pivotChannels: SlideReportPivotData['channels'] = {};
-      for (const [ch, rows] of Object.entries(mergedRawRows)) {
-        pivotChannels[ch] = {
-          current: emptyMetrics,
-          monthly: {},
-          rawDataRows: rows,
-          dimensionMap: mergedDimMaps[ch] || {},
-        };
-      }
-      return {
-        overview: { current: emptyMetrics, monthly: {}, yearly: {} },
-        channels: pivotChannels,
-        budget: emptyBudget,
-      };
-    }
+    // Build pivot data structure from raw rows (dimension_data is the single source of truth)
+    if (!hasMergedRows) return null;
 
-    if (!base) return null;
-    if (!hasMergedRows) return base;
-
-    const pivotChannels: SlideReportPivotData['channels'] = { ...base.channels };
+    const pivotChannels: SlideReportPivotData['channels'] = {};
     for (const [ch, rows] of Object.entries(mergedRawRows)) {
-      const baseChannel = base.channels?.[ch];
-      const freshDimMap = mergedDimMaps[ch] || {};
       pivotChannels[ch] = {
         current: emptyMetrics,
         monthly: {},
-        ...(baseChannel || {}),
         rawDataRows: rows,
-        dimensionMap: Object.keys(freshDimMap).length > 0
-          ? freshDimMap
-          : (baseChannel?.dimensionMap || {}),
-        filterUniqueValues: baseChannel?.filterUniqueValues || {},
-      } as SlideReportPivotData['channels'][string];
+        dimensionMap: mergedDimMaps[ch] || {},
+      };
     }
-    return { ...base, channels: pivotChannels };
-  }, [slideReport?.pivot_data, dataStudioResult, primaryYear1Result, primaryYear2Result, comparisonYearResult]);
+    return {
+      overview: { current: emptyMetrics, monthly: {}, yearly: {} },
+      channels: pivotChannels,
+      budget: emptyBudget,
+    };
+  }, [dataStudioResult, primaryYear1Result, primaryYear2Result, comparisonYearResult]);
 
   const filteredData = useFilteredSlideData({
     pivotData: effectivePivotData,

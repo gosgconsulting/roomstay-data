@@ -474,105 +474,6 @@ export type Database = {
         }
         Relationships: []
       }
-      master_report_configs: {
-        Row: {
-          account_id: string | null
-          created_at: string
-          group_by_dimension_id: string | null
-          group_by_dimension_name: string | null
-          id: string
-          report_id: string
-          selected_metrics: string[] | null
-          selected_values: string[] | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_id?: string | null
-          created_at?: string
-          group_by_dimension_id?: string | null
-          group_by_dimension_name?: string | null
-          id?: string
-          report_id: string
-          selected_metrics?: string[] | null
-          selected_values?: string[] | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_id?: string | null
-          created_at?: string
-          group_by_dimension_id?: string | null
-          group_by_dimension_name?: string | null
-          id?: string
-          report_id?: string
-          selected_metrics?: string[] | null
-          selected_values?: string[] | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "master_report_configs_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "master_report_configs_group_by_dimension_id_fkey"
-            columns: ["group_by_dimension_id"]
-            isOneToOne: false
-            referencedRelation: "dimensions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "master_report_configs_report_id_fkey"
-            columns: ["report_id"]
-            isOneToOne: false
-            referencedRelation: "reports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      master_report_global_configs: {
-        Row: {
-          account_id: string | null
-          created_at: string
-          id: string
-          selected_metrics: string[]
-          since_date: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_id?: string | null
-          created_at?: string
-          id?: string
-          selected_metrics?: string[]
-          since_date?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_id?: string | null
-          created_at?: string
-          id?: string
-          selected_metrics?: string[]
-          since_date?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "master_report_global_configs_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           created_at: string
@@ -640,108 +541,6 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      query_cache: {
-        Row: {
-          cache_key: string
-          cache_version: number
-          created_at: string
-          expires_at: string
-          payload: Json
-          report_id: string
-        }
-        Insert: {
-          cache_key: string
-          cache_version?: number
-          created_at?: string
-          expires_at: string
-          payload: Json
-          report_id: string
-        }
-        Update: {
-          cache_key?: string
-          cache_version?: number
-          created_at?: string
-          expires_at?: string
-          payload?: Json
-          report_id?: string
-        }
-        Relationships: []
-      }
-      report_daily_metrics: {
-        Row: {
-          account_id: string | null
-          clicks: number | null
-          conversion_rate: number | null
-          conversions: number | null
-          cost: number | null
-          cpc: number | null
-          created_at: string
-          ctr: number | null
-          date: string
-          id: string
-          impressions: number | null
-          report_id: string
-          report_name: string
-          revenue: number | null
-          roas: number | null
-          row_count: number | null
-          updated_at: string
-        }
-        Insert: {
-          account_id?: string | null
-          clicks?: number | null
-          conversion_rate?: number | null
-          conversions?: number | null
-          cost?: number | null
-          cpc?: number | null
-          created_at?: string
-          ctr?: number | null
-          date: string
-          id?: string
-          impressions?: number | null
-          report_id: string
-          report_name: string
-          revenue?: number | null
-          roas?: number | null
-          row_count?: number | null
-          updated_at?: string
-        }
-        Update: {
-          account_id?: string | null
-          clicks?: number | null
-          conversion_rate?: number | null
-          conversions?: number | null
-          cost?: number | null
-          cpc?: number | null
-          created_at?: string
-          ctr?: number | null
-          date?: string
-          id?: string
-          impressions?: number | null
-          report_id?: string
-          report_name?: string
-          revenue?: number | null
-          roas?: number | null
-          row_count?: number | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "report_daily_metrics_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "report_daily_metrics_report_id_fkey"
-            columns: ["report_id"]
-            isOneToOne: false
-            referencedRelation: "reports"
             referencedColumns: ["id"]
           },
         ]
@@ -906,7 +705,6 @@ export type Database = {
           is_active: boolean
           last_refreshed_at: string | null
           name: string
-          pivot_data: Json
           report_ids: Json
           updated_at: string
           user_id: string
@@ -921,7 +719,6 @@ export type Database = {
           is_active?: boolean
           last_refreshed_at?: string | null
           name?: string
-          pivot_data?: Json
           report_ids?: Json
           updated_at?: string
           user_id: string
@@ -936,7 +733,6 @@ export type Database = {
           is_active?: boolean
           last_refreshed_at?: string | null
           name?: string
-          pivot_data?: Json
           report_ids?: Json
           updated_at?: string
           user_id?: string
@@ -959,6 +755,7 @@ export type Database = {
           column_order: string[] | null
           comparison_type: string | null
           created_at: string
+          custom_date_range: Json | null
           date_granularity: string | null
           date_order: string | null
           date_range_end: string | null
@@ -991,6 +788,7 @@ export type Database = {
           column_order?: string[] | null
           comparison_type?: string | null
           created_at?: string
+          custom_date_range?: Json | null
           date_granularity?: string | null
           date_order?: string | null
           date_range_end?: string | null
@@ -1023,6 +821,7 @@ export type Database = {
           column_order?: string[] | null
           comparison_type?: string | null
           created_at?: string
+          custom_date_range?: Json | null
           date_granularity?: string | null
           date_order?: string | null
           date_range_end?: string | null

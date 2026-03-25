@@ -4,7 +4,7 @@ import { toast } from "@/hooks/use-toast";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { FilterState } from "./FiltersBar";
+import type { FilterState } from "@/types/filters";
 import { ColumnFilterModal } from "./ColumnFilterModal";
 import { TableHeader } from "./PerformanceTable/TableHeader";
 import { TableBody } from "./PerformanceTable/TableBody";

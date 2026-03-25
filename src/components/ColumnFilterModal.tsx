@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, X } from "lucide-react";
-import { FilterState } from "./FiltersBar";
+import type { FilterState } from "@/types/filters";
 import { toast } from "@/hooks/use-toast";
 
 interface TableRow {

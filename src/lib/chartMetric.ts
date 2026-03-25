@@ -3,6 +3,9 @@ import type { ChartMetric } from '@/types/slideView';
 
 type ChartMetricFormat = 'number' | 'currency' | 'percent' | 'roas';
 
+/** Default Y-axis metric for overview / channel trend charts */
+export const DEFAULT_CHART_METRIC: ChartMetric = 'revenue';
+
 export const CHART_METRIC_OPTIONS: Array<{ value: ChartMetric; label: string }> = [
   { value: 'revenue', label: 'Revenue' },
   { value: 'impressions', label: 'Impressions' },
@@ -16,6 +19,16 @@ export const CHART_METRIC_OPTIONS: Array<{ value: ChartMetric; label: string }> 
   { value: 'roas', label: 'ROAS' },
   { value: 'costOfSale', label: 'Cost of Sale' },
 ];
+
+const VALID_CHART_METRICS = new Set<string>(CHART_METRIC_OPTIONS.map((o) => o.value));
+
+/** Parse persisted chart metric; unknown or missing values default to revenue */
+export function parseChartMetric(value: unknown): ChartMetric {
+  if (typeof value === 'string' && VALID_CHART_METRICS.has(value)) {
+    return value as ChartMetric;
+  }
+  return DEFAULT_CHART_METRIC;
+}
 
 const CHART_METRIC_FORMATS: Record<ChartMetric, ChartMetricFormat> = {
   revenue: 'currency',

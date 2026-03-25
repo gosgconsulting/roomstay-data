@@ -144,8 +144,8 @@ export function useSourceData(
   const queryClient = useQueryClient();
   const {
     enabled = true,
-    staleTime = 24 * 60 * 60 * 1000, // 24 hours - keep data fresh until manual sync
-    gcTime = 7 * 24 * 60 * 60 * 1000, // 7 days - keep in memory for a week
+    staleTime = 0, // Always stale - refetch immediately
+    gcTime = 0, // Don't keep in memory
   } = options;
 
   const queryResult = useQuery({

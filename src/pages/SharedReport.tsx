@@ -7,12 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Lock, Eye, EyeOff } from "lucide-react";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { DashboardHeader } from "@/components/DashboardHeader";
-import { FiltersBar, FilterState } from "@/components/FiltersBar";
-import { KPIMetricsCards } from "@/components/KPIMetricsCards";
-import { KPIChart } from "@/components/KPIChart";
-import { PerformanceTable } from "@/components/PerformanceTable";
 import { isChannelBasedFormat, convertReportToChannelFormat } from "@/lib/filterFormatUtils";
 import { getCurrentMonthToDateRange, DEFAULT_REPORT_DATE_PRESET, formatDateToLocalIso } from "@/lib/monthUtils";
 import { writeShareDateToSession, type ShareDateSelection } from "@/lib/shareSession";
@@ -28,88 +22,44 @@ export default function SharedReport() {
   const [loading, setLoading] = useState(false);
   const [shareLink, setShareLink] = useState<any>(null);
   const [authenticated, setAuthenticated] = useState(false);
-  const [lockedDimensionIds, setLockedDimensionIds] = useState<string[]>([]);
   
-  // Report dashboard state
-  const [reportId, setReportId] = useState<string | null>(null);
-  const [account, setAccount] = useState<any>(null);
-  const [accountLoadState, setAccountLoadState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [loadingComponents, setLoadingComponents] = useState<Set<string>>(new Set());
-  const [isDataLoading, setIsDataLoading] = useState(false);
-  const [dataRefreshKey, setDataRefreshKey] = useState(0);
-  const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
-  const [loadingGeneration, setLoadingGeneration] = useState(0);
   // Prevent double-bootstrap when slug/effect deps fire twice
   const bootstrapDoneRef = useRef(false);
-  
-  // Filter state — month-to-date by default (same as owner Data Studio / FiltersBar)
-  const [filters, setFilters] = useState<FilterState>(() => {
-    const mtd = getCurrentMonthToDateRange();
-    return {
-      dimensionFilters: {},
-      dateRange: { from: mtd.from, to: mtd.to },
-      datePreset: DEFAULT_REPORT_DATE_PRESET,
-      compareEnabled: false,
-      compareType: "previous_period",
-      compareDateRange: undefined,
-    };
-  });
-
-  // Stabilize the onFiltersChange callback to prevent unnecessary re-renders
-  const handleFiltersChange = useCallback((newFilters: FilterState) => {
-    setFilters(newFilters);
-  }, []);
-
-  // Track component loading states
-  const markComponentLoading = (component: string) => {
-    setLoadingComponents(prev => new Set([...prev, component]));
-    setIsDataLoading(true);
-  };
-
-  const markComponentLoaded = (component: string) => {
-    setLoadingComponents(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(component);
-      if (newSet.size === 0) {
-        setIsDataLoading(false);
-      }
-      return newSet;
-    });
-  };
 
   const initializeReport = useCallback(async (linkData: any) => {
-    // Check if this is a slide report share link (has slide_report_id or view_id)
-    const slideReportId = linkData.slide_report_id;
-    const hasViewId = linkData.view_id;
+    // ALL share links now redirect to Data Studio (/shared/:slug/studio)
+    // This unifies the data fetching pipeline and enables cross-year dates, multi-year parallel fetch, etc.
     
-    if (slideReportId || hasViewId) {
-      try {
-        let finalSlideReportId = slideReportId;
-        let accountId = linkData.account_id;
+    try {
+      let finalSlideReportId = linkData.slide_report_id;
+      let accountId = linkData.account_id;
+      const hasViewId = linkData.view_id;
 
-        // If we have slide_report_id directly, use it (new format)
-        if (slideReportId) {
-          // no-op
-        } else if (hasViewId) {
-          // Legacy: Use view_id to look up slide_report_id via the canonical `views` table
-          try {
-            const { data: view, error: viewError } = await supabase
-              .from("views")
-              .select("slide_report_id, account_id")
-              .eq("id", linkData.view_id)
-              .maybeSingle();
+      // If we have slide_report_id directly, use it (new format)
+      if (finalSlideReportId) {
+        // Already have slide_report_id, no-op
+      } else if (hasViewId) {
+        // Legacy: Use view_id to look up slide_report_id via the canonical `views` table
+        try {
+          const { data: view, error: viewError } = await supabase
+            .from("views")
+            .select("slide_report_id, account_id")
+            .eq("id", linkData.view_id)
+            .maybeSingle();
 
-            if (!viewError && view && view.slide_report_id) {
-              finalSlideReportId = view.slide_report_id;
-              accountId = (view as any).account_id || accountId;
-            }
-          } catch (err) {
-            console.error('Exception while querying view:', err);
+          if (!viewError && view && view.slide_report_id) {
+            finalSlideReportId = view.slide_report_id;
+            accountId = (view as any).account_id || accountId;
           }
+        } catch (err) {
+          console.error('Exception while querying view:', err);
         }
-
-        // If accountId is still missing, try to get it from the first report
-        if (!accountId && linkData.report_ids && linkData.report_ids.length > 0) {
+      } else if (linkData.report_ids && linkData.report_ids.length > 0) {
+        // Legacy classic share link with report_ids array but no slide_report_id
+        // Auto-create or find the account's Data Studio slide report
+        
+        // First, get account_id from the first report if not provided
+        if (!accountId) {
           const { data: report } = await supabase
             .from("reports")
             .select("account_id")
@@ -121,99 +71,152 @@ export default function SharedReport() {
           }
         }
 
-        if (!finalSlideReportId || !accountId) {
-          console.error('Missing slide_report_id or account_id in share link', {
-            slideReportId: finalSlideReportId,
-            accountId
-          });
-          toast({
-            title: "Invalid share link",
-            description: "This share link is missing required information. The share link may need to be recreated. Please contact the link creator.",
-            variant: "destructive",
-          });
-          return;
-        }
+        if (accountId) {
+          // Find or create the account's Data Studio slide report
+          const { data: existingSlideReports } = await supabase
+            .from("slide_reports")
+            .select("id, name")
+            .eq("account_id", accountId)
+            .eq("name", "Data Studio")
+            .limit(1);
 
-        // Extract channel-based filters from dimension_filters
-        const channelFilters = linkData.dimension_filters || {};
-        
-        // Store filters in sessionStorage for SlideViewPage to pick up
-        // Use channel-based format: { "metasearch": { "dimensionId": ["value1"] }, ... }
-        if (Object.keys(channelFilters).length > 0) {
-          if (isChannelBasedFormat(channelFilters)) {
-            // Already in channel-based format
-            sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(channelFilters));
+          if (existingSlideReports && existingSlideReports.length > 0) {
+            finalSlideReportId = existingSlideReports[0].id;
           } else {
-            // Convert from report-based to channel-based format
-            try {
-              const { data: slideReport } = await supabase
-                .from("slide_reports")
-                .select("report_ids")
-                .eq("id", finalSlideReportId)
-                .single();
+            // Create a new Data Studio slide report for this account
+            console.log('[SharedReport] Auto-creating Data Studio slide report for account:', accountId);
+            
+            // Build report_ids mapping from the array
+            // Try to infer channel from report names
+            const reportIdsMap: Record<string, string> = {};
+            for (const reportId of linkData.report_ids) {
+              const { data: report } = await supabase
+                .from("reports")
+                .select("name, channel")
+                .eq("id", reportId)
+                .maybeSingle();
               
-              if (slideReport?.report_ids) {
-                const reportIds = slideReport.report_ids as Record<string, string>;
-                const convertedFilters = convertReportToChannelFormat(channelFilters, reportIds);
-                
-                if (Object.keys(convertedFilters).length > 0) {
-                  sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(convertedFilters));
+              if (report) {
+                const channel = report.channel || inferChannelFromName(report.name);
+                if (channel) {
+                  reportIdsMap[channel] = reportId;
                 }
               }
-            } catch (error) {
-              console.error('Error converting filters:', error);
+            }
+
+            const { data: newSlideReport, error: createError } = await supabase
+              .from("slide_reports")
+              .insert({
+                account_id: accountId,
+                name: "Data Studio",
+                report_ids: reportIdsMap,
+                configuration: {},
+              })
+              .select()
+              .single();
+
+            if (!createError && newSlideReport) {
+              finalSlideReportId = newSlideReport.id;
             }
           }
         }
+      }
+
+      // If accountId is still missing, try to get it from the first report
+      if (!accountId && linkData.report_ids && linkData.report_ids.length > 0) {
+        const { data: report } = await supabase
+          .from("reports")
+          .select("account_id")
+          .eq("id", linkData.report_ids[0])
+          .maybeSingle();
         
-        // Store slide_report_id and account_id in sessionStorage
-        sessionStorage.setItem(`share_slide_report_id_${slug}`, finalSlideReportId);
-        sessionStorage.setItem(`share_account_id_${slug}`, accountId);
-        
-        // Store locked dimension IDs for Data Studio embed
-        sessionStorage.setItem(`share_locked_dimension_ids_${slug}`, JSON.stringify(linkData.locked_dimension_ids || []));
-        
-        // Store date selection for Data Studio embed
-        // Priority: share_links date fields > view date fields > default month-to-date
-        let dateSelection: ShareDateSelection;
-        
-        if (linkData.selected_year || linkData.selected_month || linkData.custom_date_range) {
-          // Use date from share_links (new format)
-          dateSelection = {
-            selectedYear: linkData.selected_year || new Date().getFullYear().toString(),
-            selectedMonth: linkData.selected_month || 'Month to Date',
-            customDateRange: linkData.custom_date_range 
-              ? { from: linkData.custom_date_range.from, to: linkData.custom_date_range.to }
-              : undefined,
-            datePreset: linkData.date_preset,
-          };
-        } else if (hasViewId) {
-          // Fallback: try to load date from view
+        if (report?.account_id) {
+          accountId = report.account_id;
+        }
+      }
+
+      if (!finalSlideReportId || !accountId) {
+        console.error('Missing slide_report_id or account_id in share link', {
+          slideReportId: finalSlideReportId,
+          accountId
+        });
+        toast({
+          title: "Invalid share link",
+          description: "This share link is missing required information. The share link may need to be recreated. Please contact the link creator.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Extract channel-based filters from dimension_filters
+      const channelFilters = linkData.dimension_filters || {};
+      
+      // Store filters in sessionStorage for SlideViewPage to pick up
+      // Use channel-based format: { "metasearch": { "dimensionId": ["value1"] }, ... }
+      if (Object.keys(channelFilters).length > 0) {
+        if (isChannelBasedFormat(channelFilters)) {
+          // Already in channel-based format
+          sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(channelFilters));
+        } else {
+          // Convert from report-based to channel-based format
           try {
-            const { data: view } = await supabase
-              .from("views")
-              .select("selected_year, selected_month")
-              .eq("id", linkData.view_id)
-              .maybeSingle();
+            const { data: slideReport } = await supabase
+              .from("slide_reports")
+              .select("report_ids")
+              .eq("id", finalSlideReportId)
+              .single();
             
-            if (view) {
-              dateSelection = {
-                selectedYear: view.selected_year || new Date().getFullYear().toString(),
-                selectedMonth: view.selected_month || 'Month to Date',
-              };
-            } else {
-              // View not found, use default
-              const mtd = getCurrentMonthToDateRange();
-              dateSelection = {
-                selectedYear: mtd.to!.getFullYear().toString(),
-                selectedMonth: 'Month to Date',
-                customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
-                datePreset: DEFAULT_REPORT_DATE_PRESET,
-              };
+            if (slideReport?.report_ids) {
+              const reportIds = slideReport.report_ids as Record<string, string>;
+              const convertedFilters = convertReportToChannelFormat(channelFilters, reportIds);
+              
+              if (Object.keys(convertedFilters).length > 0) {
+                sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(convertedFilters));
+              }
             }
-          } catch (err) {
-            console.error('Error loading view date:', err);
-            // Fallback to default
+          } catch (error) {
+            console.error('Error converting filters:', error);
+          }
+        }
+      }
+      
+      // Store slide_report_id and account_id in sessionStorage
+      sessionStorage.setItem(`share_slide_report_id_${slug}`, finalSlideReportId);
+      sessionStorage.setItem(`share_account_id_${slug}`, accountId);
+      
+      // Store locked dimension IDs for Data Studio embed
+      sessionStorage.setItem(`share_locked_dimension_ids_${slug}`, JSON.stringify(linkData.locked_dimension_ids || []));
+      
+      // Store date selection for Data Studio embed
+      // Priority: share_links date fields > view date fields > default month-to-date
+      let dateSelection: ShareDateSelection;
+      
+      if (linkData.selected_year || linkData.selected_month || linkData.custom_date_range) {
+        // Use date from share_links (new format)
+        dateSelection = {
+          selectedYear: linkData.selected_year || new Date().getFullYear().toString(),
+          selectedMonth: linkData.selected_month || 'Month to Date',
+          customDateRange: linkData.custom_date_range 
+            ? { from: linkData.custom_date_range.from, to: linkData.custom_date_range.to }
+            : undefined,
+          datePreset: linkData.date_preset,
+        };
+      } else if (hasViewId) {
+        // Fallback: try to load date from view
+        try {
+          const { data: view } = await supabase
+            .from("views")
+            .select("selected_year, selected_month")
+            .eq("id", linkData.view_id)
+            .maybeSingle();
+          
+          if (view) {
+            dateSelection = {
+              selectedYear: view.selected_year || new Date().getFullYear().toString(),
+              selectedMonth: view.selected_month || 'Month to Date',
+            };
+          } else {
+            // View not found, use default
             const mtd = getCurrentMonthToDateRange();
             dateSelection = {
               selectedYear: mtd.to!.getFullYear().toString(),
@@ -222,8 +225,9 @@ export default function SharedReport() {
               datePreset: DEFAULT_REPORT_DATE_PRESET,
             };
           }
-        } else {
-          // No date info available, use default month-to-date
+        } catch (err) {
+          console.error('Error loading view date:', err);
+          // Fallback to default
           const mtd = getCurrentMonthToDateRange();
           dateSelection = {
             selectedYear: mtd.to!.getFullYear().toString(),
@@ -232,100 +236,49 @@ export default function SharedReport() {
             datePreset: DEFAULT_REPORT_DATE_PRESET,
           };
         }
-        
-        writeShareDateToSession(slug, dateSelection);
-        
-        // Legacy: Store view_id if it exists (for backward compatibility)
-        if (hasViewId) {
-          sessionStorage.setItem(`share_view_id_${finalSlideReportId}`, linkData.view_id);
-        }
-        
-        // Store share link data for authentication persistence
-        const authKey = `share_auth_${slug}`;
-        sessionStorage.setItem(authKey, "true");
-        sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(linkData));
-
-        // Navigate to Data Studio embed for slide/view shares
-        navigate(`/shared/${slug}/studio`, { replace: true });
-      } catch (error) {
-        console.error('Error handling slide report view:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load slide report view",
-          variant: "destructive",
-        });
-      }
-      return;
-    }
-    
-    // For shared links with multiple reports, set reportId to null to show "All Reports" view
-    // For single report links, set the specific reportId
-    if (linkData.report_ids && linkData.report_ids.length > 0) {
-      // Cancel previous loading by incrementing generation
-      setLoadingGeneration(prev => prev + 1);
-      
-      // Clear previous loading states immediately
-      setLoadingComponents(new Set());
-      setIsDataLoading(false);
-      
-      if (linkData.report_ids.length === 1) {
-        // Single report - show traditional view
-        markComponentLoading('metrics');
-        markComponentLoading('chart');
-        markComponentLoading('table');
-        setReportId(linkData.report_ids[0]);
-        
-        // Apply dimension filters for this report to filter state
-        const reportFilters = linkData.dimension_filters?.[linkData.report_ids[0]];
-        if (reportFilters) {
-          setFilters(prev => ({
-            ...prev,
-            dimensionFilters: reportFilters
-          }));
-        }
       } else {
-        // Multiple reports - show "All Reports" view
-        setReportId(null);
+        // No date info available, use default month-to-date
+        const mtd = getCurrentMonthToDateRange();
+        dateSelection = {
+          selectedYear: mtd.to!.getFullYear().toString(),
+          selectedMonth: 'Month to Date',
+          customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
+          datePreset: DEFAULT_REPORT_DATE_PRESET,
+        };
       }
       
-      // Load account information if account_id is available
-      if (linkData.account_id) {
-        await fetchAccountWithRetry(linkData.account_id);
+      writeShareDateToSession(slug, dateSelection);
+      
+      // Legacy: Store view_id if it exists (for backward compatibility)
+      if (hasViewId) {
+        sessionStorage.setItem(`share_view_id_${finalSlideReportId}`, linkData.view_id);
       }
+      
+      // Store share link data for authentication persistence
+      const authKey = `share_auth_${slug}`;
+      sessionStorage.setItem(authKey, "true");
+      sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(linkData));
+
+      // Navigate to Data Studio embed for ALL shares (unified pipeline)
+      navigate(`/shared/${slug}/studio`, { replace: true });
+    } catch (error) {
+      console.error('Error handling share link:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load shared report",
+        variant: "destructive",
+      });
     }
-  }, [slug, navigate, toast, setLockedDimensionIds, setLoadingGeneration, setLoadingComponents, setIsDataLoading, markComponentLoading, setReportId, setFilters, setAccount]);
+  }, [slug, navigate, toast]);
 
-  // Separated account fetch so it can be called from initializeReport and from retry
-  const fetchAccountWithRetry = useCallback(async (accountId: string) => {
-    setAccountLoadState('loading');
-    const TIMEOUT_MS = 15_000;
-    try {
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), TIMEOUT_MS)
-      );
-      const fetchPromise = supabase
-        .from('accounts')
-        .select('*')
-        .eq('id', accountId)
-        .single();
-
-      const { data: accountData, error: accountError } = await Promise.race([
-        fetchPromise,
-        timeoutPromise,
-      ]) as Awaited<typeof fetchPromise>;
-
-      if (!accountError && accountData) {
-        setAccount(accountData);
-        setAccountLoadState('success');
-      } else {
-        console.error('Error loading account for shared report:', accountError);
-        setAccountLoadState('error');
-      }
-    } catch (err) {
-      console.error('Account fetch failed/timed out:', err);
-      setAccountLoadState('error');
-    }
-  }, []);
+  // Helper function to infer channel from report name
+  const inferChannelFromName = (name: string): string | null => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('metasearch') || lowerName.includes('meta search')) return 'metasearch';
+    if (lowerName.includes('sem') || lowerName.includes('google ads') || lowerName.includes('search')) return 'sem';
+    if (lowerName.includes('social') || lowerName.includes('facebook') || lowerName.includes('meta')) return 'social';
+    return null;
+  };
 
   // Consolidated bootstrap: check session auth first, then load from DB if needed.
   // Recovery path: if share_auth is set but share_data is missing or corrupt, re-fetch
@@ -526,105 +479,19 @@ export default function SharedReport() {
     );
   }
 
-  // Classic dashboard only: need `account` for FiltersBar / KPI / table. Slide/studio shares navigate away
-  // before account fetch; don't block the UI on a spinner for those.
-  const isSlideOrViewShare = !!(shareLink?.slide_report_id || shareLink?.view_id);
-  const needsAccount = authenticated && !account && shareLink?.account_id && !isSlideOrViewShare;
-
-  if (needsAccount && accountLoadState === 'error') {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle>Failed to load report</CardTitle>
-            <CardDescription>
-              There was a problem fetching your report data. Please check your connection and try again.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex justify-center">
-            <Button onClick={() => fetchAccountWithRetry(shareLink.account_id)}>
-              Retry
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (needsAccount) {
+  // All authenticated shares now redirect to Data Studio (/shared/:slug/studio)
+  // Show a loading state while the redirect happens
+  if (authenticated) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          <p className="text-sm text-muted-foreground">Loading reports...</p>
+          <p className="text-sm text-muted-foreground">Opening shared report...</p>
         </div>
       </div>
     );
   }
 
-  // Render the full report dashboard
-  return (
-    <div className="min-h-screen bg-background relative">
-      <ThemeToggle className="fixed top-4 right-4 z-50" />
-      {/* Loading toast for data loading - HIDDEN: Individual components show their own loading states */}
-      {/* <LoadingToast 
-        isVisible={isDataLoading} 
-        loadingComponents={loadingComponents}
-      /> */}
-
-      <DashboardHeader 
-        reportId={reportId}
-        accountId={account?.id}
-        onReportChange={setReportId}
-        onRefreshData={() => setDataRefreshKey(prev => prev + 1)}
-        onVisibilityChange={() => setVisibilityRefreshTrigger(prev => prev + 1)}
-        session={null} // No session for shared reports
-        onSignOut={async () => {}} // No sign out for shared reports
-        isSharedView={true}
-        title={shareLink?.report_ids?.length > 1 ? "All Shared Reports" : undefined}
-        allowedReportIds={shareLink?.report_ids || []}
-      />
-      
-      <FiltersBar
-        reportId={reportId}
-        onFiltersChange={handleFiltersChange}
-        isSharedView={true}
-        accountId={account?.id}
-        refreshTrigger={loadingGeneration}
-        lockedDimensionIds={lockedDimensionIds}
-        sharedDimensionFilters={reportId && shareLink?.dimension_filters?.[reportId] ? shareLink.dimension_filters[reportId] : {}}
-      />
-      
-      <main className="container mx-auto px-6 py-6 space-y-6">
-        <div className="relative">
-          <KPIMetricsCards
-            reportId={reportId}
-            filters={filters}
-            accountId={account?.id}
-            visibilityRefreshTrigger={visibilityRefreshTrigger}
-            key={`metrics-${dataRefreshKey}-${loadingGeneration}`}
-            onLoadingComplete={() => markComponentLoaded('metrics')}
-          />
-        </div>
-        
-        <KPIChart
-          reportId={reportId}
-          filters={filters}
-          accountId={account?.id}
-          key={`charts-${dataRefreshKey}-${loadingGeneration}`}
-          onLoadingComplete={() => markComponentLoaded('chart')}
-        />
-        
-        <PerformanceTable 
-          reportId={reportId} 
-          filters={filters} 
-          isSharedView={true} 
-          accountId={account?.id} 
-          visibilityRefreshTrigger={visibilityRefreshTrigger}
-          key={`table-${dataRefreshKey}-${loadingGeneration}`}
-          onLoadingComplete={() => markComponentLoaded('table')}
-        />
-      </main>
-    </div>
-  );
+  // This should never be reached since authenticated shares redirect immediately
+  return null;
 }

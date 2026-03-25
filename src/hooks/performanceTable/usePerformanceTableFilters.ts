@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { FilterState } from "@/components/FiltersBar";
+import type { FilterState } from "@/types/filters";
 import type { Dimension } from "./usePerformanceTableDimensions";
 import type { TableRow } from "./usePerformanceTableData";
 import { calculateTotals, calculateComparisonTotalsAndChanges } from "@/lib/performanceTable/calculators";

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import type { FilterState } from "@/components/FiltersBar";
+import type { FilterState } from "@/types/filters";
 import type { Dimension } from "./usePerformanceTableDimensions";
 import { useSourceData, useCachedSourceData } from "@/hooks/dataSources";
 import type { DataSource } from "@/lib/data-sources/types";
