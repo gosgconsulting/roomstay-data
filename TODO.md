@@ -34,6 +34,26 @@ After coding:
 
 ## Active tasks
 
+### Fix: Shared studio 0 KPI on first load — RLS missing for direct share links (2026-03-26)
+
+**Status:** ✅ Complete
+
+**Root cause:** Unauthenticated shared-studio viewers could not read `slide_reports` due to a missing RLS policy. The existing policy only granted access when `share_links.view_id` was set (view-based legacy shares). New shares created via the 2-step wizard set `share_links.slide_report_id` directly with no `view_id`. So `useSlideReport` always returned null → `effectiveReportIdsForFetch = {}` → `useDataStudioRawRows` never fired → 0 KPI every time.
+
+**Changes:**
+
+1. **New migration `20260326120000_allow_anon_slide_reports_for_direct_shares.sql`:** adds RLS policy `"Anon can read slide_reports for direct share links"` granting `anon` SELECT on `slide_reports` when `share_links.slide_report_id` matches. Applied to production via MCP.
+
+2. **`SharedReport.tsx`:** after resolving `finalSlideReportId` (direct new-format path), eagerly fetches `slide_reports.report_ids` and stores it in `sessionStorage` as `share_report_ids_{slug}`. This seeds the client before the RLS-gated DB query resolves.
+
+3. **`SlideViewPage.tsx`:** reads `share_report_ids_{slug}` from sessionStorage in lazy `useState` → `shareReportIds`. Passed as `reportIdsOverride` to `useSlideReportPage`.
+
+4. **`useSlideReportPage.ts`:** added `reportIdsOverride?: Record<string, string> | null` param. `effectiveReportIdsForFetch` now resolves: `slideReport.report_ids` > `reportIdsOverride` (session seed) > `accountReportIds`. This lets data fetch start on first render without waiting for `useSlideReport` to resolve.
+
+**Verification:** Build passes (`npm run build` exit 0). RLS policy applied to production. Shared links with direct `slide_report_id` now load data immediately.
+
+---
+
 ### Shared view 2-step flow + loading parity (2026-03-26)
 
 **Status:** ✅ Complete
