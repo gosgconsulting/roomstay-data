@@ -348,8 +348,6 @@ export default function SlideViewPage() {
     groupByDimensionId: groupByDimension[selectedTab] || groupByDimension['metasearch'],
     breakdownByDimensionId: breakdownByDimension[selectedTab] || breakdownByDimension['metasearch'],
     selectedViewId,
-    displayCurrency: undefined,
-    audPerUsd,
     configuredDimensionNames,
   });
   const {

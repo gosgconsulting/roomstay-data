@@ -35,8 +35,6 @@ export interface UseSlideReportPageParams {
   breakdownByDimensionId: string;
   selectedViewId: string | null;
   dynamicChannelTotals?: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
-  displayCurrency?: 'AUD' | 'USD';
-  audPerUsd?: number;
   /** Global dimension-ID → human-name map for filter ID resolution in filterRawDataRows. */
   configuredDimensionNames?: Record<string, string>;
 }
@@ -101,8 +99,6 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     groupByDimensionId,
     breakdownByDimensionId,
     selectedViewId,
-    displayCurrency,
-    audPerUsd,
     configuredDimensionNames,
   } = params;
 
