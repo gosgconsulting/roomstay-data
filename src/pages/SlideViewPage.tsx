@@ -828,8 +828,22 @@ export default function SlideViewPage() {
     configuredDimensionNames
   );
 
+  const comparisonRawRowsInput = comparisonType !== 'none' && comparisonChartDateRange ? chartRawRows : undefined;
+
+  // Debug: log comparison chart inputs for shared views
+  if (isPublicShareStudio && comparisonType !== 'none') {
+    console.log('[SharedStudio] Comparison chart debug:', {
+      comparisonType,
+      comparisonChartDateRange,
+      hasChartRawRows: !!chartRawRows,
+      chartRawRowCounts: Object.fromEntries(Object.entries(chartRawRows || {}).map(([k, v]) => [k, (v as any[]).length])),
+      chartDimMapCounts: Object.fromEntries(Object.entries(chartDimensionMaps || {}).map(([k, v]) => [k, Object.keys(v).length])),
+      comparisonRawRowsProvided: !!comparisonRawRowsInput,
+    });
+  }
+
   const { data: comparisonChannelChartDataFromTable } = useChannelChartDataFromRawRows(
-    comparisonType !== 'none' && comparisonChartDateRange ? chartRawRows : undefined,
+    comparisonRawRowsInput,
     chartDimensionMaps,
     comparisonChartDateRange,
     chartGranularity,
