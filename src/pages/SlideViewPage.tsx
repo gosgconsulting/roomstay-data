@@ -204,6 +204,9 @@ export default function SlideViewPage() {
   useEffect(() => {
     if (!isPublicShareStudio || !effectiveSlug) return;
     
+    const studioBootstrapStart = performance.now();
+    console.log('[SlideViewPage] Public share studio bootstrap starting');
+    
     // Verify authentication
     const authKey = `share_auth_${effectiveSlug}`;
     const storedAuth = sessionStorage.getItem(authKey);
@@ -238,6 +241,9 @@ export default function SlideViewPage() {
     // Load filters from sessionStorage if available
     const channelFilters = readShareFiltersFromSession(effectiveSlug);
     if (channelFilters) setFilterValues(channelFilters);
+    
+    const studioBootstrapEnd = performance.now();
+    console.log(`[SlideViewPage] Public share studio bootstrap complete in ${(studioBootstrapEnd - studioBootstrapStart).toFixed(2)}ms`);
   }, [isPublicShareStudio, effectiveSlug, navigate]);
 
   // Resolve account from URL param or from auth context (short-entry route support).
@@ -254,29 +260,19 @@ export default function SlideViewPage() {
   
   // Initialize date state - for shared studio, read from sessionStorage BEFORE first render
   // to avoid race condition where default state triggers wrong year fetch
-  // Use lazy initialization (function form) so it only runs once on mount
-  const [selectedYear, setSelectedYear] = useState(() => {
-    const state = isPublicShareStudio 
+  // PERFORMANCE: Build state once and reuse for all three useState calls
+  const initialDateState = useMemo(() => {
+    return isPublicShareStudio 
       ? buildInitialDateStateForSharedStudio(effectiveSlug)
       : buildDefaultDataStudioDateState();
-    return state.selectedYear;
-  });
+  }, [isPublicShareStudio, effectiveSlug]);
   
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const state = isPublicShareStudio 
-      ? buildInitialDateStateForSharedStudio(effectiveSlug)
-      : buildDefaultDataStudioDateState();
-    return state.selectedMonth;
-  });
+  const [selectedYear, setSelectedYear] = useState(() => initialDateState.selectedYear);
+  const [selectedMonth, setSelectedMonth] = useState(() => initialDateState.selectedMonth);
   
   // These are declared here so useSlideReportPage (called below) can receive them.
   // useDataStudioFilters receives them as controlled state so it becomes the single manager.
-  const [customDateRange, setCustomDateRange] = useState<import("react-day-picker").DateRange | undefined>(() => {
-    const state = isPublicShareStudio 
-      ? buildInitialDateStateForSharedStudio(effectiveSlug)
-      : buildDefaultDataStudioDateState();
-    return state.range;
-  });
+  const [customDateRange, setCustomDateRange] = useState<import("react-day-picker").DateRange | undefined>(() => initialDateState.range);
   
   const [comparisonType, setComparisonType] = useState("none");
   const [filterValues, setFilterValues] = useState<Record<string, Record<string, string[]>>>({

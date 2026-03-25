@@ -30,6 +30,9 @@ export default function SharedReport() {
     // ALL share links now redirect to Data Studio (/shared/:slug/studio)
     // This unifies the data fetching pipeline and enables cross-year dates, multi-year parallel fetch, etc.
     
+    const perfStart = performance.now();
+    console.log('[SharedReport] Starting initialization for slug:', slug);
+    
     try {
       let finalSlideReportId = linkData.slide_report_id;
       let accountId = linkData.account_id;
@@ -58,17 +61,15 @@ export default function SharedReport() {
         // Legacy classic share link with report_ids array but no slide_report_id
         // Auto-create or find the account's Data Studio slide report
         
-        // First, get account_id from the first report if not provided
-        if (!accountId) {
-          const { data: report } = await supabase
-            .from("reports")
-            .select("account_id")
-            .eq("id", linkData.report_ids[0])
-            .maybeSingle();
-          
-          if (report?.account_id) {
-            accountId = report.account_id;
-          }
+        // PERFORMANCE: Fetch all report details in parallel (single query with .in())
+        const { data: allReports } = await supabase
+          .from("reports")
+          .select("id, account_id, name, channel")
+          .in("id", linkData.report_ids);
+        
+        // Get account_id from first report if not provided
+        if (!accountId && allReports && allReports.length > 0) {
+          accountId = allReports[0].account_id;
         }
 
         if (accountId) {
@@ -86,20 +87,13 @@ export default function SharedReport() {
             // Create a new Data Studio slide report for this account
             console.log('[SharedReport] Auto-creating Data Studio slide report for account:', accountId);
             
-            // Build report_ids mapping from the array
-            // Try to infer channel from report names
+            // Build report_ids mapping from the fetched reports (already have all data)
             const reportIdsMap: Record<string, string> = {};
-            for (const reportId of linkData.report_ids) {
-              const { data: report } = await supabase
-                .from("reports")
-                .select("name, channel")
-                .eq("id", reportId)
-                .maybeSingle();
-              
-              if (report) {
+            if (allReports) {
+              for (const report of allReports) {
                 const channel = report.channel || inferChannelFromName(report.name);
                 if (channel) {
-                  reportIdsMap[channel] = reportId;
+                  reportIdsMap[channel] = report.id;
                 }
               }
             }
@@ -243,9 +237,12 @@ export default function SharedReport() {
       sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(linkData));
 
       // Navigate to Data Studio embed for ALL shares (unified pipeline)
+      const perfEnd = performance.now();
+      console.log(`[SharedReport] Initialization complete in ${(perfEnd - perfStart).toFixed(2)}ms`);
       navigate(`/shared/${slug}/studio`, { replace: true });
     } catch (error) {
-      console.error('Error handling share link:', error);
+      const perfEnd = performance.now();
+      console.error(`[SharedReport] Error after ${(perfEnd - perfStart).toFixed(2)}ms:`, error);
       toast({
         title: "Error",
         description: "Failed to load shared report",
@@ -284,6 +281,9 @@ export default function SharedReport() {
     };
     
     const bootstrap = async () => {
+      const bootstrapStart = performance.now();
+      console.log('[SharedReport] Bootstrap starting for slug:', slug);
+      
       const authKey = `share_auth_${slug}`;
       const storedAuth = sessionStorage.getItem(authKey);
       
@@ -301,12 +301,14 @@ export default function SharedReport() {
 
         if (linkData) {
           if (mounted) {
+            console.log('[SharedReport] Restored from sessionStorage');
             setShareLink(linkData);
             setAuthenticated(true);
             await initializeReport(linkData);
           }
         } else {
           // share_data missing or corrupt — recover by re-fetching from DB
+          console.log('[SharedReport] Session data missing, fetching from DB');
           const freshData = await loadFromDb();
           if (!mounted) return;
           if (freshData) {
@@ -331,6 +333,7 @@ export default function SharedReport() {
         }
       } else {
         // Not authenticated — load share link from DB so password card can render
+        console.log('[SharedReport] Not authenticated, loading share link');
         const data = await loadFromDb();
         if (!data) {
           if (mounted) {
@@ -346,6 +349,9 @@ export default function SharedReport() {
           setShareLink(data);
         }
       }
+      
+      const bootstrapEnd = performance.now();
+      console.log(`[SharedReport] Bootstrap complete in ${(bootstrapEnd - bootstrapStart).toFixed(2)}ms`);
     };
     
     bootstrap();

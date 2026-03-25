@@ -64,6 +64,20 @@ Per README note: "some history was applied only via MCP" — timestamps differ b
 
 **Verification:** Local migration files now have unique timestamps; remote schema is current with latest migration `20260325174317`.
 
+**TypeScript types regenerated:** MCP `generate_typescript_types` output written to `src/integrations/supabase/types.ts`; `npm run build` succeeded (1767.23 kB, +0.12 kB delta from types update).
+
+**Optional tasks deferred:**
+
+- **RLS hardening:** README already documents broad public read on `reports`, `dimension_data`, `dimensions` (migration `20251030184608`). Stricter share-scoped or token-based policies would be a behavior change for anonymous studio users; requires explicit product decision + QA on `/shared/:slug/studio`. Marked for future phase if needed.
+- **Dead SQL cleanup:** Postgres functions/views inventory deferred; current schema is clean after Phase 9 legacy table drops. Any future cleanup should follow **Verify → Migrate → Delete** (grep `src/` + `supabase/functions/` for zero references before dropping RPCs).
+
+**Final verification:**
+
+- `npm run build`: ✅ Success (1767.23 kB)
+- `npm run lint`: ✅ 0 errors, 73 warnings (pre-existing)
+- Migration files: ✅ No duplicate timestamps
+- Types: ✅ Synced with remote schema
+
 ---
 
 ### Remove report URL viewId sync and legacy redirects (2026-03-26)
