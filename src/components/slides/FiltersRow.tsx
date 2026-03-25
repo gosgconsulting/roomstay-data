@@ -293,6 +293,7 @@ interface FiltersRowProps {
    * `views.main_dimension_id` when creating a share link.
    */
   lockedDimensionIds?: string[];
+  allowDataFilterChanges?: boolean;
 }
 
 export function FiltersRow({

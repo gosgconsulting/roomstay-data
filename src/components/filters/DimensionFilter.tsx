@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Settings, Search, Check } from "lucide-react";
+import { Settings, Search, Check, Lock } from "lucide-react";
 
 interface DimensionMeta {
   id: string;

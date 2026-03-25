@@ -2420,16 +2420,10 @@ export default function SlideViewPage() {
         name: viewName,
         selected_year: selectedYear,
         selected_month: selectedMonth,
-        custom_date_range: customDateRange ? {
-          from: formatDateToLocalIso(customDateRange.from!),
-          to: formatDateToLocalIso(customDateRange.to || customDateRange.from!)
-        } : null,
         comparison_type: comparisonType as any,
         price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues }, // Deep copy to avoid mutations
-        main_dimension_id: mainDimensionId || null,
-        main_dimension_name: mainDimensionName || null,
-      });
+      } as any);
 
       // The view will be automatically refetched by the query
       // We'll select it after the query refetches
@@ -2458,14 +2452,10 @@ export default function SlideViewPage() {
         id: viewId,
         selected_year: selectedYear,
         selected_month: selectedMonth,
-        custom_date_range: customDateRange ? {
-          from: formatDateToLocalIso(customDateRange.from!),
-          to: formatDateToLocalIso(customDateRange.to || customDateRange.from!)
-        } : null,
         comparison_type: comparisonType as any,
         price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues },
-      });
+      } as any);
       queryClient.invalidateQueries({ queryKey: ['views', 'list', slideReportId] });
     } catch (error) {
       console.error('Error updating view:', error);
@@ -2794,7 +2784,7 @@ export default function SlideViewPage() {
     let commissionsPaid = 0;
     let commissionsFree = 0;
     for (const ch of channels) {
-      const chData = (effectivePivotData?.channels as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[ch];
+      const chData = (effectivePivotData?.channels as unknown as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[ch];
       const rows = getFilteredPivotRowsForChannel(
         chData,
         ch,
@@ -2856,7 +2846,7 @@ export default function SlideViewPage() {
         return { ...derived, label };
       }
 
-      const chData = (effectivePivotData?.channels as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[channel];
+      const chData = (effectivePivotData?.channels as unknown as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[channel];
       const rows = getFilteredPivotRowsForChannel(
         chData,
         channel,
@@ -3411,7 +3401,7 @@ export default function SlideViewPage() {
             selectedYear,
             selectedMonth,
             customDateRange,
-            datePreset: dsFilters.datePreset,
+            datePreset: (dsFilters as any).datePreset,
           }}
           channelReportIds={accountReportIds}
         />

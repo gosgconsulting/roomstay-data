@@ -134,7 +134,7 @@ async function fetchChannelRowsDirect(
 
     if (sampleError) throw sampleError;
 
-    const sampleRows = (sampleData || []).map((r) => ({ ...(r.dimension_values || {}) }));
+    const sampleRows = (sampleData || []).map((r) => ({ ...(typeof r.dimension_values === 'object' && r.dimension_values !== null ? r.dimension_values as Record<string, unknown> : {}) }));
     const dateDimId = findDateDimensionId(sampleRows);
 
     if (dateDimId) {

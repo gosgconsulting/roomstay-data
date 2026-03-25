@@ -299,7 +299,7 @@ export const CreateShareLinkModal = ({
             : [],
         };
 
-        const { error } = await supabase.from("share_links").insert(insertData);
+        const { error } = await supabase.from("share_links").insert(insertData as any);
         if (error) {
           if (error.code === "23505") {
             toast({

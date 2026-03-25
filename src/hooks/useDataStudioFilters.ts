@@ -318,7 +318,7 @@ export function useDataStudioFilters({
           Object.entries(normalizedChannelFilterValues).filter(([filterId]) => filterId !== dimId)
         );
         const scopedRows = filterRawDataRows(
-          rows,
+          rows as any,
           otherFilterValues,
           optionDateRange ?? undefined,
           combinedDimNames
@@ -486,8 +486,8 @@ export function useDataStudioFilters({
       if (view.selected_month) setSelectedMonth(view.selected_month);
 
       // PRIORITY: Use custom_date_range if available (preserves exact dates for cross-year ranges)
-      if (view.custom_date_range) {
-        const customRange = view.custom_date_range as { from: string; to: string };
+      if ((view as any).custom_date_range) {
+        const customRange = (view as any).custom_date_range as { from: string; to: string };
         setCustomDateRangeRaw({
           from: new Date(customRange.from),
           to: new Date(customRange.to)
@@ -513,19 +513,17 @@ export function useDataStudioFilters({
     values: string[]
   ) => {
     if (isReadOnly) return;
-    setFilterValuesRaw(prev => ({
-      ...prev,
-      [channel]: { ...prev[channel], [dimensionId]: values },
-    }));
+    setFilterValuesRaw({
+      ...filterValues,
+      [channel]: { ...(filterValues[channel] || {}), [dimensionId]: values },
+    });
   }, [isReadOnly]);
 
   const clearChannelFilter = useCallback((channel: Channel, dimensionId: string) => {
     if (isReadOnly) return;
-    setFilterValuesRaw(prev => {
-      const next = { ...prev, [channel]: { ...prev[channel] } };
-      delete next[channel][dimensionId];
-      return next;
-    });
+    const next = { ...filterValues, [channel]: { ...(filterValues[channel] || {}) } };
+    delete next[channel][dimensionId];
+    setFilterValuesRaw(next);
   }, [isReadOnly]);
 
   const persistFilterConfigs = useCallback((next: FilterConfigs) => {
