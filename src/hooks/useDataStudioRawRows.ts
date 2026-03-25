@@ -246,10 +246,11 @@ export function useDataStudioRawRows(
   // works with or without the slideReport.
   const stableCacheId = slideReport?.id ?? (hasReportIds ? 'shared-' + Object.values(reportIds).sort().join(',') : '');
 
+  // Detect if we are in a shared/anon context (no authenticated user).
+  // Shared views must NOT cache aggressively — stale empty results cause 0-KPI bugs.
+  const isAnon = !slideReport?.user_id;
+
   const queryResult = useQuery({
-    // Key includes selectedYear so switching years refetches the correct data.
-    // Month is NOT in the key — we always fetch the full year and let the
-    // client-side useFilteredSlideData narrow to the selected month for KPI totals.
     queryKey: ['data-studio-raw-rows', stableCacheId, selectedYear, Object.keys(reportIds).sort().join(',')],
     queryFn: async (): Promise<DataStudioSourceResult> => {
       const { user } = await getUser();
@@ -272,27 +273,20 @@ export function useDataStudioRawRows(
 
       const results = await Promise.all(promises);
       for (const { channel, rows, dimMap } of results) {
-        // Always include every channel so the report shows all three (metasearch, sem, social).
-        // Empty rows when no data so cost/revenue etc. show as 0 instead of only metasearch showing.
         result[channel] = rows ?? [];
         dimensionMaps[channel] = dimMap ?? {};
       }
 
       return { rawRows: result, dimensionMaps };
     },
-    // CRITICAL: Do NOT gate on slideReport?.id — for shared/anon views, slideReport may be
-    // null (RLS blocks the query). reportIdsOverride from sessionStorage provides valid IDs.
-    // The query only needs: (1) caller says enabled, (2) we have channel report IDs to fetch.
     enabled: enabled && hasReportIds,
-    // Smart caching for performance:
-    // - staleTime: Data is fresh for 5 minutes (no refetch)
-    // - gcTime: Keep in memory for 10 minutes after last use
-    // - Refresh Data button invalidates cache via queryClient.invalidateQueries
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000, // 10 minutes
-    refetchOnMount: false, // Don't refetch if data is fresh
+    // For authenticated users: cache 5 min. For anon/shared: no caching to avoid stale 0-data.
+    staleTime: isAnon ? 0 : 5 * 60 * 1000,
+    gcTime: isAnon ? 0 : 10 * 60 * 1000,
+    refetchOnMount: isAnon ? 'always' : false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
+    retry: 2, // Retry transient edge-function failures
   });
 
   // Cache verification guard: if the query is enabled with real IDs but the cached result
@@ -301,15 +295,19 @@ export function useDataStudioRawRows(
   const { data, isLoading, isFetching } = queryResult;
   const allChannelsEmpty = data != null &&
     Object.values(data.rawRows).every((rows) => rows.length === 0);
+  // Also detect when rows exist but dimension map is empty (RLS/edge failure)
+  const dimMapsEmpty = data != null &&
+    Object.values(data.dimensionMaps).every((dm) => Object.keys(dm).length === 0);
+  const shouldInvalidate = allChannelsEmpty || (data != null && !allChannelsEmpty && dimMapsEmpty);
 
   useEffect(() => {
-    if (enabled && hasReportIds && !isLoading && !isFetching && allChannelsEmpty) {
-      console.warn('[DataStudio] Cached result has 0 rows but query is enabled — invalidating cache to force refetch');
+    if (enabled && hasReportIds && !isLoading && !isFetching && shouldInvalidate) {
+      console.warn('[DataStudio] Cached result has 0 rows or empty dimMaps — invalidating cache to force refetch');
       queryClient.invalidateQueries({
         queryKey: ['data-studio-raw-rows', stableCacheId, selectedYear],
       });
     }
-  }, [enabled, hasReportIds, stableCacheId, isLoading, isFetching, allChannelsEmpty, queryClient, selectedYear]);
+  }, [enabled, hasReportIds, stableCacheId, isLoading, isFetching, shouldInvalidate, queryClient, selectedYear]);
 
   return queryResult;
 }
