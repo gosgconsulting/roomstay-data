@@ -1069,7 +1069,8 @@ export default function SlideViewPage() {
       if (config.breakdownByDimension) {
         setBreakdownByDimensionRaw(prev => ({ ...prev, ...config.breakdownByDimension }));
       }
-      setChartMetric(parseChartMetric(config.chartMetric));
+      // For shared/public views, always default to 'revenue' regardless of saved config
+      setChartMetric(isPublicShareStudio ? DEFAULT_CHART_METRIC : parseChartMetric(config.chartMetric));
       if (config.chartGranularity) {
         setChartGranularity(config.chartGranularity as ChartGranularity);
       }
