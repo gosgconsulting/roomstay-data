@@ -340,6 +340,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
       pivotChannels[ch] = {
         current: emptyMetrics,
         monthly: {},
+        breakdowns: {},
         rawDataRows: rows,
         dimensionMap: mergedDimMaps[ch] || {},
       };

@@ -118,7 +118,8 @@ export default function SharedReport() {
                 name: "Data Studio",
                 report_ids: reportIdsMap,
                 configuration: {},
-              })
+                user_id: linkData.created_by,
+              } as any)
               .select()
               .single();
 

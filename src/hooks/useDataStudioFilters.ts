@@ -521,11 +521,9 @@ export function useDataStudioFilters({
 
   const clearChannelFilter = useCallback((channel: Channel, dimensionId: string) => {
     if (isReadOnly) return;
-    setFilterValuesRaw(prev => {
-      const next = { ...prev, [channel]: { ...prev[channel] } };
-      delete next[channel][dimensionId];
-      return next;
-    });
+    const next = { ...filterValues, [channel]: { ...(filterValues[channel] || {}) } };
+    delete next[channel][dimensionId];
+    setFilterValuesRaw(next);
   }, [isReadOnly]);
 
   const persistFilterConfigs = useCallback((next: FilterConfigs) => {
