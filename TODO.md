@@ -34,6 +34,39 @@ After coding:
 
 ## Active tasks
 
+### Shared studio zero-data QA and fix (2026-03-26)
+
+**Status:** ✅ Complete
+
+**Problem:** `https://report.roomstay.io/shared/brady/studio` showed all KPI cards as `0`.
+
+**Root causes found (audit):**
+
+1. **CRITICAL — bad CORS request headers in Supabase browser client.** `src/integrations/supabase/client.ts` included `Access-Control-Allow-Origin` and `Access-Control-Allow-Headers` in the Supabase `global.headers` config. These are response-only headers; sending them as request headers causes the browser to reject the POST preflight for `get-cached-report-data` and the year-filter RPC (`get_dimension_data_by_report_and_date`), both of which are the primary data paths for the shared studio.
+
+2. **HIGH — stale `?viewId=` write path in SharedReport.** `SharedReport.tsx` was reading `viewId` from the URL query string and writing it to session storage, diverging from master (`SlideViewPage`) which explicitly does not read `?viewId=`. This kept shared and master loading behavior out of sync.
+
+3. **MEDIUM — one-render null gap for shared IDs.** `shareAccountId` and `shareSlideReportId` were initialized to `null` and set only in a `useEffect`, meaning the first render of `useSlideReportPage` had no IDs. Combined with `staleTime: 5min` and `refetchOnMount: false` on the React Query raw-rows cache, an empty first fetch could be locked in. Mitigated by moving all session reads into lazy `useState` initializers so IDs are populated synchronously before the first render.
+
+**Verified:** DB confirmed 60K+ rows across all three Brady channel reports; the RPC returns correct data as `anon` role. No invalid date rows. Issue was entirely in the loading/request path, not the data.
+
+**Fixes applied:**
+
+| File | Change |
+|---|---|
+| `src/integrations/supabase/client.ts` | Removed `global.headers` block (`Access-Control-Allow-Origin`, `Access-Control-Allow-Headers`, `Connection: keep-alive`) |
+| `src/pages/SharedReport.tsx` | Removed `?viewId=` URL query-string write path; now uses `view_id` from `share_links` exclusively |
+| `src/pages/SlideViewPage.tsx` | Moved `shareAccountId`, `shareSlideReportId`, `shareLockedDimensionIds` into synchronous lazy `useState` init; bootstrap `useEffect` now only re-reads on HMR/double-invoke guard |
+
+**Verification:**
+
+- `npm run build`: ✅ 1,767.65 kB, 0 errors
+- `npm run lint`: ✅ 0 errors (pre-existing warnings unchanged)
+- Browser test (local dev): KPIs show `$1,041,077` Revenue, `2,036` Bookings, `24.6x` ROAS — real Brady data
+- Network trace: All `get-cached-report-data` POSTs returning `200`; no CORS rejections; no RPC 500s
+
+---
+
 ### Supabase database refactor — migration inventory and consolidation (2026-03-26)
 
 **Status:** ✅ Complete
