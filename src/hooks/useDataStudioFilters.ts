@@ -318,7 +318,7 @@ export function useDataStudioFilters({
           Object.entries(normalizedChannelFilterValues).filter(([filterId]) => filterId !== dimId)
         );
         const scopedRows = filterRawDataRows(
-          rows,
+          rows as any,
           otherFilterValues,
           optionDateRange ?? undefined,
           combinedDimNames
