@@ -37,6 +37,12 @@ export interface UseSlideReportPageParams {
   dynamicChannelTotals?: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }>;
   /** Global dimension-ID → human-name map for filter ID resolution in filterRawDataRows. */
   configuredDimensionNames?: Record<string, string>;
+  /**
+   * Pre-seeded report_ids map (e.g. from sessionStorage for shared studio).
+   * When provided, used to populate effectiveReportIdsForFetch before useSlideReport resolves.
+   * Prevents 0 KPI on first load when the viewer is unauthenticated and the DB query is slow.
+   */
+  reportIdsOverride?: Record<string, string> | null;
 }
 
 export interface ViewBudgetItem {
@@ -100,6 +106,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     breakdownByDimensionId,
     selectedViewId,
     configuredDimensionNames,
+    reportIdsOverride,
   } = params;
 
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
@@ -208,15 +215,17 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   // but fill in any missing channel from accountReportIds so metasearch (and sem/social) are
   // always fetched when the account has that report. Replicates SEM/Social behavior for Metasearch.
   const effectiveReportIdsForFetch = useMemo((): Record<string, string> => {
+    // Priority: slideReport.report_ids (from DB) > reportIdsOverride (from sessionStorage seed) > accountReportIds
     const stored = (slideReport?.report_ids || {}) as Record<string, string>;
+    const seed = (reportIdsOverride || {}) as Record<string, string>;
     const channelKeys = ['metasearch', 'sem', 'social'] as const;
     const merged: Record<string, string> = {};
     for (const ch of channelKeys) {
-      const id = stored[ch] || accountReportIds[ch] || null;
+      const id = stored[ch] || seed[ch] || accountReportIds[ch] || null;
       if (id) merged[ch] = id;
     }
     return merged;
-  }, [slideReport?.report_ids, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social]);
+  }, [slideReport?.report_ids, reportIdsOverride, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social]);
 
   // Compute the list of calendar years that the primary customDateRange spans.
   // A cross-year range (e.g. Nov 2025 → Feb 2026) needs rows from both years.

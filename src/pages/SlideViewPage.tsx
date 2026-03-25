@@ -412,6 +412,7 @@ export default function SlideViewPage() {
     breakdownByDimensionId: breakdownByDimension[selectedTab] || breakdownByDimension['metasearch'],
     selectedViewId,
     configuredDimensionNames,
+    reportIdsOverride: shareReportIds,
   });
   const {
     slideReportId: hookSlideReportId,
