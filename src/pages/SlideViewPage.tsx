@@ -353,6 +353,8 @@ export default function SlideViewPage() {
     'price-check': {},
     booking: {},
   });
+  // Base filter values for shared views — "Reset" restores to these instead of clearing all.
+  const [shareBaseFilters, setShareBaseFilters] = useState<Record<string, Record<string, string[]>> | null>(null);
   const [selectedTab, setSelectedTab] = useState("overview");
   const [chartMetric, setChartMetric] = useState<ChartMetric>(DEFAULT_CHART_METRIC);
   const [chartGranularity, setChartGranularity] = useState<ChartGranularity>('week');
