@@ -2452,14 +2452,10 @@ export default function SlideViewPage() {
         id: viewId,
         selected_year: selectedYear,
         selected_month: selectedMonth,
-        custom_date_range: customDateRange ? {
-          from: formatDateToLocalIso(customDateRange.from!),
-          to: formatDateToLocalIso(customDateRange.to || customDateRange.from!)
-        } : null,
         comparison_type: comparisonType as any,
         price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues },
-      });
+      } as any);
       queryClient.invalidateQueries({ queryKey: ['views', 'list', slideReportId] });
     } catch (error) {
       console.error('Error updating view:', error);
