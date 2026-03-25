@@ -431,14 +431,17 @@ export function useDataStudioFilters({
 
   const resetFilters = useCallback(() => {
     if (isReadOnly) return;
-    setFilterValuesRaw(EMPTY_FILTER_VALUES);
+    // For shared views, restore the base filters (from saved view) instead of clearing all.
+    // This prevents users from seeing other accounts' data after clicking "Reset".
+    const baseFilters = shareBaseFilterValues ?? EMPTY_FILTER_VALUES;
+    setFilterValuesRaw(baseFilters);
     setComparisonTypeRaw('none');
     const range = getCurrentMonthToDateRange();
     const next = dateRangeToSlideSelection(range);
     setCustomDateRangeRaw(range);
     setSelectedYear(next.year);
     setSelectedMonth(next.month);
-  }, [isReadOnly, setSelectedYear, setSelectedMonth]);
+  }, [isReadOnly, setSelectedYear, setSelectedMonth, shareBaseFilterValues]);
 
   const applyPreset = useCallback((preset: string) => {
     if (isReadOnly) return;
