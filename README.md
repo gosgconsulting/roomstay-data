@@ -190,6 +190,7 @@ Google Sheets / CSV URL
 - Share links can be password-protected (base64 encoded - NOTE: not cryptographically secure, consider proper hashing)
 - **Main dimension is locked:** When saving a view, users select a main dimension (Account/Hotel). This dimension is locked when the view is shared publicly.
 - **Selective read-only:** Viewers can change date range, comparison period, and non-locked filter values (Device, Market, Link Type, Campaign, Ad Group) locally. Locked dimensions (Account/Hotel) remain disabled. Structural changes (save view, share, refresh, dimension configuration) are disabled.
+- **Default date filter:** Shared reports (both Data Studio and classic) default to "This Month" on initial load
 - **Smart defaults:** Metasearch → Hotel, SEM/Social → Account (inferred from active tab when saving view)
 - Locked filters render with a lock icon and disabled state
 - Slide report shares use `slide_report_id` + `view_id` for configuration

@@ -46,7 +46,7 @@ After coding:
 - **`SlideViewPage.tsx`:** Added `viewerMayAdjustDataFilters` flag (true for public studio or legacy share preview). Pass `isReadOnly: isReadOnlyMode && !viewerMayAdjustDataFilters` to `useDataStudioFilters` so shared viewers can change date/compare/filter values locally while structural changes remain locked.
 - **`FiltersRow.tsx`:** Added `allowDataFilterChanges` prop; date `onApply` guard now checks `isReadOnlyMode && !allowDataFilterChanges` instead of `isReadOnlyMode` alone.
 - **`FiltersBar.tsx`:** Added `getReportOwnerId()` helper; `loadDimensions` and `loadAllDimensions` resolve report owner's `user_id` when `isSharedView && !user`. Added `sharedDimensionFilters` prop; `loadFilterSettings` prefers link filters over owner's default view for shared reports.
-- **`SharedReport.tsx`:** Pass `sharedDimensionFilters={shareLink.dimension_filters[reportId]}` to `FiltersBar`.
+- **`SharedReport.tsx`:** Pass `sharedDimensionFilters={shareLink.dimension_filters[reportId]}` to `FiltersBar`. Default date filter changed from `undefined` to "This Month" (computed at initialization) so shared reports always start with current month filtered.
 - **`README.md`:** Updated Sharing System behavior to clarify viewers may change date/compare/filter values locally; structural edits remain disabled. Noted anonymous access dimension resolution.
 
 **Verification:** `npm run build` ✅, `npm run lint` ✅

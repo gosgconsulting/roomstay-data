@@ -38,14 +38,23 @@ export default function SharedReport() {
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   
-  // Filter state - default to last 7 days for better performance with large datasets
-  const [filters, setFilters] = useState<FilterState>({
-    dimensionFilters: {},
-    dateRange: undefined, // Let FiltersBar handle initial date range
-    datePreset: "this_month",
-    compareEnabled: false,
-    compareType: "previous_period",
-    compareDateRange: undefined,
+  // Filter state - default to this month for shared reports
+  const [filters, setFilters] = useState<FilterState>(() => {
+    const thisMonthRange = (() => {
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { from: start, to: end };
+    })();
+    
+    return {
+      dimensionFilters: {},
+      dateRange: thisMonthRange,
+      datePreset: "this_month",
+      compareEnabled: false,
+      compareType: "previous_period",
+      compareDateRange: undefined,
+    };
   });
 
   // Stabilize the onFiltersChange callback to prevent unnecessary re-renders
