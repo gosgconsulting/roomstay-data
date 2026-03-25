@@ -3241,7 +3241,7 @@ export default function SlideViewPage() {
               setChartGranularity={setChartGranularity}
               selectedYear={selectedYear}
               selectedMonth={selectedMonth}
-              isReadOnlyMode={isReadOnlyMode}
+              isReadOnlyMode={isReadOnlyMode && !viewerMayAdjustDataFilters}
               setIsEditSourceOpen={setIsEditSourceOpen}
               renderKPICards={renderKPICards}
               renderKPICardsSkeleton={renderKPICardsSkeleton}
