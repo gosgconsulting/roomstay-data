@@ -208,13 +208,21 @@ export default function SlideViewPage() {
   // This prevents an uncacheable empty React Query result being locked in for staleTime (5 min).
   const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
 
+  // For public share studio: read critical IDs from URL query params first (reliable),
+  // then fall back to sessionStorage (legacy / backward compat).
   const [shareAccountId, setShareAccountId] = useState<string | null>(() => {
-    if (!isPublicShareStudio || !effectiveSlug) return null;
-    return sessionStorage.getItem(`share_account_id_${effectiveSlug}`) ?? null;
+    if (!isPublicShareStudio) return null;
+    const fromUrl = searchParams.get('aid');
+    if (fromUrl) return fromUrl;
+    if (effectiveSlug) return sessionStorage.getItem(`share_account_id_${effectiveSlug}`) ?? null;
+    return null;
   });
   const [shareSlideReportId, setShareSlideReportId] = useState<string | null>(() => {
-    if (!isPublicShareStudio || !effectiveSlug) return null;
-    return sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`) ?? null;
+    if (!isPublicShareStudio) return null;
+    const fromUrl = searchParams.get('id');
+    if (fromUrl) return fromUrl;
+    if (effectiveSlug) return sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`) ?? null;
+    return null;
   });
   const [shareLockedDimensionIds, setShareLockedDimensionIds] = useState<string[]>(() => {
     if (!isPublicShareStudio || !effectiveSlug) return [];
@@ -226,10 +234,21 @@ export default function SlideViewPage() {
     }
   });
 
+  // Read view_id from URL query param (new) or sessionStorage (legacy)
+  const [shareViewId] = useState<string | null>(() => {
+    if (!isPublicShareStudio) return null;
+    const fromUrl = searchParams.get('vid');
+    if (fromUrl) return fromUrl;
+    // Legacy: stored under share_view_id_${slideReportId}
+    const srId = searchParams.get('id') || (effectiveSlug ? sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`) : null);
+    if (srId) return sessionStorage.getItem(`share_view_id_${srId}`) ?? null;
+    return null;
+  });
+
   // Eagerly read report_ids stored by SharedReport during initialization.
   // This seeds effectiveReportIdsForFetch on the very first render so useDataStudioRawRows
   // can fire before useSlideReport (RLS-gated DB query) resolves — preventing 0 KPI.
-  const [shareReportIds] = useState<Record<string, string> | null>(() => {
+  const [shareReportIds, setShareReportIds] = useState<Record<string, string> | null>(() => {
     if (!isPublicShareStudio || !effectiveSlug) return null;
     try {
       const raw = sessionStorage.getItem(`share_report_ids_${effectiveSlug}`);
