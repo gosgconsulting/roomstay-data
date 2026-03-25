@@ -220,9 +220,14 @@ export default function SharedReport() {
       sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(linkData));
 
       // Navigate to Data Studio embed for ALL shares (unified pipeline)
+      // Put critical IDs in the URL so SlideViewPage never depends on sessionStorage for core loading.
+      const studioParams = new URLSearchParams();
+      studioParams.set('id', finalSlideReportId);
+      studioParams.set('aid', accountId);
+      if (hasViewId) studioParams.set('vid', linkData.view_id);
       const perfEnd = performance.now();
       console.log(`[SharedReport] Initialization complete in ${(perfEnd - perfStart).toFixed(2)}ms`);
-      navigate(`/shared/${slug}/studio`, { replace: true });
+      navigate(`/shared/${slug}/studio?${studioParams.toString()}`, { replace: true });
     } catch (error) {
       const perfEnd = performance.now();
       console.error(`[SharedReport] Error after ${(perfEnd - perfStart).toFixed(2)}ms:`, error);
