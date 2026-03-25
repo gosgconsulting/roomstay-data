@@ -444,7 +444,9 @@ RPCs such as `get_dimension_data_by_report_and_date` support year-scoped fetches
 
 **Metasearch Cost (or other metrics) under-counted:** Prefer **Data Studio → Refresh Data → Full Refresh**. That clears `dimension_data` for the report(s) and re-syncs from sources with correct column → dimension mapping. **Optional DB fix without re-fetch:** run `supabase/scripts/fix_metasearch_cost_dimension_data.sql` via Supabase SQL Editor, `npm run fix:metasearch-cost` (linked CLI), or MCP `execute_sql` with the script body. Currency strings in sheets are normalized via `parseNumericValue` / `transformSourceData` — wrong totals are usually dimension ID / multi-source issues, not formatting.
 
-**Supabase MCP (linked project):** authenticate once if required; use `execute_sql` for one-off scripts, `apply_migration` for DDL, `deploy_edge_function` to ship functions from `supabase/functions/`, `list_tables` / `list_migrations` for inspection.
+**Supabase MCP (linked project):** authenticate once if required; use `execute_sql` for one-off scripts, `apply_migration` for DDL (can ship schema changes without adding repo migration files when appropriate), `deploy_edge_function` to ship functions from `supabase/functions/`, `list_tables` / `list_migrations` for inspection.
+
+**Legacy tables removed from the active linked project (2026-03-25, via MCP):** `ai_summary_*`, `slide_report_summaries`, `cluster_dimensions`, `cluster_mappings`, `slides`, `booking_statuses`, `master_filter_settings`. App code never queried these; `src/integrations/supabase/types.ts` matches the live schema.
 
 **Local MCP refresh server:** see `mcp/README.md` for the optional `run_refresh_workflow` MCP tool package.
 

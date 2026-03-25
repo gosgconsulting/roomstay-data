@@ -34,6 +34,22 @@ After coding:
 
 ## Active tasks
 
+### Supabase legacy drops — MCP only (2026-03-25)
+
+**Status:** ✅ Complete (DDL applied via Supabase MCP `apply_migration`; no new `.sql` files added for this step)
+
+**Applied on linked project:**
+1. `drop_ai_summary_and_unused_legacy_tables` — `ai_summary_forecasts`, `ai_summary_budgets`, `ai_summary_cards`, `slide_report_summaries` (IF EXISTS).
+2. `drop_cluster_slides_booking_master_filter_legacy` — `cluster_mappings`, `cluster_dimensions`, `slides`, `booking_statuses`, `master_filter_settings`.
+
+**Repo:** `src/integrations/supabase/types.ts` updated — removed dropped tables; added `query_cache` to match live schema.
+
+**Not dropped (needs product/integration sign-off):** `report_daily_metrics`, `master_report_configs`, `master_report_global_configs`.
+
+**Verify:** `npx tsc --noEmit`, `npm run build`.
+
+---
+
 ### Supabase refactor — server + schema alignment (2026-03-25)
 
 **Status:** ✅ Complete (code + linked DB migrations applied via MCP)
@@ -47,7 +63,7 @@ After coding:
 
 **Verify:** `npm run build`, `npm run lint`, `node --check server.js`. After deploy: Make.com route smoke test; optional Price Widget create/load if UI writes widgets.
 
-**Next (optional):** Apply repo migrations `20260318150000_drop_ai_summary_tables.sql` / legacy-table drops on environments that still have `ai_summary_*` or unused cluster/master tables; regenerate types from Supabase CLI if you prefer generated `types.gen.ts` over hand-maintained `types.ts`.
+**Next (optional):** Other Supabase projects/branches: repeat MCP `apply_migration` drops (or run equivalent SQL) if they still have `ai_summary_*` / cluster / `slides` / `booking_statuses` / `master_filter_settings`. Remove or refresh stale `types.gen.ts` if you use it anywhere.
 
 ---
 

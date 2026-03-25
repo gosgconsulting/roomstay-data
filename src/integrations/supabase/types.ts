@@ -41,166 +41,6 @@ export type Database = {
         }
         Relationships: []
       }
-      ai_summary_budgets: {
-        Row: {
-          account_id: string | null
-          ai_summary_card_id: string
-          budget_amount: number
-          created_at: string
-          id: string
-          month_key: string
-          report_id: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_id?: string | null
-          ai_summary_card_id: string
-          budget_amount?: number
-          created_at?: string
-          id?: string
-          month_key: string
-          report_id: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_id?: string | null
-          ai_summary_card_id?: string
-          budget_amount?: number
-          created_at?: string
-          id?: string
-          month_key?: string
-          report_id?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_summary_budgets_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ai_summary_budgets_report_id_fkey"
-            columns: ["report_id"]
-            isOneToOne: false
-            referencedRelation: "reports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ai_summary_cards: {
-        Row: {
-          account_id: string | null
-          ai_prompt: string
-          cached_budget_data: Json | null
-          cached_pivot_data: Json | null
-          created_at: string
-          generated_summary: string | null
-          id: string
-          last_generated_at: string | null
-          name: string
-          pivot_data_refreshed_at: string | null
-          report_configs: Json
-          report_ids: string[]
-          selected_metrics: string[]
-          since_date: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_id?: string | null
-          ai_prompt: string
-          cached_budget_data?: Json | null
-          cached_pivot_data?: Json | null
-          created_at?: string
-          generated_summary?: string | null
-          id?: string
-          last_generated_at?: string | null
-          name?: string
-          pivot_data_refreshed_at?: string | null
-          report_configs?: Json
-          report_ids?: string[]
-          selected_metrics?: string[]
-          since_date: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_id?: string | null
-          ai_prompt?: string
-          cached_budget_data?: Json | null
-          cached_pivot_data?: Json | null
-          created_at?: string
-          generated_summary?: string | null
-          id?: string
-          last_generated_at?: string | null
-          name?: string
-          pivot_data_refreshed_at?: string | null
-          report_configs?: Json
-          report_ids?: string[]
-          selected_metrics?: string[]
-          since_date?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_summary_cards_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ai_summary_forecasts: {
-        Row: {
-          ai_summary_card_id: string
-          created_at: string
-          daily_rate: number
-          id: string
-          name: string
-          occupancy_rate: number
-          rooms: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          ai_summary_card_id: string
-          created_at?: string
-          daily_rate?: number
-          id?: string
-          name: string
-          occupancy_rate?: number
-          rooms?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          ai_summary_card_id?: string
-          created_at?: string
-          daily_rate?: number
-          id?: string
-          name?: string
-          occupancy_rate?: number
-          rooms?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_summary_forecasts_ai_summary_card_id_fkey"
-            columns: ["ai_summary_card_id"]
-            isOneToOne: false
-            referencedRelation: "ai_summary_cards"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       api_keys: {
         Row: {
           created_at: string
@@ -250,47 +90,6 @@ export type Database = {
             columns: ["report_id"]
             isOneToOne: false
             referencedRelation: "reports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      booking_statuses: {
-        Row: {
-          account_id: string
-          booking_number: string
-          checkout_date: string
-          created_at: string
-          hotel: string
-          id: string
-          status: string | null
-          updated_at: string
-        }
-        Insert: {
-          account_id: string
-          booking_number: string
-          checkout_date: string
-          created_at?: string
-          hotel: string
-          id?: string
-          status?: string | null
-          updated_at?: string
-        }
-        Update: {
-          account_id?: string
-          booking_number?: string
-          checkout_date?: string
-          created_at?: string
-          hotel?: string
-          id?: string
-          status?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "booking_statuses_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
             referencedColumns: ["id"]
           },
         ]
@@ -352,106 +151,6 @@ export type Database = {
             columns: ["view_id"]
             isOneToOne: false
             referencedRelation: "views"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      cluster_dimensions: {
-        Row: {
-          account_id: string | null
-          cluster_dimension_name: string
-          created_at: string
-          created_dimension_id: string | null
-          id: string
-          report_id: string | null
-          source_dimension_id: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_id?: string | null
-          cluster_dimension_name: string
-          created_at?: string
-          created_dimension_id?: string | null
-          id?: string
-          report_id?: string | null
-          source_dimension_id: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_id?: string | null
-          cluster_dimension_name?: string
-          created_at?: string
-          created_dimension_id?: string | null
-          id?: string
-          report_id?: string | null
-          source_dimension_id?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cluster_dimensions_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cluster_dimensions_created_dimension_id_fkey"
-            columns: ["created_dimension_id"]
-            isOneToOne: false
-            referencedRelation: "dimensions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cluster_dimensions_report_id_fkey"
-            columns: ["report_id"]
-            isOneToOne: false
-            referencedRelation: "reports"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cluster_dimensions_source_dimension_id_fkey"
-            columns: ["source_dimension_id"]
-            isOneToOne: false
-            referencedRelation: "dimensions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      cluster_mappings: {
-        Row: {
-          cluster_dimension_id: string
-          cluster_name: string
-          created_at: string
-          id: string
-          source_values: string[]
-          updated_at: string
-        }
-        Insert: {
-          cluster_dimension_id: string
-          cluster_name: string
-          created_at?: string
-          id?: string
-          source_values: string[]
-          updated_at?: string
-        }
-        Update: {
-          cluster_dimension_id?: string
-          cluster_name?: string
-          created_at?: string
-          id?: string
-          source_values?: string[]
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cluster_mappings_cluster_dimension_id_fkey"
-            columns: ["cluster_dimension_id"]
-            isOneToOne: false
-            referencedRelation: "cluster_dimensions"
             referencedColumns: ["id"]
           },
         ]
@@ -775,68 +474,6 @@ export type Database = {
         }
         Relationships: []
       }
-      master_filter_settings: {
-        Row: {
-          account_id: string | null
-          compare_date_from: string | null
-          compare_date_to: string | null
-          compare_enabled: boolean | null
-          compare_type: string | null
-          created_at: string | null
-          date_preset: string | null
-          date_range_from: string | null
-          date_range_to: string | null
-          id: string
-          selected_dimension_id: string | null
-          selected_dimension_values: string[] | null
-          selected_report_ids: string[] | null
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          account_id?: string | null
-          compare_date_from?: string | null
-          compare_date_to?: string | null
-          compare_enabled?: boolean | null
-          compare_type?: string | null
-          created_at?: string | null
-          date_preset?: string | null
-          date_range_from?: string | null
-          date_range_to?: string | null
-          id?: string
-          selected_dimension_id?: string | null
-          selected_dimension_values?: string[] | null
-          selected_report_ids?: string[] | null
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          account_id?: string | null
-          compare_date_from?: string | null
-          compare_date_to?: string | null
-          compare_enabled?: boolean | null
-          compare_type?: string | null
-          created_at?: string | null
-          date_preset?: string | null
-          date_range_from?: string | null
-          date_range_to?: string | null
-          id?: string
-          selected_dimension_id?: string | null
-          selected_dimension_values?: string[] | null
-          selected_report_ids?: string[] | null
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "master_filter_settings_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       master_report_configs: {
         Row: {
           account_id: string | null
@@ -1006,6 +643,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      query_cache: {
+        Row: {
+          cache_key: string
+          cache_version: number
+          created_at: string
+          expires_at: string
+          payload: Json
+          report_id: string
+        }
+        Insert: {
+          cache_key: string
+          cache_version?: number
+          created_at?: string
+          expires_at: string
+          payload: Json
+          report_id: string
+        }
+        Update: {
+          cache_key?: string
+          cache_version?: number
+          created_at?: string
+          expires_at?: string
+          payload?: Json
+          report_id?: string
+        }
+        Relationships: []
       }
       report_daily_metrics: {
         Row: {
@@ -1268,70 +932,6 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      slides: {
-        Row: {
-          account_id: string | null
-          cached_data: Json | null
-          components: Json
-          created_at: string
-          data_source_id: string | null
-          id: string
-          last_refreshed_at: string | null
-          name: string
-          report_id: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          account_id?: string | null
-          cached_data?: Json | null
-          components?: Json
-          created_at?: string
-          data_source_id?: string | null
-          id?: string
-          last_refreshed_at?: string | null
-          name: string
-          report_id?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          account_id?: string | null
-          cached_data?: Json | null
-          components?: Json
-          created_at?: string
-          data_source_id?: string | null
-          id?: string
-          last_refreshed_at?: string | null
-          name?: string
-          report_id?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "slides_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "slides_data_source_id_fkey"
-            columns: ["data_source_id"]
-            isOneToOne: false
-            referencedRelation: "data_sources"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "slides_report_id_fkey"
-            columns: ["report_id"]
-            isOneToOne: false
-            referencedRelation: "reports"
             referencedColumns: ["id"]
           },
         ]
