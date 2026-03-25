@@ -188,6 +188,11 @@ export interface UseDataStudioFiltersParams {
    * (which use report-specific IDs). Built from breakdownDimensions in the parent page.
    */
   configuredDimensionNames?: Record<string, string>;
+  /**
+   * Base filter values for shared views. When provided, resetFilters restores
+   * to these values instead of clearing all filters (prevents showing other accounts' data).
+   */
+  shareBaseFilterValues?: FilterValues | null;
 }
 
 export interface UseDataStudioFiltersReturn {
@@ -242,6 +247,7 @@ export function useDataStudioFilters({
   selectedMonth,
   setSelectedMonth,
   configuredDimensionNames = {},
+  shareBaseFilterValues = null,
 }: UseDataStudioFiltersParams): UseDataStudioFiltersReturn {
   const [_internalCustomDateRange, _setInternalCustomDateRange] = useState<DateRange | undefined>(undefined);
   const [_internalComparisonType, _setInternalComparisonType] = useState('none');
@@ -425,14 +431,17 @@ export function useDataStudioFilters({
 
   const resetFilters = useCallback(() => {
     if (isReadOnly) return;
-    setFilterValuesRaw(EMPTY_FILTER_VALUES);
+    // For shared views, restore the base filters (from saved view) instead of clearing all.
+    // This prevents users from seeing other accounts' data after clicking "Reset".
+    const baseFilters = shareBaseFilterValues ?? EMPTY_FILTER_VALUES;
+    setFilterValuesRaw(baseFilters);
     setComparisonTypeRaw('none');
     const range = getCurrentMonthToDateRange();
     const next = dateRangeToSlideSelection(range);
     setCustomDateRangeRaw(range);
     setSelectedYear(next.year);
     setSelectedMonth(next.month);
-  }, [isReadOnly, setSelectedYear, setSelectedMonth]);
+  }, [isReadOnly, setSelectedYear, setSelectedMonth, shareBaseFilterValues]);
 
   const applyPreset = useCallback((preset: string) => {
     if (isReadOnly) return;

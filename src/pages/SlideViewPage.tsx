@@ -291,7 +291,11 @@ export default function SlideViewPage() {
 
     // Apply share-link channel filters (date already initialized via buildInitialDateStateForSharedStudio)
     const channelFilters = readShareFiltersFromSession(effectiveSlug);
-    if (channelFilters) setFilterValues(channelFilters);
+    if (channelFilters) {
+      setFilterValues(channelFilters);
+      // Store as base filters so "Reset" restores to these instead of clearing all
+      setShareBaseFilters(channelFilters);
+    }
   }, [isPublicShareStudio, effectiveSlug, navigate, shareAccountId, shareSlideReportId]);
 
   // ALWAYS fetch report_ids from DB for shared views (URL is source of truth).
@@ -349,6 +353,8 @@ export default function SlideViewPage() {
     'price-check': {},
     booking: {},
   });
+  // Base filter values for shared views — "Reset" restores to these instead of clearing all.
+  const [shareBaseFilters, setShareBaseFilters] = useState<Record<string, Record<string, string[]>> | null>(null);
   const [selectedTab, setSelectedTab] = useState("overview");
   const [chartMetric, setChartMetric] = useState<ChartMetric>(DEFAULT_CHART_METRIC);
   const [chartGranularity, setChartGranularity] = useState<ChartGranularity>('week');
@@ -552,6 +558,7 @@ export default function SlideViewPage() {
     selectedMonth,
     setSelectedMonth,
     configuredDimensionNames,
+    shareBaseFilterValues: shareBaseFilters,
   });
 
   // Expose dsFilters.filterConfigs as a local alias.
