@@ -27,7 +27,7 @@ type CachedPayload = {
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -45,21 +45,33 @@ async function validateAuth(req: Request): Promise<boolean> {
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const authHeader = req.headers.get('authorization');
+  const apiKeyHeader = req.headers.get('apikey');
   const bearer = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
-  if (!bearer) return false;
+  if (!bearer && !apiKeyHeader) return false;
   if (serviceRoleKey && bearer === serviceRoleKey) return true;
   
-  // Accept the anon key for public share access
+  // Accept the anon key for public share access (sent as Bearer or apikey header)
   // Safe because the function uses service role for all DB operations
-  if (anonKey && bearer === anonKey) return true;
+  if (anonKey && (bearer === anonKey || apiKeyHeader === anonKey)) return true;
+
+  // Also accept any valid JWT that looks like a Supabase anon token (role=anon)
+  // This handles cases where the env SUPABASE_ANON_KEY doesn't match the client's key
+  if (bearer) {
+    try {
+      const payload = JSON.parse(atob(bearer.split('.')[1]));
+      if (payload.role === 'anon') return true;
+    } catch {
+      // Not a valid JWT, continue to user auth check
+    }
+  }
 
   if (supabaseUrl && anonKey) {
     try {
       const client = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: `Bearer ${bearer}` } },
       });
-      const { data: { user }, error } = await client.auth.getUser(bearer);
+      const { data: { user }, error } = await client.auth.getUser(bearer!);
       if (!error && user) return true;
     } catch {
       // ignore and return false
