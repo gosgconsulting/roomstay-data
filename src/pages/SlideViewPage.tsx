@@ -3401,7 +3401,7 @@ export default function SlideViewPage() {
             selectedYear,
             selectedMonth,
             customDateRange,
-            datePreset: dsFilters.datePreset,
+            datePreset: (dsFilters as any).datePreset,
           }}
           channelReportIds={accountReportIds}
         />
