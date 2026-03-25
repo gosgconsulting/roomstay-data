@@ -593,8 +593,6 @@ export const FiltersBar = ({
       }
       if (!userId) throw new Error("User not authenticated");
 
-      console.log('[FiltersBar] Loading dimensions for filtering - being more permissive...');
-
       // Use centralized dimension loader to get ALL dimensions (no data filtering for filters)
       const allAvailableDimensions = await loadDimensionsForUser(
         userId, 

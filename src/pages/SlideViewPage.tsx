@@ -607,7 +607,6 @@ export default function SlideViewPage() {
               const channelFilters = JSON.parse(storedFilters);
               // Apply filters immediately
               setFilterValues(channelFilters);
-              console.log('[testing] Applied filters from share link:', channelFilters);
             } catch (error) {
               console.error('[testing] Error parsing share link filters:', error);
             }
@@ -1538,9 +1537,6 @@ export default function SlideViewPage() {
         .map(name => channelDims.find(d => d.name === name))
         .filter((d): d is Dimension => d !== undefined);
 
-      console.log(`[loadDimensionsForChannel] Loaded ${sortedDims.length} dimensions for ${channel} (account: ${accountId}):`,
-        sortedDims.map(d => ({ id: d.id, name: d.name })));
-
       setDimensions(prev => ({ ...prev, [channel]: sortedDims }));
       setLoadingDimensions(prev => ({ ...prev, [channel]: false }));
 
@@ -1730,7 +1726,6 @@ export default function SlideViewPage() {
           }
 
           if (abortController.signal.aborted) {
-            console.log(`[loadValuesForDimension] Request cancelled for ${channel}/${dimensionId}`);
             return;
           }
 
@@ -1755,16 +1750,11 @@ export default function SlideViewPage() {
             offset += batchSize;
             hasMore = batchData.length === batchSize;
 
-            // Log progress for large datasets
-            if (allDimData.length % 5000 === 0) {
-              console.log(`[loadValuesForDimension] Loaded ${allDimData.length} rows for ${channel}/${dimensionId}...`);
-            }
           } else {
             hasMore = false;
           }
         } catch (err: any) {
           if (abortController.signal.aborted) {
-            console.log(`[loadValuesForDimension] Request cancelled for ${channel}/${dimensionId}`);
             return;
           }
 
@@ -1849,7 +1839,6 @@ export default function SlideViewPage() {
       setDimensionValues(prev => ({ ...prev, [channel]: values }));
     } catch (err: any) {
       if (abortController.signal.aborted) {
-        console.log(`[loadValuesForDimension] Request cancelled for ${channel}/${dimensionId}`);
         return;
       }
 
