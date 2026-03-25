@@ -715,11 +715,10 @@ export default function SlideViewPage() {
     }
   }, [user, isUserLoading, searchParams, navigate]);
 
-  // Apply saved view once when opening a share: `SharedReport` sets `share_view_id_${slideReportId}` only.
-  // We do not read `?viewId=` from the URL (no query-string sync / no re-apply when the URL changes).
+  // Apply saved view once when opening a share: read from URL param (shareViewId) or sessionStorage.
   useEffect(() => {
-    const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
-    const viewIdToUse = shareViewId;
+    const sessionViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
+    const viewIdToUse = shareViewId || sessionViewId;
 
     if (viewIdToUse && views.length > 0) {
       const view = views.find(v => v.id === viewIdToUse);
