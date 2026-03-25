@@ -294,10 +294,10 @@ export default function SlideViewPage() {
     if (channelFilters) setFilterValues(channelFilters);
   }, [isPublicShareStudio, effectiveSlug, navigate, shareAccountId, shareSlideReportId]);
 
-  // When report_ids are not in sessionStorage (e.g. page refresh with only URL params),
-  // fetch them from the slide_reports table so useDataStudioRawRows can fire.
+  // ALWAYS fetch report_ids from DB for shared views (URL is source of truth).
+  // sessionStorage is only a performance optimisation — never trust it as sole source.
   useEffect(() => {
-    if (!isPublicShareStudio || shareReportIds || !shareSlideReportId) return;
+    if (!isPublicShareStudio || !shareSlideReportId) return;
     let cancelled = false;
     (async () => {
       try {
@@ -307,10 +307,10 @@ export default function SlideViewPage() {
           .eq("id", shareSlideReportId)
           .maybeSingle();
         if (!cancelled && sr?.report_ids && typeof sr.report_ids === 'object') {
-          setShareReportIds(sr.report_ids as Record<string, string>);
-          // Also cache for future use
+          const ids = sr.report_ids as Record<string, string>;
+          setShareReportIds(ids);
           if (effectiveSlug) {
-            sessionStorage.setItem(`share_report_ids_${effectiveSlug}`, JSON.stringify(sr.report_ids));
+            sessionStorage.setItem(`share_report_ids_${effectiveSlug}`, JSON.stringify(ids));
           }
         }
       } catch (err) {
@@ -318,7 +318,7 @@ export default function SlideViewPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [isPublicShareStudio, shareReportIds, shareSlideReportId, effectiveSlug]);
+  }, [isPublicShareStudio, shareSlideReportId, effectiveSlug]);
   
   const accountId = isPublicShareStudio 
     ? shareAccountId 

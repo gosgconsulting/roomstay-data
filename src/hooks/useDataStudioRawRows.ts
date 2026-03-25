@@ -295,15 +295,19 @@ export function useDataStudioRawRows(
   const { data, isLoading, isFetching } = queryResult;
   const allChannelsEmpty = data != null &&
     Object.values(data.rawRows).every((rows) => rows.length === 0);
+  // Also detect when rows exist but dimension map is empty (RLS/edge failure)
+  const dimMapsEmpty = data != null &&
+    Object.values(data.dimensionMaps).every((dm) => Object.keys(dm).length === 0);
+  const shouldInvalidate = allChannelsEmpty || (data != null && !allChannelsEmpty && dimMapsEmpty);
 
   useEffect(() => {
-    if (enabled && hasReportIds && !isLoading && !isFetching && allChannelsEmpty) {
-      console.warn('[DataStudio] Cached result has 0 rows but query is enabled — invalidating cache to force refetch');
+    if (enabled && hasReportIds && !isLoading && !isFetching && shouldInvalidate) {
+      console.warn('[DataStudio] Cached result has 0 rows or empty dimMaps — invalidating cache to force refetch');
       queryClient.invalidateQueries({
         queryKey: ['data-studio-raw-rows', stableCacheId, selectedYear],
       });
     }
-  }, [enabled, hasReportIds, stableCacheId, isLoading, isFetching, allChannelsEmpty, queryClient, selectedYear]);
+  }, [enabled, hasReportIds, stableCacheId, isLoading, isFetching, shouldInvalidate, queryClient, selectedYear]);
 
   return queryResult;
 }
