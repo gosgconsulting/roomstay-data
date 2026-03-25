@@ -1101,9 +1101,11 @@ export default function SlideViewPage() {
         setCustomDateRange(defaultDateState.range);
       }
       
-      // Restore persisted filter values for the new report (overrides the default empty state).
+      // Restore persisted filter values for owner views only.
+      // Public shared studio must keep share-link/view filters and must NOT be reset to
+      // slide_report.configuration.activeFilterValues (often empty), otherwise filters are cleared.
       const savedFilters = config?.activeFilterValues;
-      if (savedFilters) {
+      if (savedFilters && !isPublicShareStudio) {
         setFilterValues({
           metasearch: savedFilters.metasearch || {},
           sem: savedFilters.sem || {},
