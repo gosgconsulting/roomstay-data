@@ -239,11 +239,18 @@ export function useDataStudioRawRows(
     ) as Record<string, string>;
   }, [slideReport?.report_ids, reportIdsOverride]);
 
+  const hasReportIds = Object.keys(reportIds).length > 0;
+
+  // For shared/anon views, slideReport may be null (RLS blocks), but reportIdsOverride
+  // from sessionStorage provides valid channel IDs. Build a stable cache key that
+  // works with or without the slideReport.
+  const stableCacheId = slideReport?.id ?? (hasReportIds ? 'shared-' + Object.values(reportIds).sort().join(',') : '');
+
   const queryResult = useQuery({
     // Key includes selectedYear so switching years refetches the correct data.
     // Month is NOT in the key — we always fetch the full year and let the
     // client-side useFilteredSlideData narrow to the selected month for KPI totals.
-    queryKey: ['data-studio-raw-rows', slideReport?.id, selectedYear, Object.keys(reportIds).sort().join(',')],
+    queryKey: ['data-studio-raw-rows', stableCacheId, selectedYear, Object.keys(reportIds).sort().join(',')],
     queryFn: async (): Promise<DataStudioSourceResult> => {
       const { user } = await getUser();
       if (!user) {
@@ -273,7 +280,10 @@ export function useDataStudioRawRows(
 
       return { rawRows: result, dimensionMaps };
     },
-    enabled: enabled && !!slideReport?.id && Object.keys(reportIds).length > 0,
+    // CRITICAL: Do NOT gate on slideReport?.id — for shared/anon views, slideReport may be
+    // null (RLS blocks the query). reportIdsOverride from sessionStorage provides valid IDs.
+    // The query only needs: (1) caller says enabled, (2) we have channel report IDs to fetch.
+    enabled: enabled && hasReportIds,
     // Smart caching for performance:
     // - staleTime: Data is fresh for 5 minutes (no refetch)
     // - gcTime: Keep in memory for 10 minutes after last use
@@ -293,13 +303,13 @@ export function useDataStudioRawRows(
     Object.values(data.rawRows).every((rows) => rows.length === 0);
 
   useEffect(() => {
-    if (enabled && !!slideReport?.id && !isLoading && !isFetching && allChannelsEmpty) {
+    if (enabled && hasReportIds && !isLoading && !isFetching && allChannelsEmpty) {
       console.warn('[DataStudio] Cached result has 0 rows but query is enabled — invalidating cache to force refetch');
       queryClient.invalidateQueries({
-        queryKey: ['data-studio-raw-rows', slideReport?.id, selectedYear],
+        queryKey: ['data-studio-raw-rows', stableCacheId, selectedYear],
       });
     }
-  }, [enabled, slideReport?.id, isLoading, isFetching, allChannelsEmpty, queryClient, selectedYear]);
+  }, [enabled, hasReportIds, stableCacheId, isLoading, isFetching, allChannelsEmpty, queryClient, selectedYear]);
 
   return queryResult;
 }
