@@ -208,13 +208,21 @@ export default function SlideViewPage() {
   // This prevents an uncacheable empty React Query result being locked in for staleTime (5 min).
   const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
 
+  // For public share studio: read critical IDs from URL query params first (reliable),
+  // then fall back to sessionStorage (legacy / backward compat).
   const [shareAccountId, setShareAccountId] = useState<string | null>(() => {
-    if (!isPublicShareStudio || !effectiveSlug) return null;
-    return sessionStorage.getItem(`share_account_id_${effectiveSlug}`) ?? null;
+    if (!isPublicShareStudio) return null;
+    const fromUrl = searchParams.get('aid');
+    if (fromUrl) return fromUrl;
+    if (effectiveSlug) return sessionStorage.getItem(`share_account_id_${effectiveSlug}`) ?? null;
+    return null;
   });
   const [shareSlideReportId, setShareSlideReportId] = useState<string | null>(() => {
-    if (!isPublicShareStudio || !effectiveSlug) return null;
-    return sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`) ?? null;
+    if (!isPublicShareStudio) return null;
+    const fromUrl = searchParams.get('id');
+    if (fromUrl) return fromUrl;
+    if (effectiveSlug) return sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`) ?? null;
+    return null;
   });
   const [shareLockedDimensionIds, setShareLockedDimensionIds] = useState<string[]>(() => {
     if (!isPublicShareStudio || !effectiveSlug) return [];
@@ -226,10 +234,21 @@ export default function SlideViewPage() {
     }
   });
 
+  // Read view_id from URL query param (new) or sessionStorage (legacy)
+  const [shareViewId] = useState<string | null>(() => {
+    if (!isPublicShareStudio) return null;
+    const fromUrl = searchParams.get('vid');
+    if (fromUrl) return fromUrl;
+    // Legacy: stored under share_view_id_${slideReportId}
+    const srId = searchParams.get('id') || (effectiveSlug ? sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`) : null);
+    if (srId) return sessionStorage.getItem(`share_view_id_${srId}`) ?? null;
+    return null;
+  });
+
   // Eagerly read report_ids stored by SharedReport during initialization.
   // This seeds effectiveReportIdsForFetch on the very first render so useDataStudioRawRows
   // can fire before useSlideReport (RLS-gated DB query) resolves — preventing 0 KPI.
-  const [shareReportIds] = useState<Record<string, string> | null>(() => {
+  const [shareReportIds, setShareReportIds] = useState<Record<string, string> | null>(() => {
     if (!isPublicShareStudio || !effectiveSlug) return null;
     try {
       const raw = sessionStorage.getItem(`share_report_ids_${effectiveSlug}`);
@@ -240,8 +259,7 @@ export default function SlideViewPage() {
   });
 
   // Bootstrap public share studio mode: verify auth, enable read-only, apply filters.
-  // IDs are already set via lazy useState above — no need to call setShareAccountId etc. here
-  // unless the session recovers a stale mount (e.g. HMR).
+  // IDs are already set via lazy useState above from URL params — no sessionStorage dependency.
   useEffect(() => {
     if (!isPublicShareStudio || !effectiveSlug) return;
 
@@ -253,13 +271,17 @@ export default function SlideViewPage() {
       return;
     }
 
-    // Re-read IDs in case the effect fires after a session recovery (lazy init already covers
-    // the first render, but a second mount — e.g. Strict Mode double-invoke — may have cleared them).
-    const storedAccountId = sessionStorage.getItem(`share_account_id_${effectiveSlug}`);
-    const storedSlideReportId = sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`);
+    // URL params are the source of truth for IDs (set in lazy useState).
+    // Only fall back to sessionStorage if URL params were missing (legacy links).
+    if (!shareAccountId) {
+      const storedAccountId = sessionStorage.getItem(`share_account_id_${effectiveSlug}`);
+      if (storedAccountId) setShareAccountId(storedAccountId);
+    }
+    if (!shareSlideReportId) {
+      const storedSlideReportId = sessionStorage.getItem(`share_slide_report_id_${effectiveSlug}`);
+      if (storedSlideReportId) setShareSlideReportId(storedSlideReportId);
+    }
     const storedLockedDimensions = sessionStorage.getItem(`share_locked_dimension_ids_${effectiveSlug}`);
-    if (storedAccountId) setShareAccountId(storedAccountId);
-    if (storedSlideReportId) setShareSlideReportId(storedSlideReportId);
     if (storedLockedDimensions) {
       try { setShareLockedDimensionIds(JSON.parse(storedLockedDimensions)); } catch { setShareLockedDimensionIds([]); }
     }
@@ -270,7 +292,33 @@ export default function SlideViewPage() {
     // Apply share-link channel filters (date already initialized via buildInitialDateStateForSharedStudio)
     const channelFilters = readShareFiltersFromSession(effectiveSlug);
     if (channelFilters) setFilterValues(channelFilters);
-  }, [isPublicShareStudio, effectiveSlug, navigate]);
+  }, [isPublicShareStudio, effectiveSlug, navigate, shareAccountId, shareSlideReportId]);
+
+  // When report_ids are not in sessionStorage (e.g. page refresh with only URL params),
+  // fetch them from the slide_reports table so useDataStudioRawRows can fire.
+  useEffect(() => {
+    if (!isPublicShareStudio || shareReportIds || !shareSlideReportId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: sr } = await supabase
+          .from("slide_reports")
+          .select("report_ids")
+          .eq("id", shareSlideReportId)
+          .maybeSingle();
+        if (!cancelled && sr?.report_ids && typeof sr.report_ids === 'object') {
+          setShareReportIds(sr.report_ids as Record<string, string>);
+          // Also cache for future use
+          if (effectiveSlug) {
+            sessionStorage.setItem(`share_report_ids_${effectiveSlug}`, JSON.stringify(sr.report_ids));
+          }
+        }
+      } catch (err) {
+        console.error('[SharedStudio] Failed to fetch report_ids from DB:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isPublicShareStudio, shareReportIds, shareSlideReportId, effectiveSlug]);
   
   const accountId = isPublicShareStudio 
     ? shareAccountId 
@@ -667,11 +715,10 @@ export default function SlideViewPage() {
     }
   }, [user, isUserLoading, searchParams, navigate]);
 
-  // Apply saved view once when opening a share: `SharedReport` sets `share_view_id_${slideReportId}` only.
-  // We do not read `?viewId=` from the URL (no query-string sync / no re-apply when the URL changes).
+  // Apply saved view once when opening a share: read from URL param (shareViewId) or sessionStorage.
   useEffect(() => {
-    const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
-    const viewIdToUse = shareViewId;
+    const sessionViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
+    const viewIdToUse = shareViewId || sessionViewId;
 
     if (viewIdToUse && views.length > 0) {
       const view = views.find(v => v.id === viewIdToUse);
