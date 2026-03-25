@@ -4,10 +4,13 @@ import {
   slideSelectionToDateRange,
   dateRangeFromPreset,
   derivePresetFromDateRange,
+  deriveSlideDatePreset,
   formatDateToLocalIso,
   getCurrentMonthToDateRange,
   getCurrentYearToDateRange,
+  getYearsInDateRange,
 } from '../monthUtils';
+import { MONTH_NAMES } from '@/constants/slideViewConstants';
 
 describe('dateRangeToSlideSelection', () => {
   it('returns all/all when range is undefined', () => {
@@ -82,6 +85,15 @@ describe('slideSelectionToDateRange', () => {
   });
 });
 
+describe('deriveSlideDatePreset', () => {
+  it('maps current calendar month selection to month_to_date', () => {
+    const now = new Date();
+    const y = String(now.getFullYear());
+    const m = MONTH_NAMES[now.getMonth()];
+    expect(deriveSlideDatePreset(y, m)).toBe('month_to_date');
+  });
+});
+
 describe('dateRangeFromPreset', () => {
   it('returns undefined for all_time', () => {
     expect(dateRangeFromPreset('all_time')).toBeUndefined();
@@ -146,5 +158,49 @@ describe('current default range helpers', () => {
 
   it('formatDateToLocalIso uses local calendar parts', () => {
     expect(formatDateToLocalIso(new Date(2026, 0, 5, 23, 59, 59))).toBe('2026-01-05');
+  });
+});
+
+describe('getYearsInDateRange', () => {
+  it('returns current year when range is undefined', () => {
+    const result = getYearsInDateRange(undefined);
+    expect(result).toEqual([new Date().getFullYear()]);
+  });
+
+  it('returns single year for a same-year range', () => {
+    const result = getYearsInDateRange({
+      from: new Date(2025, 2, 1),
+      to: new Date(2025, 10, 30),
+    });
+    expect(result).toEqual([2025]);
+  });
+
+  it('returns two years for a cross-year range (Nov 2025 - Feb 2026)', () => {
+    const result = getYearsInDateRange({
+      from: new Date(2025, 10, 1),
+      to: new Date(2026, 1, 28),
+    });
+    expect(result).toEqual([2025, 2026]);
+  });
+
+  it('returns three years for a range spanning three calendar years', () => {
+    const result = getYearsInDateRange({
+      from: new Date(2024, 11, 1),
+      to: new Date(2026, 0, 31),
+    });
+    expect(result).toEqual([2024, 2025, 2026]);
+  });
+
+  it('returns single year for a single-day range', () => {
+    const result = getYearsInDateRange({
+      from: new Date(2025, 5, 15),
+      to: new Date(2025, 5, 15),
+    });
+    expect(result).toEqual([2025]);
+  });
+
+  it('uses from year when to is undefined', () => {
+    const result = getYearsInDateRange({ from: new Date(2025, 0, 1) });
+    expect(result).toEqual([2025]);
   });
 });

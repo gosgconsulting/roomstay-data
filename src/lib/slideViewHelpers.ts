@@ -466,6 +466,27 @@ export const formatNumber = (
   }).format(Math.round(value));
 };
 
+const EFFECTIVE_ZERO = 1e-12;
+
+/** Cost of Sale %: extra decimals only for small non-zero values; show 0.00% when effectively zero (not 0.0000%). */
+export function formatCostOfSalePercent(value: number): string {
+  if (!Number.isFinite(value) || Math.abs(value) <= EFFECTIVE_ZERO) return '0.00%';
+  if (value < 0.01) return `${value.toFixed(4)}%`;
+  return `${value.toFixed(2)}%`;
+}
+
+/** CPC: extra fraction digits for small positive amounts only; $0.00 when effectively zero. */
+export function currencyMaxFractionDigitsForCpc(value: number): number {
+  if (!Number.isFinite(value) || Math.abs(value) <= EFFECTIVE_ZERO) return 2;
+  return value < 0.01 ? 4 : 2;
+}
+
+/** AOV: extra fraction digits for small positive amounts only; $0.00 when effectively zero. */
+export function currencyMaxFractionDigitsForAov(value: number): number {
+  if (!Number.isFinite(value) || Math.abs(value) <= EFFECTIVE_ZERO) return 2;
+  return value < 1 ? 4 : 2;
+}
+
 /**
  * Builds a mapping from metric names to dimension IDs using the dimensionMap
  */

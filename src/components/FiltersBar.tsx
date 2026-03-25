@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { differenceInDays, subDays, subYears } from "date-fns";
-import { dateRangeFromPreset } from "@/lib/monthUtils";
+import { dateRangeFromPreset, DEFAULT_REPORT_DATE_PRESET } from "@/lib/monthUtils";
 import { DateRange } from "react-day-picker";
 import { supabase } from "@/integrations/supabase/client";
 import { retryWithBackoff } from "@/lib/utils/retry";
@@ -85,7 +85,7 @@ export const FiltersBar = ({
   const [dimensionValues, setDimensionValues] = useState<Record<string, string[]>>({});
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [datePreset, setDatePreset] = useState<string>("this_month");
+  const [datePreset, setDatePreset] = useState<string>(DEFAULT_REPORT_DATE_PRESET);
   const [showDimensionSelector, setShowDimensionSelector] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingFilters, setIsLoadingFilters] = useState(true); // Start true to prevent flash
@@ -166,7 +166,7 @@ export const FiltersBar = ({
       setSelectedFilters({});
       // Don't pre-compute dates - let loadFilterSettings handle it
       setDateRange(undefined);
-      setDatePreset("this_month");
+      setDatePreset(DEFAULT_REPORT_DATE_PRESET);
       setCompareEnabled(false);
       setCompareType("previous_period");
       setCompareDateRange(undefined);
@@ -176,8 +176,8 @@ export const FiltersBar = ({
         if (reportId) {
           loadFilterSettings().finally(() => setIsInitialLoad(false));
         } else {
-          // No saved view - apply "this_month" preset
-          applyDatePreset("this_month");
+          // No saved view — month to date (same default as Data Studio)
+          applyDatePreset(DEFAULT_REPORT_DATE_PRESET);
           setIsInitialLoad(false);
         }
       });
@@ -437,9 +437,9 @@ export const FiltersBar = ({
           setMasterDimensionId(fv.__master_dimension_id);
         }
 
-        // FORCE DEFAULT: Always initialize date to 'this_month' on first load
-        console.log('[FiltersBar] Forcing default date preset to this_month on initial load');
-        applyDatePreset("this_month");
+        // FORCE DEFAULT: month-to-date on first load (aligned with Data Studio)
+        console.log('[FiltersBar] Forcing default date preset to month_to_date on initial load');
+        applyDatePreset(DEFAULT_REPORT_DATE_PRESET);
         setCompareEnabled(false);
         setCompareType("previous_period");
         setCompareDateRange(undefined);
@@ -447,14 +447,14 @@ export const FiltersBar = ({
         // REMOVED: Using saved custom date ranges/presets to avoid defaulting to old months
         // (savedDateStart/savedDateEnd/preset handling removed for initial load)
       } else {
-        // No view: default to Account if available, else Date, and always use this_month for date
+        // No view: default to Account if available, else Date, and month-to-date for date
         if (defaultAccountDimId) {
           setActiveDimensions([defaultAccountDimId]);
         } else if (dateDimensionId) {
           setActiveDimensions([dateDimensionId]);
         }
-        console.log('[FiltersBar] No saved view, defaulting to this_month');
-        applyDatePreset("this_month");
+        console.log('[FiltersBar] No saved view, defaulting to month_to_date');
+        applyDatePreset(DEFAULT_REPORT_DATE_PRESET);
       }
     } catch (error) {
       console.error("Error loading filter settings:", error);
@@ -466,8 +466,8 @@ export const FiltersBar = ({
       } else if (dateDimensionId) {
         setActiveDimensions([dateDimensionId]);
       }
-      console.log('[FiltersBar] Error fallback - using this_month');
-      applyDatePreset("this_month");
+      console.log('[FiltersBar] Error fallback - using month_to_date');
+      applyDatePreset(DEFAULT_REPORT_DATE_PRESET);
     }
   };
 
@@ -584,7 +584,7 @@ export const FiltersBar = ({
 
   const handleResetFilters = () => {
     setSelectedFilters({});
-    applyDatePreset("this_month");
+    applyDatePreset(DEFAULT_REPORT_DATE_PRESET);
     setCompareEnabled(false);
     setCompareType("previous_period");
     setCompareDateRange(undefined);

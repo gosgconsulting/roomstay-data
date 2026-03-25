@@ -10,6 +10,9 @@ import {
   filterRawDataRows,
   getRowKeysForSameNamedDimension,
   computePerformanceModelCommissionSplit,
+  formatCostOfSalePercent,
+  currencyMaxFractionDigitsForCpc,
+  currencyMaxFractionDigitsForAov,
 } from '../slideViewHelpers';
 
 describe('hasActiveFiltersForChannel', () => {
@@ -313,5 +316,33 @@ describe('computePerformanceModelCommissionSplit', () => {
       commissionsPaid: 120,
       commissionsFree: 0,
     });
+  });
+});
+
+describe('formatCostOfSalePercent / currency fraction helpers', () => {
+  it('formatCostOfSalePercent: zero and tiny floats show 0.00%', () => {
+    expect(formatCostOfSalePercent(0)).toBe('0.00%');
+    expect(formatCostOfSalePercent(-0)).toBe('0.00%');
+    expect(formatCostOfSalePercent(1e-15)).toBe('0.00%');
+  });
+
+  it('formatCostOfSalePercent: small non-zero below 0.01 uses four decimals', () => {
+    expect(formatCostOfSalePercent(0.0023)).toBe('0.0023%');
+  });
+
+  it('formatCostOfSalePercent: normal values use two decimals', () => {
+    expect(formatCostOfSalePercent(2.47)).toBe('2.47%');
+  });
+
+  it('currencyMaxFractionDigitsForCpc: zero uses 2', () => {
+    expect(currencyMaxFractionDigitsForCpc(0)).toBe(2);
+    expect(currencyMaxFractionDigitsForCpc(0.005)).toBe(4);
+    expect(currencyMaxFractionDigitsForCpc(0.5)).toBe(2);
+  });
+
+  it('currencyMaxFractionDigitsForAov: zero uses 2', () => {
+    expect(currencyMaxFractionDigitsForAov(0)).toBe(2);
+    expect(currencyMaxFractionDigitsForAov(0.5)).toBe(4);
+    expect(currencyMaxFractionDigitsForAov(2)).toBe(2);
   });
 });

@@ -244,7 +244,9 @@ export function useDataStudioRawRows(
     queryKey: ['data-studio-raw-rows', slideReport?.id, selectedYear, Object.keys(reportIds).sort().join(',')],
     queryFn: async (): Promise<DataStudioSourceResult> => {
       const { user } = await getUser();
-      if (!user) throw new Error('User must be authenticated');
+      if (!user) {
+        console.warn('[DataStudio] No user session, attempting anonymous fetch');
+      }
 
       const result: ChannelRawRows = {};
       const dimensionMaps: ChannelDimensionMaps = {};

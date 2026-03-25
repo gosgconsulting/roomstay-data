@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -76,11 +77,15 @@ export function OverviewTab({
   comparisonTotals,
   comparisonType,
 }: OverviewTabProps) {
-  // Merge comparison data into chart data
-  const mergedChartData = overviewChartData.map((point, i) => ({
-    ...point,
-    comparisonValue: comparisonChartData?.[i]?.value ?? undefined,
-  }));
+  // Merge comparison data into chart data by matching on the bucket label string.
+  // This is robust against granularity switches that change bucket counts, unlike index-based merging.
+  const mergedChartData = useMemo(() => {
+    const compMap = new Map(comparisonChartData?.map(p => [p.label, p.value]) ?? []);
+    return overviewChartData.map(point => ({
+      ...point,
+      comparisonValue: compMap.get(point.label) ?? undefined,
+    }));
+  }, [overviewChartData, comparisonChartData]);
 
   const showComparison = comparisonType && comparisonType !== 'none';
   const compLabel = comparisonType === 'previous_period' ? 'Previous Period' : 'Previous Year';

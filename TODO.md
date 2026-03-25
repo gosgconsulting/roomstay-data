@@ -34,6 +34,62 @@ After coding:
 
 ## Active tasks
 
+### Cross-year date filter + chart granularity fix (2026-03-25)
+
+**Status:** ✅ Complete
+
+**Problems fixed:**
+1. Cross-year custom ranges (e.g. Nov 2025 → Feb 2026) only fetched the start year, causing missing data in charts and KPIs for months in the second year.
+2. Day/week chart X-axis labels showed duplicate values (e.g. two "Jan 1") when the range crossed a year boundary — no year suffix was included.
+3. Switching granularity (day ↔ month) with comparison active caused the comparison overlay to misalign because merging was done by array index instead of by bucket label key.
+
+**Changes:**
+- `src/lib/monthUtils.ts`: Added `getYearsInDateRange(range)` — returns every distinct calendar year intersecting the given `DateRange`.
+- `src/hooks/useSlideReportPage.ts`: Multi-year parallel fetch — up to 3 fixed hook slots for primary-year rows; all year results merged before `effectivePivotData` is built.
+- `src/hooks/useDataStudioRawRows.ts`: Removed hard `throw` when no auth user — replaced with `console.warn` so anonymous shared-studio sessions can proceed.
+- `src/hooks/useChannelChartDataFromRawRows.ts`: `getBucketLabel` now accepts all bucket dates; adds year suffix (`MMM d, yy`) to day/week labels only when the bucket set spans multiple calendar years.
+- `src/components/slides/OverviewTab.tsx` + `ChannelTab.tsx`: Chart comparison merge replaced with key-based `Map` lookup (by bucket label) instead of fragile array-index access.
+
+**Verification:**
+- ✅ `npm run build` (exit 0, 3584 modules)
+- ✅ `npx vitest run src/lib/__tests__/monthUtils.test.ts` (27/27 pass, incl. 6 new `getYearsInDateRange` cases)
+- ✅ `ReadLints` on all edited files (0 new errors)
+- [ ] Manual: Owner `/` with Nov 2025 → Feb 2026 custom range; all channels show complete data
+- [ ] Manual: Owner `/` MTD, comparison on, toggle day ↔ week ↔ month (comparison overlay stays aligned)
+- [ ] Manual: Shared studio `/shared/:slug/studio` with cross-year range loads correctly
+
+---
+
+### Breakdown table — zero formatting (2026-03-25)
+
+**Status:** ✅ Complete
+
+**Problem:** Rows with Cost of Sale or CPC effectively zero showed `0.0000%` and `$0.0000` because the “small value” branch (`< 0.01` / `< 1` for AOV) used four decimal places, which also matched zero.
+
+**Changes:** `slideViewHelpers.ts` — `formatCostOfSalePercent`, `currencyMaxFractionDigitsForCpc`, `currencyMaxFractionDigitsForAov`. `BreakdownTableSection.tsx` uses them for group, expanded, and total rows. README §4 Breakdown bullet updated.
+
+**Verify:** `npm run build`, `npx vitest run src/lib/__tests__/slideViewHelpers.test.ts`.
+
+---
+
+### Date filter default — MTD owner + shared (2026-03-25)
+
+**Status:** ✅ Complete
+
+**Goal:** One default for classic `FiltersBar`, `SharedReport`, and Data Studio: month-to-date (not full calendar month).
+
+**Changes:**
+- `monthUtils.ts` — `DEFAULT_REPORT_DATE_PRESET` (`month_to_date`); `deriveSlideDatePreset` maps current calendar month selection to `month_to_date`.
+- `FiltersBar.tsx` — initial load / reset / fallbacks use `DEFAULT_REPORT_DATE_PRESET`.
+- `SharedReport.tsx` — initial `FilterState` uses `getCurrentMonthToDateRange()` + same preset.
+- `DateRangeFilter.tsx` — preset list: “This Month” → `month_to_date`, add “Full month” → `this_month`.
+- `FiltersRow.tsx` — same preset ids/labels for Data Studio.
+- `README.md` — Sharing + Data Studio filter notes updated.
+
+**Verify:** `npm run build`, `npm run lint`, spot-check owner `/` and `/shared/:slug` date button shows MTD range through today.
+
+---
+
 ### Shared report filters fix (2026-03-25)
 
 **Status:** ✅ Complete

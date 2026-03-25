@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -101,13 +102,17 @@ export function ChannelTab({
   const gradientId = `${channel}Gradient`;
   const compGradientId = `${channel}CompGradient`;
 
-  // Merge comparison data into channel chart data
+  // Merge comparison data into channel chart data by matching on the bucket label string.
+  // Key-based merge is robust when granularity switches change the number of buckets.
   const currentData = channelChartData[channel] || [];
   const compData = comparisonChannelChartData?.[channel];
-  const mergedChartData = currentData.map((point, i) => ({
-    ...point,
-    comparisonValue: compData?.[i]?.value ?? undefined,
-  }));
+  const mergedChartData = useMemo(() => {
+    const compMap = new Map(compData?.map(p => [p.label, p.value]) ?? []);
+    return currentData.map(point => ({
+      ...point,
+      comparisonValue: compMap.get(point.label) ?? undefined,
+    }));
+  }, [currentData, compData]);
   const hasComparison = !!compData && compData.length > 0;
 
   // Show skeletons whenever any loading is in flight — no blur/stale-dim.

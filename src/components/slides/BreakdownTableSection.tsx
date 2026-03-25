@@ -25,6 +25,9 @@ import { cn } from '@/lib/utils';
 import {
   calculateDerivedMetrics,
   computePerformanceModelCommissionSplit,
+  currencyMaxFractionDigitsForAov,
+  currencyMaxFractionDigitsForCpc,
+  formatCostOfSalePercent,
   formatNumber,
   filterRawDataRows,
   hasActiveFiltersForChannel,
@@ -618,12 +621,12 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                     <TableCell className="text-right">{renderMetricCell(`${group.metrics.ctr.toFixed(2)}%`)}</TableCell>
                     <TableCell className="text-right">{renderMetricCell(group.metrics.bookings.toFixed(2))}</TableCell>
                     <TableCell className="text-right">{renderMetricCell(`${group.metrics.conversionRate.toFixed(2)}%`)}</TableCell>
-                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.cpc, 'currency', displayCurrency, group.metrics.cpc < 0.01 ? 4 : 2))}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.cpc, 'currency', displayCurrency, currencyMaxFractionDigitsForCpc(group.metrics.cpc)))}</TableCell>
                     <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.cost, 'currency', displayCurrency))}</TableCell>
-                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.aov, 'currency', displayCurrency, group.metrics.aov < 1 ? 4 : 2))}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.aov, 'currency', displayCurrency, currencyMaxFractionDigitsForAov(group.metrics.aov)))}</TableCell>
                     <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.revenue, 'currency', displayCurrency))}</TableCell>
                     <TableCell className="text-right">{renderMetricCell(`${group.metrics.roas.toFixed(1)}x`)}</TableCell>
-                    <TableCell className="text-right">{renderMetricCell(`${group.metrics.costOfSale < 0.01 ? group.metrics.costOfSale.toFixed(4) : group.metrics.costOfSale.toFixed(2)}%`)}</TableCell>
+                    <TableCell className="text-right">{renderMetricCell(formatCostOfSalePercent(group.metrics.costOfSale))}</TableCell>
                     <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.grossProfit, 'currency', displayCurrency))}</TableCell>
                   </TableRow>
                   {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
@@ -641,18 +644,16 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                           <TableCell className="text-right text-muted-foreground">{item.metrics.bookings.toFixed(2)}</TableCell>
                           <TableCell className="text-right text-muted-foreground">{item.metrics.conversionRate.toFixed(2)}%</TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {formatNumber(item.metrics.cpc, 'currency', displayCurrency, item.metrics.cpc < 0.01 ? 4 : 2)}
+                            {formatNumber(item.metrics.cpc, 'currency', displayCurrency, currencyMaxFractionDigitsForCpc(item.metrics.cpc))}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.cost, 'currency', displayCurrency)}</TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {formatNumber(item.metrics.aov, 'currency', displayCurrency, item.metrics.aov < 1 ? 4 : 2)}
+                            {formatNumber(item.metrics.aov, 'currency', displayCurrency, currencyMaxFractionDigitsForAov(item.metrics.aov))}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.revenue, 'currency', displayCurrency)}</TableCell>
                           <TableCell className="text-right text-muted-foreground">{item.metrics.roas.toFixed(1)}x</TableCell>
                           <TableCell className="text-right text-muted-foreground">
-                            {item.metrics.costOfSale < 0.01
-                              ? item.metrics.costOfSale.toFixed(4)
-                              : item.metrics.costOfSale.toFixed(2)}%
+                            {formatCostOfSalePercent(item.metrics.costOfSale)}
                           </TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {formatNumber(item.metrics.grossProfit, 'currency', displayCurrency)}
@@ -672,12 +673,12 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                 <TableCell className="text-right">{renderMetricCell(`${totalMetrics.ctr.toFixed(2)}%`)}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(totalMetrics.bookings.toFixed(2))}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(`${totalMetrics.conversionRate.toFixed(2)}%`)}</TableCell>
-                <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.cpc, 'currency', displayCurrency, totalMetrics.cpc < 0.01 ? 4 : 2))}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.cpc, 'currency', displayCurrency, currencyMaxFractionDigitsForCpc(totalMetrics.cpc)))}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.cost, 'currency', displayCurrency))}</TableCell>
-                <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.aov, 'currency', displayCurrency, totalMetrics.aov < 1 ? 4 : 2))}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.aov, 'currency', displayCurrency, currencyMaxFractionDigitsForAov(totalMetrics.aov)))}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.revenue, 'currency', displayCurrency))}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(`${totalMetrics.roas.toFixed(1)}x`)}</TableCell>
-                <TableCell className="text-right">{renderMetricCell(`${totalMetrics.costOfSale < 0.01 ? totalMetrics.costOfSale.toFixed(4) : totalMetrics.costOfSale.toFixed(2)}%`)}</TableCell>
+                <TableCell className="text-right">{renderMetricCell(formatCostOfSalePercent(totalMetrics.costOfSale))}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(formatNumber(totalGrossProfit, 'currency', displayCurrency))}</TableCell>
               </TableRow>
             </TableBody>

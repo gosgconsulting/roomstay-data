@@ -185,8 +185,8 @@ export function deriveSlideDatePreset(selectedYear: string, selectedMonth: strin
   // this_year: current year + all months
   if (selectedYear === curYear && selectedMonth === 'all') return 'this_year';
 
-  // this_month: current year + current month
-  if (selectedYear === curYear && selectedMonth === curMonthName) return 'this_month';
+  // Current calendar month selection: treat as month-to-date (same default as FiltersBar / Data Studio)
+  if (selectedYear === curYear && selectedMonth === curMonthName) return 'month_to_date';
 
   // last_month: previous month selection
   const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -398,7 +398,7 @@ export function getCurrentYearToDateRange(): { from: Date; to: Date } {
 
 /**
  * Returns month-to-date (1st of current calendar month -> today).
- * Canonical default for Data Studio so the scope matches the "Month to Date" preset.
+ * Canonical default for Data Studio and classic report filters (owner + shared).
  */
 export function getCurrentMonthToDateRange(): { from: Date; to: Date } {
   const now = new Date();
@@ -407,6 +407,23 @@ export function getCurrentMonthToDateRange(): { from: Date; to: Date } {
     from: new Date(now.getFullYear(), now.getMonth(), 1),
     to: today,
   };
+}
+
+/** Preset id used when initializing / resetting date filters to month-to-date (matches `dateRangeFromPreset`). */
+export const DEFAULT_REPORT_DATE_PRESET = 'month_to_date' as const;
+
+/**
+ * Returns the distinct calendar years that intersect with the given DateRange.
+ * e.g. Nov 2025 → Feb 2026 returns [2025, 2026].
+ * Returns [currentYear] when range is undefined.
+ */
+export function getYearsInDateRange(range: DateRange | undefined): number[] {
+  if (!range?.from) return [new Date().getFullYear()];
+  const fromYear = range.from.getFullYear();
+  const toYear = (range.to ?? range.from).getFullYear();
+  const years: number[] = [];
+  for (let y = fromYear; y <= toYear; y++) years.push(y);
+  return years;
 }
 
 /**

@@ -15,6 +15,7 @@ import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { LoadingToast } from "@/components/LoadingToast";
 import { isChannelBasedFormat, convertReportToChannelFormat } from "@/lib/filterFormatUtils";
+import { getCurrentMonthToDateRange, DEFAULT_REPORT_DATE_PRESET } from "@/lib/monthUtils";
 
 export default function SharedReport() {
   const { slug } = useParams();
@@ -38,19 +39,13 @@ export default function SharedReport() {
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
   
-  // Filter state - default to this month for shared reports
+  // Filter state — month-to-date by default (same as owner Data Studio / FiltersBar)
   const [filters, setFilters] = useState<FilterState>(() => {
-    const thisMonthRange = (() => {
-      const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-      return { from: start, to: end };
-    })();
-    
+    const mtd = getCurrentMonthToDateRange();
     return {
       dimensionFilters: {},
-      dateRange: thisMonthRange,
-      datePreset: "this_month",
+      dateRange: { from: mtd.from, to: mtd.to },
+      datePreset: DEFAULT_REPORT_DATE_PRESET,
       compareEnabled: false,
       compareType: "previous_period",
       compareDateRange: undefined,

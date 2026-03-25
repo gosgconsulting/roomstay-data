@@ -111,9 +111,16 @@ function getBucketKey(date: Date, granularity: ChartGranularity): string {
   return format(date, 'yyyy-MM');
 }
 
-function getBucketLabel(date: Date, granularity: ChartGranularity): string {
-  if (granularity === 'day') return format(date, 'MMM d');
-  if (granularity === 'week') return format(date, 'MMM d');
+function getBucketLabel(date: Date, granularity: ChartGranularity, allBuckets: Date[]): string {
+  if (granularity === 'month') return format(date, 'MMM yy');
+
+  // For day/week: include year suffix only when the range spans multiple calendar years
+  // to disambiguate labels like "Jan 1" that would appear in both 2025 and 2026.
+  const years = new Set(allBuckets.map(d => d.getFullYear()));
+  const needsYear = years.size > 1;
+
+  if (granularity === 'day') return format(date, needsYear ? 'MMM d, yy' : 'MMM d');
+  if (granularity === 'week') return format(date, needsYear ? 'MMM d, yy' : 'MMM d');
   return format(date, 'MMM yy');
 }
 
@@ -269,7 +276,7 @@ function buildChartDataFromRawRows(
 
   for (const bucketDate of bucketDates) {
     const key = getBucketKey(bucketDate, granularity);
-    const label = getBucketLabel(bucketDate, granularity);
+    const label = getBucketLabel(bucketDate, granularity, bucketDates);
     const bucketTotals = bucketMap.get(key);
     if (!bucketTotals) continue;
 

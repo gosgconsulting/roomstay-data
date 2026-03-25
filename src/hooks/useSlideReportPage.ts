@@ -12,7 +12,7 @@ import { useDataStudioRawRows } from "@/hooks/useDataStudioRawRows";
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useFilteredSlideData } from "@/hooks/useFilteredSlideData";
 import { getAccountReportIds, clearAccountReportIdsCache, type AccountReportIds } from "@/lib/accountReportIds";
-import { buildComparisonDateRangeFromExact, exactDateRangeFromDayPicker, buildComparisonDateRange, formatDateToLocalIso, getCurrentMonthToDateRange } from "@/lib/monthUtils";
+import { buildComparisonDateRangeFromExact, exactDateRangeFromDayPicker, buildComparisonDateRange, formatDateToLocalIso, getCurrentMonthToDateRange, getYearsInDateRange } from "@/lib/monthUtils";
 import type { SlideReport, SlideReportPivotData, SlideReportView, SlideReportConfiguration, SlideReportDateRange } from "@/types/slideReports";
 import type { ChannelMetrics } from "@/types/slideReports";
 import type { BreakdownRow } from "@/types/slideReports";
@@ -221,18 +221,49 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     return merged;
   }, [slideReport?.report_ids, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social]);
 
-  // Data Studio: fetch raw rows from dimension_data (canonical DB cache).
-  // Uses effectiveReportIdsForFetch so all account channels (including metasearch) get data.
-  // Pass the actual selectedYear so the RPC path is used for year-filtered fetch (fast).
-  // When selectedYear is 'all', falls back to fetchAllRowsParallel (slower but complete).
+  // Compute the list of calendar years that the primary customDateRange spans.
+  // A cross-year range (e.g. Nov 2025 → Feb 2026) needs rows from both years.
+  // We support up to 3 years (covers any reasonable analytics window).
+  // Rules of Hooks requires a fixed number of hook calls, so we always declare
+  // three primary-year slots and enable them conditionally — same pattern as comparisonYear.
+  const primaryYears = useMemo((): [string, string, string] => {
+    const exactRange = exactDateRangeFromDayPicker(customDateRange);
+    if (exactRange) {
+      const years = getYearsInDateRange({ from: exactRange.start, to: exactRange.end });
+      return [
+        String(years[0] ?? selectedYear),
+        years[1] ? String(years[1]) : '',
+        years[2] ? String(years[2]) : '',
+      ];
+    }
+    return [selectedYear, '', ''];
+  }, [customDateRange, selectedYear]);
+
+  const [primaryYear0, primaryYear1, primaryYear2] = primaryYears;
+
+  // Primary year fetch (always active when slideReport is ready)
   const { data: dataStudioResult, isLoading: isLoadingRawRows, isFetching: isFetchingRawRows } = useDataStudioRawRows(
     slideReport,
     !!slideReportId,
-    selectedYear,
+    primaryYear0 || selectedYear,
     effectiveReportIdsForFetch,
   );
-  const dataStudioRawRows = dataStudioResult?.rawRows;
-  const dataStudioDimensionMaps = dataStudioResult?.dimensionMaps;
+
+  // Second year of primary range (only enabled when customDateRange spans ≥2 years)
+  const { data: primaryYear1Result } = useDataStudioRawRows(
+    slideReport,
+    !!slideReportId && primaryYear1 !== '',
+    primaryYear1 || 'all',
+    effectiveReportIdsForFetch,
+  );
+
+  // Third year of primary range (only enabled when customDateRange spans 3 years)
+  const { data: primaryYear2Result } = useDataStudioRawRows(
+    slideReport,
+    !!slideReportId && primaryYear2 !== '',
+    primaryYear2 || 'all',
+    effectiveReportIdsForFetch,
+  );
 
   // When the comparison period falls in a different calendar year than the current view,
   // fetch that prior year's rows so useChannelMetrics can aggregate comparison data.
@@ -240,8 +271,10 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   // (e.g. Jan 1–15 2026 previous_period → Dec 1–15 2025).
   const comparisonYear = useMemo((): string => {
     if (comparisonType === 'none') return '';
-    if (!selectedYear || selectedYear === 'all') return '';
-    const currentYearNum = parseInt(selectedYear);
+    // Use the earliest primary year as the reference for comparison
+    const refYear = primaryYear0 && primaryYear0 !== 'all' ? primaryYear0 : selectedYear;
+    if (!refYear || refYear === 'all') return '';
+    const currentYearNum = parseInt(refYear);
     if (isNaN(currentYearNum)) return '';
 
     if (comparisonType === 'previous_year') {
@@ -260,7 +293,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     }
 
     return '';
-  }, [comparisonType, selectedYear, selectedMonth, customDateRange]);
+  }, [comparisonType, primaryYear0, selectedYear, selectedMonth, customDateRange]);
 
   const { data: comparisonYearResult } = useDataStudioRawRows(
     slideReport,
@@ -274,22 +307,22 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     const emptyMetrics: ChannelMetrics = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0, ctr: 0, conversionRate: 0, cpc: 0, roas: 0, costOfSale: 0 };
     const emptyBudget: SlideReportPivotData['budget'] = { monthly: [], totals: { totalBudget: 0, totalActual: 0, variance: 0 } };
 
-    // Merge current-year rows with previous-year comparison rows (if fetched).
-    // Both sets are stored in rawDataRows so the single filterRawDataRows path
-    // can apply the correct date range for both current and comparison windows.
+    // Merge all primary-year rows (current year + additional years for cross-year ranges)
+    // with comparison-year rows so filterRawDataRows has the full universe of rows.
+    const allResults = [
+      dataStudioResult,
+      primaryYear1Result,
+      primaryYear2Result,
+      comparisonYearResult,
+    ].filter(Boolean);
+
     const mergedRawRows: Record<string, Record<string, any>[]> = {};
     const mergedDimMaps: Record<string, Record<string, string>> = {};
-    const channels = new Set([
-      ...Object.keys(dataStudioRawRows || {}),
-      ...Object.keys(comparisonYearResult?.rawRows || {}),
-    ]);
+    const channels = new Set(allResults.flatMap(r => Object.keys(r?.rawRows || {})));
+
     for (const ch of channels) {
-      const currentRows = dataStudioRawRows?.[ch] ?? [];
-      const prevRows = comparisonYearResult?.rawRows?.[ch] ?? [];
-      mergedRawRows[ch] = [...currentRows, ...prevRows];
-      const currentDimMap = dataStudioDimensionMaps?.[ch] ?? {};
-      const prevDimMap = comparisonYearResult?.dimensionMaps?.[ch] ?? {};
-      mergedDimMaps[ch] = { ...currentDimMap, ...prevDimMap };
+      mergedRawRows[ch] = allResults.flatMap(r => r?.rawRows?.[ch] ?? []);
+      mergedDimMaps[ch] = Object.assign({}, ...allResults.map(r => r?.dimensionMaps?.[ch] ?? {}));
     }
     const hasMergedRows = Object.keys(mergedRawRows).length > 0;
 
@@ -331,7 +364,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
       } as SlideReportPivotData['channels'][string];
     }
     return { ...base, channels: pivotChannels };
-  }, [slideReport?.pivot_data, dataStudioRawRows, dataStudioDimensionMaps, comparisonYearResult]);
+  }, [slideReport?.pivot_data, dataStudioResult, primaryYear1Result, primaryYear2Result, comparisonYearResult]);
 
   const filteredData = useFilteredSlideData({
     pivotData: effectivePivotData,
