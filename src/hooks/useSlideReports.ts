@@ -55,7 +55,7 @@ export function useSlideReport(slideReportId: string | null) {
         ...data,
         configuration: (data.configuration || {}) as unknown as SlideReportConfiguration,
         report_ids: (data.report_ids || {}) as unknown as Record<string, string>,
-        pivot_data: (data.pivot_data || {}) as unknown as SlideReportPivotData,
+        pivot_data: {} as SlideReportPivotData,
         date_range: (data.date_range || null) as unknown as SlideReportDateRange | null,
       };
     },
