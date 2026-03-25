@@ -513,10 +513,10 @@ export function useDataStudioFilters({
     values: string[]
   ) => {
     if (isReadOnly) return;
-    setFilterValuesRaw(prev => ({
-      ...prev,
-      [channel]: { ...prev[channel], [dimensionId]: values },
-    }));
+    setFilterValuesRaw({
+      ...filterValues,
+      [channel]: { ...(filterValues[channel] || {}), [dimensionId]: values },
+    });
   }, [isReadOnly]);
 
   const clearChannelFilter = useCallback((channel: Channel, dimensionId: string) => {
