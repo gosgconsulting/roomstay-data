@@ -558,6 +558,7 @@ export default function SlideViewPage() {
     selectedMonth,
     setSelectedMonth,
     configuredDimensionNames,
+    shareBaseFilterValues: shareBaseFilters,
   });
 
   // Expose dsFilters.filterConfigs as a local alias.
