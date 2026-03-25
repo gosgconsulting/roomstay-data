@@ -149,7 +149,6 @@ export const FiltersBar = ({
       
       // For the settings modal, show ALL text/date dimensions regardless of data availability
       // This allows users to select dimensions for filtering even if they don't have data yet
-      console.log('[FiltersBar] loadAllDimensions - All available dimensions:', textDateDimensions.map(d => `${d.name} (${d.type})`));
       setAllDimensions(textDateDimensions);
     } catch (e) {
       console.error("Error loading all dimensions:", e);
@@ -197,7 +196,6 @@ export const FiltersBar = ({
       try {
         const extracted = extractMultipleDimensionValues(sourceRows, [masterDimensionId], 10000);
         const values = extracted[masterDimensionId] || [];
-        console.log(`[FiltersBar] Master dimension values extracted from source:`, values.length);
         setMasterDimensionOptions(values);
       } catch (e) {
         console.error("Error extracting master dimension values:", e);
@@ -329,12 +327,9 @@ export const FiltersBar = ({
       );
       
       if (dimensionWithData) {
-        console.log("[FiltersBar] Using dimension with data:", dimensionWithData);
         return dimensionWithData;
       }
       
-      // Final fallback: Date dimension (even if it has no data, it's a safe default)
-      console.log("[FiltersBar] No dimensions with data found, falling back to Date");
       return await getDateDimensionId();
     } catch (error) {
       console.error("[FiltersBar] Error finding default dimension:", error);
@@ -377,7 +372,6 @@ export const FiltersBar = ({
         // Filter existing dimensions to only include those that are mapped in the data source
         const { filterDimensionsByMappedData } = await import("@/lib/dimensionDataChecker");
         const validDims = await filterDimensionsByMappedData(reportId!, existingDims);
-        console.log('[FiltersBar] Filtered dimensions by mapped data:', { original: existingDims.length, valid: validDims.length });
         
         if (existingDims.length === 1 && dateDimensionId && existingDims[0] === dateDimensionId && defaultAccountDimId) {
           setActiveDimensions([defaultAccountDimId]);
@@ -417,7 +411,6 @@ export const FiltersBar = ({
           }
           
           if (validDims.length < existingDims.length && !isSharedView) {
-            console.log('[FiltersBar] Updating saved view with valid dimensions only');
             await supabase
               .from("views")
               .update({
@@ -437,8 +430,6 @@ export const FiltersBar = ({
           setMasterDimensionId(fv.__master_dimension_id);
         }
 
-        // FORCE DEFAULT: month-to-date on first load (aligned with Data Studio)
-        console.log('[FiltersBar] Forcing default date preset to month_to_date on initial load');
         applyDatePreset(DEFAULT_REPORT_DATE_PRESET);
         setCompareEnabled(false);
         setCompareType("previous_period");
@@ -453,7 +444,6 @@ export const FiltersBar = ({
         } else if (dateDimensionId) {
           setActiveDimensions([dateDimensionId]);
         }
-        console.log('[FiltersBar] No saved view, defaulting to month_to_date');
         applyDatePreset(DEFAULT_REPORT_DATE_PRESET);
       }
     } catch (error) {
@@ -466,7 +456,6 @@ export const FiltersBar = ({
       } else if (dateDimensionId) {
         setActiveDimensions([dateDimensionId]);
       }
-      console.log('[FiltersBar] Error fallback - using month_to_date');
       applyDatePreset(DEFAULT_REPORT_DATE_PRESET);
     }
   };
@@ -518,7 +507,6 @@ export const FiltersBar = ({
         if (error) throw error;
       }
 
-      console.log('[FILTERS] Filter settings saved successfully');
     } catch (error) {
       console.error("Error saving filter settings:", error);
     }
@@ -619,11 +607,8 @@ export const FiltersBar = ({
         }
       );
 
-      console.log('[FiltersBar] loadDimensions - All dimensions loaded:', allAvailableDimensions.map(d => `${d.name} (${d.type})`));
-      
       // Filter to only text dimensions (suitable for filtering)
       const filterable = allAvailableDimensions.filter(d => d.type === "text");
-      console.log('[FiltersBar] loadDimensions - After type filter (text only):', filterable.map(d => d.name));
       
       // Apply filter settings filtering, but with fallback to ensure some dimensions are always available
       let final = filterable;
@@ -631,9 +616,7 @@ export const FiltersBar = ({
         try {
           const settingsFiltered = await filterDimensionsByFilterSettings(filterable, reportId, user.id, supabase);
           
-          // If filter settings result in empty array, use some default dimensions
           if (settingsFiltered.length === 0) {
-            console.log('[FiltersBar] Filter settings returned empty, using fallback dimensions');
             // Use first 5 filterable dimensions as fallback
             final = filterable.slice(0, 5);
           } else {
@@ -645,9 +628,7 @@ export const FiltersBar = ({
         }
       }
       
-      // Ensure we always have at least some dimensions for filtering
       if (final.length === 0) {
-        console.log('[FiltersBar] No dimensions available after all filtering, using fallback');
         // Create fallback dimensions to prevent complete failure
         const fallbackDimensions = [
           {
@@ -666,7 +647,6 @@ export const FiltersBar = ({
         final = fallbackDimensions;
       }
       
-      console.log('[FiltersBar] loadDimensions - Final dimensions for filtering:', final.map(d => d.name));
       setDimensions(final);
       
       // Store all dimensions for settings modal
@@ -694,7 +674,6 @@ export const FiltersBar = ({
     
     // Wait for source data to be loaded
     if (sourceDataLoading || !sourceRows) {
-      console.log('[FiltersBar] Waiting for source data to load...');
       return;
     }
 
@@ -702,14 +681,11 @@ export const FiltersBar = ({
     try {
       const valuesArray: Record<string, string[]> = {};
       
-      // Extract values for dimensions from source data
       if (activeDimensions.length > 0 && sourceRows.length > 0) {
-        console.log('[FiltersBar] Extracting dimension values from source data for:', activeDimensions);
         const extracted = extractMultipleDimensionValues(sourceRows, activeDimensions, 10000);
         
         activeDimensions.forEach(dimId => {
           const values = extracted[dimId] || [];
-          console.log(`[FiltersBar] Extracted ${values.length} unique values for dimension ${dimId}`);
           valuesArray[dimId] = values.sort();
         });
       } else if (activeDimensions.length > 0) {
@@ -749,9 +725,6 @@ export const FiltersBar = ({
   };
 
   const handleDimensionsChange = async (dimensionIds: string[]) => {
-    console.log('[FiltersBar] handleDimensionsChange called with:', dimensionIds);
-    console.log('[FiltersBar] Current dimensions before update:', dimensions.map(d => d.name));
-    
     setActiveDimensions(dimensionIds);
     const next = { ...selectedFilters };
     Object.keys(next).forEach(key => {
@@ -759,15 +732,9 @@ export const FiltersBar = ({
     });
     setSelectedFilters(next);
 
-    // Immediately refresh dimensions so new ids are present for rendering
-    console.log('[FiltersBar] Calling loadDimensions to refresh...');
     await loadDimensions();
-    await loadAllDimensions(); // Also refresh all dimensions
-    console.log('[FiltersBar] loadDimensions completed');
-    
-    // Reload filter settings to ensure we have the latest data
+    await loadAllDimensions();
     await loadFilterSettings();
-    console.log('[FiltersBar] loadFilterSettings completed');
 
     // Only persist changes in Edit mode
     if (!reportId || isSharedView || isInitialLoad || !isEditMode) return;

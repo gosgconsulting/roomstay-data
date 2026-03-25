@@ -13,7 +13,6 @@ import { FiltersBar, FilterState } from "@/components/FiltersBar";
 import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
-import { LoadingToast } from "@/components/LoadingToast";
 import { isChannelBasedFormat, convertReportToChannelFormat } from "@/lib/filterFormatUtils";
 import { getCurrentMonthToDateRange, DEFAULT_REPORT_DATE_PRESET } from "@/lib/monthUtils";
 

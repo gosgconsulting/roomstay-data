@@ -15,7 +15,6 @@ import {
   buildMetricNameToIdsMap,
   filterRawDataRows,
   getMetricKeys,
-  hasAnyActiveFilters,
   hasAnyPositiveFilters,
   getChannelsWithFilters,
 } from '@/lib/slideViewHelpers';
@@ -195,7 +194,6 @@ function buildChartDataFromRawRows(
   let inferredStart: Date | null = dateRange?.start ?? null;
   let inferredEnd: Date | null = dateRange?.end ?? null;
 
-  const hasFilters = filterValues ? hasAnyActiveFilters(filterValues) : false;
   const hasPositiveGlobalFilters = filterValues ? hasAnyPositiveFilters(filterValues) : false;
   const channelsWithFilters = filterValues ? getChannelsWithFilters(filterValues) : new Set<string>();
 
