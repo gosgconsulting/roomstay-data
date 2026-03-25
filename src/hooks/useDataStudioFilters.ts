@@ -392,15 +392,26 @@ export function useDataStudioFilters({
   }, [effectivePivotData, filterConfigs, configuredDimensionNames]);
 
   // ── Active filter count (dimension selections only, not date) ───────────────
+  // In shared mode, count only filters that DIFFER from the saved baseline.
+  // This ensures the Reset button is hidden when filters match the saved view.
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    for (const ch of Object.values(filterValues)) {
-      for (const vals of Object.values(ch)) {
-        if (vals && vals.length > 0) count++;
+    const base = shareBaseFilterValues ?? null;
+    for (const [chKey, chDims] of Object.entries(filterValues)) {
+      for (const [dimId, vals] of Object.entries(chDims)) {
+        if (!vals || vals.length === 0) continue;
+        if (base) {
+          // Compare against baseline — if identical, don't count it
+          const baseVals = base[chKey as Channel]?.[dimId];
+          if (baseVals && baseVals.length === vals.length && baseVals.every((v) => vals.includes(v))) {
+            continue; // matches baseline, not a user change
+          }
+        }
+        count++;
       }
     }
     return count;
-  }, [filterValues]);
+  }, [filterValues, shareBaseFilterValues]);
 
   // ── Guards ──────────────────────────────────────────────────────────────────
   const setCustomDateRange = useCallback((r: DateRange | undefined) => {
