@@ -77,13 +77,16 @@ export function OverviewTab({
   comparisonTotals,
   comparisonType,
 }: OverviewTabProps) {
-  // Merge comparison data into chart data by matching on the bucket label string.
-  // This is robust against granularity switches that change bucket counts, unlike index-based merging.
+  // Merge comparison data into chart data by index position.
+  // Comparison period has different date labels (e.g. "Feb 2" vs "Mar 2"),
+  // so label-based matching fails. Index-based merge aligns bucket-by-bucket.
   const mergedChartData = useMemo(() => {
-    const compMap = new Map(comparisonChartData?.map(p => [p.label, p.value]) ?? []);
-    return overviewChartData.map(point => ({
+    if (!comparisonChartData || comparisonChartData.length === 0) {
+      return overviewChartData.map(point => ({ ...point, comparisonValue: undefined }));
+    }
+    return overviewChartData.map((point, i) => ({
       ...point,
-      comparisonValue: compMap.get(point.label) ?? undefined,
+      comparisonValue: i < comparisonChartData.length ? comparisonChartData[i].value : undefined,
     }));
   }, [overviewChartData, comparisonChartData]);
 
