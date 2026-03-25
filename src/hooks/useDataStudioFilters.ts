@@ -188,6 +188,11 @@ export interface UseDataStudioFiltersParams {
    * (which use report-specific IDs). Built from breakdownDimensions in the parent page.
    */
   configuredDimensionNames?: Record<string, string>;
+  /**
+   * Base filter values for shared views. When provided, resetFilters restores
+   * to these values instead of clearing all filters (prevents showing other accounts' data).
+   */
+  shareBaseFilterValues?: FilterValues | null;
 }
 
 export interface UseDataStudioFiltersReturn {
