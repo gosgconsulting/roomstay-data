@@ -107,10 +107,12 @@ export function ChannelTab({
   const currentData = channelChartData[channel] || [];
   const compData = comparisonChannelChartData?.[channel];
   const mergedChartData = useMemo(() => {
-    const compMap = new Map(compData?.map(p => [p.label, p.value]) ?? []);
-    return currentData.map(point => ({
+    if (!compData || compData.length === 0) {
+      return currentData.map(point => ({ ...point, comparisonValue: undefined }));
+    }
+    return currentData.map((point, i) => ({
       ...point,
-      comparisonValue: compMap.get(point.label) ?? undefined,
+      comparisonValue: i < compData.length ? compData[i].value : undefined,
     }));
   }, [currentData, compData]);
   const hasComparison = !!compData && compData.length > 0;
