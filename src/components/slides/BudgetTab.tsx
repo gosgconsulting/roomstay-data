@@ -12,6 +12,7 @@ import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { MONTH_NAMES } from "@/constants/slideViewConstants";
 import { formatNumber } from "@/lib/slideViewHelpers";
 import { calculateProfit } from "@/lib/budgetCalculations";
+import type { ApplyViewOptions } from "@/hooks/useDataStudioFilters";
 
 /** Derive display label and pivot key from row.month (handles "August 2025" or "2025-08"). */
 function getMonthDisplayAndKey(rowMonth: string): { display: string; key: string } {
@@ -105,7 +106,7 @@ interface BudgetTabProps {
   setSelectedViewId: (viewId: string | null) => void;
   isReadOnlyMode: boolean;
   views: View[];
-  handleApplyView: (viewId: string | null) => void;
+  handleApplyView: (viewId: string | null, options?: ApplyViewOptions) => void;
   isLoadingViewBudgets: boolean;
   /** True while display-data API is in flight (avoids glitch when budget data arrives late). */
   isLoadingDisplayData?: boolean;
@@ -451,7 +452,10 @@ export function BudgetTab({
               setSelectedViewId(newViewId);
               // Immediately apply the view filters (unless it's Unsaved)
               if (newViewId !== 'unsaved') {
-                handleApplyView(newViewId);
+                handleApplyView(
+                  newViewId,
+                  newViewId ? { skipDateRestore: true } : undefined
+                );
               }
             }}
             disabled={isReadOnlyMode}

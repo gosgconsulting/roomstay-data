@@ -42,7 +42,7 @@ import { ReportSidebar } from "@/components/slides/ReportSidebar";
 import { FiltersRow } from "@/components/slides/FiltersRow";
 import { FilterPanel } from "@/components/slides/FilterPanel";
 import { DimensionSettingsModal, type DimensionSettingsMode, type DimensionSettingsModalValue } from "@/components/slides/DimensionSettingsModal";
-import { useDataStudioFilters, type FilterConfigs } from "@/hooks/useDataStudioFilters";
+import { useDataStudioFilters, type ApplyViewOptions, type FilterConfigs } from "@/hooks/useDataStudioFilters";
 import { ComparisonBanner } from "@/components/slides/ComparisonBanner";
 
 import { OverviewTab } from "@/components/slides/OverviewTab";
@@ -63,6 +63,7 @@ import {
   formatDateToLocalIso,
   getCurrentMonthToDateRange,
   parseSelectedMonths,
+  slideSelectionToDateRange,
 } from "@/lib/monthUtils";
 import type { AccountReportIds } from "@/lib/accountReportIds";
 import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
@@ -132,13 +133,14 @@ function buildInitialDateStateForSharedStudio(slug: string | null | undefined): 
       to: new Date(sharedDate.customDateRange.to),
     };
   } else {
-    // Fallback to building range from year/month
-    const yearNum = parseInt(sharedDate.selectedYear);
     if (sharedDate.selectedMonth === 'Month to Date') {
       range = getCurrentMonthToDateRange();
     } else {
-      // Use first day of month as fallback
-      range = { from: new Date(yearNum, 0, 1), to: new Date(yearNum, 11, 31) };
+      const restored = slideSelectionToDateRange(
+        sharedDate.selectedYear,
+        sharedDate.selectedMonth || 'all'
+      );
+      range = restored ?? getCurrentMonthToDateRange();
     }
   }
   
@@ -171,7 +173,7 @@ const CHANNEL_DIMENSION_NAMES: Record<string, string[]> = {
 };
 
 export default function SlideViewPage() {
-  const { accountId: urlAccountId, slideId, slug: shareSlug } = useParams<{ accountId?: string; slideId?: string; slug?: string }>();
+  const { accountId: urlAccountId, slug: shareSlug } = useParams<{ accountId?: string; slug?: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -249,25 +251,6 @@ export default function SlideViewPage() {
     ? shareAccountId 
     : (urlAccountId ?? resolvedAccount?.id);
 
-  // If this page is mounted on legacy /tools/reports routes, redirect to an account-scoped
-  // URL once resolved. When mounted on index (/), keep the clean URL.
-  useEffect(() => {
-    const isLegacyReportsEntry =
-      location.pathname === "/tools/reports" || location.pathname.startsWith("/tools/reports/");
-
-    if (isLegacyReportsEntry && !urlAccountId && accountId && !isResolvingAccount) {
-      navigate(`/tools/reports/${accountId}`, { replace: true });
-    }
-  }, [urlAccountId, accountId, isResolvingAccount, navigate, location.pathname]);
-
-  // Single-view contract: Data Studio is the only report view now.
-  // Any legacy /view/:slideId URL is redirected to /data-studio.
-  useEffect(() => {
-    if (!accountId) return;
-    if (slideId || location.pathname.includes("/view/")) {
-      navigate(`/tools/reports`, { replace: true });
-    }
-  }, [accountId, slideId, location.pathname, navigate]);
   
   // Initialize date state - for shared studio, read from sessionStorage BEFORE first render
   // to avoid race condition where default state triggers wrong year fetch
@@ -668,48 +651,39 @@ export default function SlideViewPage() {
     }
   }, [user, isUserLoading, searchParams, navigate]);
 
-  // Check for viewId in URL params or share link on mount and when views load
+  // Apply saved view once when opening a share: `SharedReport` sets `share_view_id_${slideReportId}` only.
+  // We do not read `?viewId=` from the URL (no query-string sync / no re-apply when the URL changes).
   useEffect(() => {
-    // Legacy ?shared=true path removed — all shares now use /shared/:slug/studio
-
-    // Regular view handling (not from share link)
-    const urlViewId = searchParams.get('viewId');
     const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
-    const viewIdToUse = urlViewId || shareViewId;
+    const viewIdToUse = shareViewId;
 
     if (viewIdToUse && views.length > 0) {
-      // Check if viewId exists in views
       const view = views.find(v => v.id === viewIdToUse);
       if (view) {
-        // Apply the view (do NOT enable read-only mode for regular views, unless in public share studio)
         if (isReadOnlyMode && !isPublicShareStudio) setIsReadOnlyMode(false);
         setSelectedViewId(viewIdToUse);
         if (selectedViewId !== viewIdToUse) {
-          // For public share studio, skip date restoration from view (date comes from share_links)
-          handleApplyView(viewIdToUse, isPublicShareStudio ? { skipDateRestore: true } : undefined);
+          const applyOpts: ApplyViewOptions | undefined = isPublicShareStudio
+            ? { skipDateRestore: true }
+            : isSharedPreview
+              ? { skipDateRestore: true, applyMasterDefaultDate: true }
+              : undefined;
+          handleApplyView(viewIdToUse, applyOpts);
         }
-
-        // Clear the session storage after using it
-        if (shareViewId) {
-          sessionStorage.removeItem(`share_view_id_${slideReportId}`);
-        }
+        sessionStorage.removeItem(`share_view_id_${slideReportId}`);
       } else {
-        // View not found, remove from URL and session storage
-        if (urlViewId) {
-          const newParams = new URLSearchParams(searchParams);
-          newParams.delete('viewId');
-          setSearchParams(newParams, { replace: true });
-        }
-        if (shareViewId) {
-          sessionStorage.removeItem(`share_view_id_${slideReportId}`);
-        }
+        sessionStorage.removeItem(`share_view_id_${slideReportId}`);
       }
-    } else if (!viewIdToUse && isReadOnlyMode && !isShared && !isPublicShareStudio) {
-      // If viewId is removed from URL and not from share link, disable read-only mode (unless in public share studio)
+    } else if (
+      !viewIdToUse &&
+      isReadOnlyMode &&
+      searchParams.get('shared') !== 'true' &&
+      !isPublicShareStudio
+    ) {
       setIsReadOnlyMode(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, views.length, isReadOnlyMode, slideReportId, selectedViewId, isPublicShareStudio]);
+  }, [views.length, isReadOnlyMode, slideReportId, selectedViewId, isPublicShareStudio, isSharedPreview, searchParams]);
 
   // monthlyDataRecords, isLoadingMonthlyData from reportPage
 
@@ -2463,10 +2437,8 @@ export default function SlideViewPage() {
   }, [slideReportId, user, selectedYear, selectedMonth, customDateRange, comparisonType, priceCheckChartTimeRange, filterValues, updateView, queryClient]);
 
   // Apply a saved view (or reset to Master when viewId is null)
-  const handleApplyView = useCallback((viewId: string | null, options?: { skipDateRestore?: boolean }) => {
+  const handleApplyView = useCallback((viewId: string | null, options?: ApplyViewOptions) => {
     if (!slideReportId) return;
-
-    console.log('[DEBUG] handleApplyView called:', { viewId, skipDateRestore: options?.skipDateRestore });
 
     isApplyingViewRef.current = true;
 
@@ -2491,28 +2463,10 @@ export default function SlideViewPage() {
     if (view?.tab) setSelectedTab(view.tab);
     else if (!viewId) setSelectedTab('overview');
 
-    // Update URL with viewId; drop stale share preview params so slug never hijacks routing on auth edge cases
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (viewId) {
-          next.set('viewId', viewId);
-        } else {
-          next.delete('viewId');
-        }
-        if (!isReadOnlyMode) {
-          next.delete('shared');
-          next.delete('slug');
-        }
-        return next;
-      },
-      { replace: true }
-    );
-
     setTimeout(() => {
       isApplyingViewRef.current = false;
     }, 0);
-  }, [slideReportId, views, dsFilters, isReadOnlyMode, setSearchParams]);
+  }, [slideReportId, views, dsFilters]);
 
   // ========== Refresh Data Modal handler ==========
   const handleRefreshDataWithModal = useCallback(() => {

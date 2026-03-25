@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import type { ApplyViewOptions } from "@/hooks/useDataStudioFilters";
 
 interface View {
   id: string | null;
@@ -44,7 +45,7 @@ interface ReportSidebarProps {
   selectedViewId: string | null;
   setSelectedViewId: (viewId: string | null) => void;
   availableViews: View[];
-  handleApplyView: (viewId: string | null) => void;
+  handleApplyView: (viewId: string | null, options?: ApplyViewOptions) => void;
   handleDeleteView: (viewId: string) => void;
   setIsSaveViewDialogOpen: (open: boolean) => void;
   setIsSaveOrUpdateViewDialogOpen: (open: boolean) => void;
@@ -98,7 +99,10 @@ export function ReportSidebar({
                 const newViewId = value === "master" ? null : value === "unsaved" ? "unsaved" : value;
                 setSelectedViewId(newViewId);
                 if (newViewId !== "unsaved") {
-                  handleApplyView(newViewId);
+                  handleApplyView(
+                    newViewId,
+                    newViewId ? { skipDateRestore: true } : undefined
+                  );
                 }
               }}
               disabled={isReadOnlyMode}

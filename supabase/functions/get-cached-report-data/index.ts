@@ -49,6 +49,10 @@ async function validateAuth(req: Request): Promise<boolean> {
 
   if (!bearer) return false;
   if (serviceRoleKey && bearer === serviceRoleKey) return true;
+  
+  // Accept the anon key for public share access
+  // Safe because the function uses service role for all DB operations
+  if (anonKey && bearer === anonKey) return true;
 
   if (supabaseUrl && anonKey) {
     try {

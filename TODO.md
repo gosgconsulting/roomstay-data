@@ -34,6 +34,87 @@ After coding:
 
 ## Active tasks
 
+### Supabase database refactor — migration inventory and consolidation (2026-03-26)
+
+**Status:** ✅ Complete
+
+**Project:** `zcxxwpwheevwavdcgfht` (Sparti Data)
+
+**Migration inventory findings:**
+
+- **Remote database:** 106 migrations applied (via MCP `list_migrations`)
+- **Local repo:** 99 migration files in `supabase/migrations/`
+- **Duplicate timestamp issue:** Two local files shared `20260318200000` prefix:
+  - `20260318200000_drop_report_api_data.sql`
+  - `20260318200000_phase9_drop_legacy_tables.sql`
+- **Remote reality:** These were applied under different timestamps:
+  - `20260318150854` (phase9_drop_legacy_tables)
+  - `20260318150931` (phase9_drop_slide_report_summaries_and_views)
+
+**Fix applied:**
+
+- Merged both `20260318200000` files into single consolidated file: `20260318200000_phase9_drop_legacy_tables_consolidated.sql`
+- Deleted both duplicate files
+- Added note in consolidated file: "DO NOT re-apply to remote" (already applied under different timestamps)
+- This resolves the unsafe duplicate timestamp for fresh environments
+
+**Key gaps (remote vs repo):**
+
+Per README note: "some history was applied only via MCP" — timestamps differ but content is applied. The consolidated file documents the remote parity.
+
+**Verification:** Local migration files now have unique timestamps; remote schema is current with latest migration `20260325174317`.
+
+---
+
+### Remove report URL viewId sync and legacy redirects (2026-03-26)
+
+**Status:** ✅ Complete
+
+**Change:** Data Studio no longer writes or reads `viewId` in the query string (`handleApplyView` had been calling `setSearchParams`). Share links still apply the saved view via `sessionStorage` `share_view_id_*` only. Removed dead `SlideViewPage` effects that navigated to `/tools/reports/...` (App routes already `Navigate` to `/`). Sidebar and Budget tab apply saved views with `skipDateRestore: true` so changing the date on Master then switching to another view does not overwrite the date from the view row.
+
+**Verify:** `npm run build`, `npm run lint`.
+
+---
+
+### Shared studio default date aligns with master (MTD) (2026-03-26)
+
+**Status:** ✅ Complete
+
+**Problem:** Opening a shared link with `view_id` but no date on `share_links` copied the saved view’s calendar fields into session / `applyView`, so the date did not match master (month-to-date). Owner share-preview (`?shared=true&slug=`) also restored the view row date.
+
+**Fix:**
+
+- `SharedReport.tsx` — for `view_id` without pinned link date, write MTD into `share_date_*` (not `views.selected_year/month`).
+- `useDataStudioFilters.ts` — `ApplyViewOptions.applyMasterDefaultDate`; used with `skipDateRestore` for owner preview.
+- `SlideViewPage.tsx` — public studio: `skipDateRestore: true`; owner preview: add `applyMasterDefaultDate: true`. Replace broken `isShared` reference in view effect with `searchParams.get('shared') !== 'true'`. `buildInitialDateStateForSharedStudio`: use `slideSelectionToDateRange` instead of full-calendar-year fallback when session has year/month without `customDateRange`.
+- `ReportSidebar.tsx` — prop type accepts optional `ApplyViewOptions`.
+
+**Verify:** `npm run build`, `npm run lint`.
+
+---
+
+### Sparti Data DB cleanup — drop legacy Master Report tables (2026-03-26)
+
+**Status:** ✅ Complete
+
+**Project:** `zcxxwpwheevwavdcgfht` (matches `supabase/config.toml`).
+
+**Dropped via MCP `apply_migration`** (`drop_legacy_master_report_and_daily_metrics`, version `20260325174317`):
+
+| Table | Reason |
+|-------|--------|
+| `report_daily_metrics` | AI/Make pre-aggregate cache; app and edge functions use `dimension_data`; Express `/api/make/*` reads `dimension_data` |
+| `master_report_configs` | Master Report UI removed; zero `src/` / `supabase/functions` references |
+| `master_report_global_configs` | Same |
+
+**Kept:** `report_shares` (still used in `DashboardHeader.tsx`).
+
+**Repo:** `supabase/migrations/20260325174317_drop_legacy_master_report_and_daily_metrics.sql`; removed table blocks from `src/integrations/supabase/types.ts`; deleted unused `src/integrations/supabase/types.gen.ts`.
+
+**Verify:** `npm run build` exit 0; `npm run lint` exit 0 (warnings only).
+
+---
+
 ### MCP Supabase migration audit (2026-03-26)
 
 **Status:** ✅ Complete (linked project already current; no new `apply_migration` run needed)
@@ -691,7 +772,7 @@ If performance is unacceptable:
 
 **Verify:** `npm run build`, `npm run lint`, `node --check server.js`. After deploy: Make.com route smoke test; optional Price Widget create/load if UI writes widgets.
 
-**Next (optional):** Other Supabase projects/branches: repeat MCP `apply_migration` drops (or run equivalent SQL) if they still have `ai_summary_*` / cluster / `slides` / `booking_statuses` / `master_filter_settings`. Remove or refresh stale `types.gen.ts` if you use it anywhere.
+**Next (optional):** Other Supabase projects/branches: repeat MCP `apply_migration` drops (or run equivalent SQL) if they still have `ai_summary_*` / cluster / `slides` / `booking_statuses` / `master_filter_settings` / `report_daily_metrics` / `master_report_*`. Regenerate `types.ts` from MCP `generate_typescript_types` after DDL changes.
 
 ---
 

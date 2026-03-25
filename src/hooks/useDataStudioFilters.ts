@@ -29,6 +29,14 @@ import type { SlideReportConfiguration, SlideReportView } from '@/types/slideRep
 
 type Channel = 'metasearch' | 'sem' | 'social';
 
+/** Options for applyView (saved view vs master reset). */
+export type ApplyViewOptions = {
+  /** When true, do not restore date from the view row (e.g. public share: date comes from session / share_links). */
+  skipDateRestore?: boolean;
+  /** After applying filter values, set date to current month-to-date (master default). Used with skipDateRestore for owner share-preview URLs. */
+  applyMasterDefaultDate?: boolean;
+};
+
 /** Which dimension IDs are enabled as filter dropdowns per channel. */
 export type FilterConfigs = Record<Channel, { filterDimensionIds: string[] }>;
 
@@ -207,7 +215,7 @@ export interface UseDataStudioFiltersReturn {
   /* ── Actions ── */
   resetFilters: () => void;
   applyPreset: (preset: string) => void;
-  applyView: (view: SlideReportView | null) => void;
+  applyView: (view: SlideReportView | null, options?: ApplyViewOptions) => void;
   setChannelFilterValue: (channel: Channel, dimensionId: string, values: string[]) => void;
   clearChannelFilter: (channel: Channel, dimensionId: string) => void;
   persistFilterConfigs: (next: FilterConfigs) => void;
@@ -444,7 +452,7 @@ export function useDataStudioFilters({
     }
   }, [isReadOnly, setSelectedYear, setSelectedMonth]);
 
-  const applyView = useCallback((view: SlideReportView | null, options?: { skipDateRestore?: boolean }) => {
+  const applyView = useCallback((view: SlideReportView | null, options?: ApplyViewOptions) => {
     if (!view) {
       // Reset to master — clear filters, comparison, and date back to month-to-date.
       setFilterValuesRaw(EMPTY_FILTER_VALUES);
@@ -466,12 +474,17 @@ export function useDataStudioFilters({
       'price-check': vf['price-check'] || {},
       booking: vf.booking || {},
     });
-    
-    // Skip date restoration if requested (e.g., for public share studio where date comes from share_links)
-    if (!options?.skipDateRestore) {
+
+    if (options?.applyMasterDefaultDate) {
+      const range = getCurrentMonthToDateRange();
+      const next = dateRangeToSlideSelection(range);
+      setCustomDateRangeRaw(range);
+      setSelectedYear(next.year);
+      setSelectedMonth(next.month);
+    } else if (!options?.skipDateRestore) {
       if (view.selected_year) setSelectedYear(view.selected_year);
       if (view.selected_month) setSelectedMonth(view.selected_month);
-      
+
       // PRIORITY: Use custom_date_range if available (preserves exact dates for cross-year ranges)
       if (view.custom_date_range) {
         const customRange = view.custom_date_range as { from: string; to: string };

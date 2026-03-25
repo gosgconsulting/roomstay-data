@@ -474,27 +474,6 @@ export type Database = {
         }
         Relationships: []
       }
-      profiles: {
-        Row: {
-          created_at: string
-          email: string
-          id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          email: string
-          id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          email?: string
-          id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       price_widgets: {
         Row: {
           account_id: string
@@ -544,6 +523,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       report_shares: {
         Row: {
@@ -624,7 +624,7 @@ export type Database = {
           date_preset: string | null
           dimension_filters: Json | null
           id: string
-          locked_dimension_ids: string[]
+          locked_dimension_ids: string[] | null
           password_hash: string
           report_ids: string[]
           selected_month: string | null
@@ -642,7 +642,7 @@ export type Database = {
           date_preset?: string | null
           dimension_filters?: Json | null
           id?: string
-          locked_dimension_ids?: string[]
+          locked_dimension_ids?: string[] | null
           password_hash: string
           report_ids?: string[]
           selected_month?: string | null
@@ -660,7 +660,7 @@ export type Database = {
           date_preset?: string | null
           dimension_filters?: Json | null
           id?: string
-          locked_dimension_ids?: string[]
+          locked_dimension_ids?: string[] | null
           password_hash?: string
           report_ids?: string[]
           selected_month?: string | null
@@ -767,6 +767,8 @@ export type Database = {
           id: string
           is_default: boolean | null
           kpi_order: string[] | null
+          main_dimension_id: string | null
+          main_dimension_name: string | null
           mode: string
           name: string
           price_check_chart_time_range: string | null
@@ -800,6 +802,8 @@ export type Database = {
           id?: string
           is_default?: boolean | null
           kpi_order?: string[] | null
+          main_dimension_id?: string | null
+          main_dimension_name?: string | null
           mode: string
           name: string
           price_check_chart_time_range?: string | null
@@ -833,6 +837,8 @@ export type Database = {
           id?: string
           is_default?: boolean | null
           kpi_order?: string[] | null
+          main_dimension_id?: string | null
+          main_dimension_name?: string | null
           mode?: string
           name?: string
           price_check_chart_time_range?: string | null
@@ -853,6 +859,13 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "views_main_dimension_id_fkey"
+            columns: ["main_dimension_id"]
+            isOneToOne: false
+            referencedRelation: "dimensions"
             referencedColumns: ["id"]
           },
           {

@@ -202,40 +202,16 @@ export default function SharedReport() {
           datePreset: linkData.date_preset,
         };
       } else if (hasViewId) {
-        // Fallback: try to load date from view
-        try {
-          const { data: view } = await supabase
-            .from("views")
-            .select("selected_year, selected_month")
-            .eq("id", linkData.view_id)
-            .maybeSingle();
-          
-          if (view) {
-            dateSelection = {
-              selectedYear: view.selected_year || new Date().getFullYear().toString(),
-              selectedMonth: view.selected_month || 'Month to Date',
-            };
-          } else {
-            // View not found, use default
-            const mtd = getCurrentMonthToDateRange();
-            dateSelection = {
-              selectedYear: mtd.to!.getFullYear().toString(),
-              selectedMonth: 'Month to Date',
-              customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
-              datePreset: DEFAULT_REPORT_DATE_PRESET,
-            };
-          }
-        } catch (err) {
-          console.error('Error loading view date:', err);
-          // Fallback to default
-          const mtd = getCurrentMonthToDateRange();
-          dateSelection = {
-            selectedYear: mtd.to!.getFullYear().toString(),
-            selectedMonth: 'Month to Date',
-            customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
-            datePreset: DEFAULT_REPORT_DATE_PRESET,
-          };
-        }
+        // view_id drives filters / layout via applyView(skipDateRestore); date must match **master default**
+        // (month-to-date), not the view row's selected_year/month (often a stale calendar month).
+        // To pin a date on a share, set share_links.selected_year / custom_date_range / date_preset when creating the link.
+        const mtd = getCurrentMonthToDateRange();
+        dateSelection = {
+          selectedYear: mtd.to!.getFullYear().toString(),
+          selectedMonth: 'Month to Date',
+          customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
+          datePreset: DEFAULT_REPORT_DATE_PRESET,
+        };
       } else {
         // No date info available, use default month-to-date
         const mtd = getCurrentMonthToDateRange();
@@ -252,6 +228,13 @@ export default function SharedReport() {
       // Legacy: Store view_id if it exists (for backward compatibility)
       if (hasViewId) {
         sessionStorage.setItem(`share_view_id_${finalSlideReportId}`, linkData.view_id);
+      }
+      
+      // Read viewId from URL query string (passed by share links like /shared/brady/studio?viewId=...)
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlViewId = urlParams.get('viewId');
+      if (urlViewId) {
+        sessionStorage.setItem(`share_view_id_${finalSlideReportId}`, urlViewId);
       }
       
       // Store share link data for authentication persistence

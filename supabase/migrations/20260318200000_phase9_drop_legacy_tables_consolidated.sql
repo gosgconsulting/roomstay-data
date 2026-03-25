@@ -1,4 +1,4 @@
--- Phase 9: Drop confirmed-unused legacy tables
+-- Phase 9: Drop confirmed-unused legacy tables (consolidated from two duplicate 20260318200000 files)
 -- All tables below have passed the full "Used in current stack?" checklist:
 --   - No frontend reads/writes (only in generated types.ts or comments)
 --   - No edge function reads/writes (only in comments)
@@ -14,9 +14,17 @@
 --   monthly_dimension_data          — no reads/writes found anywhere
 --   aggregated_breakdown_data       — no reads/writes found anywhere
 --   report_api_data                 — sync/get-report-api-data edge functions deleted; auto-sync no-op
+--   slide_report_views              — all reads/writes migrated to public.views
+--   slide_report_summaries          — AI summaries removed; no reads/writes in src/ or supabase/functions/
+--
+-- Note: This migration was already applied to the remote database under different timestamps:
+--   - 20260318150854 (phase9_drop_legacy_tables)
+--   - 20260318150931 (phase9_drop_slide_report_summaries_and_views)
+-- This consolidated file is for repo parity only; DO NOT re-apply to remote.
+
+BEGIN;
 
 -- Drop in safe order (FKs first if any)
-
 DROP TABLE IF EXISTS public.aggregated_breakdown_data CASCADE;
 DROP TABLE IF EXISTS public.monthly_dimension_data CASCADE;
 DROP TABLE IF EXISTS public.report_api_data CASCADE;
@@ -32,3 +40,5 @@ DROP TABLE IF EXISTS public.slide_report_summaries CASCADE;
 -- slide_report_views: all reads/writes migrated to public.views (mode='slide_view')
 -- FKs from budgets.view_id and share_links.view_id already repointed to public.views
 DROP TABLE IF EXISTS public.slide_report_views CASCADE;
+
+COMMIT;
