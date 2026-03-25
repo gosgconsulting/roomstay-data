@@ -19,7 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { readShareFiltersFromSession } from "@/lib/shareSession";
+import { readShareFiltersFromSession, readShareDateFromSession } from "@/lib/shareSession";
 import { useSlideReportPage } from "@/hooks/useSlideReportPage";
 import { useUserAccount } from "@/hooks/useUserAccount";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
@@ -181,6 +181,19 @@ export default function SlideViewPage() {
     
     // Enable read-only mode for public shares
     setIsReadOnlyMode(true);
+    
+    // Load date selection from sessionStorage if available
+    const sharedDate = readShareDateFromSession(effectiveSlug);
+    if (sharedDate) {
+      setSelectedYear(sharedDate.selectedYear);
+      setSelectedMonth(sharedDate.selectedMonth);
+      if (sharedDate.customDateRange) {
+        setCustomDateRange({
+          from: new Date(sharedDate.customDateRange.from),
+          to: new Date(sharedDate.customDateRange.to),
+        });
+      }
+    }
     
     // Load filters from sessionStorage if available
     const channelFilters = readShareFiltersFromSession(effectiveSlug);
@@ -3389,6 +3402,12 @@ export default function SlideViewPage() {
           accountId={accountId}
           availableViews={availableViews}
           currentFilterValues={filterValues}
+          currentDateSelection={{
+            selectedYear,
+            selectedMonth,
+            customDateRange,
+            datePreset: dsFilters.datePreset,
+          }}
         />
       )}
 

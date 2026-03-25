@@ -34,6 +34,81 @@ After coding:
 
 ## Active tasks
 
+### Shared report date restoration — fix wrong date and zero data (2026-03-25)
+
+**Status:** ✅ Complete
+
+**Problem:**
+- Shared reports loaded with wrong date (current month-to-date) instead of the date range selected when creating the share link
+- Resulted in zero data when the shared date had data but current month didn't
+- Date filter button showed incorrect date range
+
+**Root cause:**
+- `share_links` table did not store date selection
+- `SharedReport.tsx` and `SlideViewPage.tsx` always defaulted to current month-to-date
+- No mechanism to restore the intended date range for shared viewers
+
+**Solution:**
+1. **Database migration** (applied via Supabase MCP `apply_migration`):
+   - Added `selected_year`, `selected_month`, `custom_date_range`, `date_preset` columns to `share_links`
+   - Allows preserving the exact date selection when creating a share link
+   - Migration applied directly to linked project (no `.sql` file needed)
+
+2. **Share creation** (`CreateShareLinkModal.tsx`, `ShareModal.tsx`):
+   - Capture current date selection from `SlideViewPage` via new `currentDateSelection` prop
+   - Store in `share_links` when creating/updating links
+   - Works with or without saved views
+
+3. **Share access** (`SharedReport.tsx`):
+   - Read date from `share_links` (priority) or fallback to `views` (if `view_id` exists)
+   - Store in sessionStorage as `share_date_${slug}` via `writeShareDateToSession()`
+   - Handles ISO date string conversion for `customDateRange`
+
+4. **Date restoration** (`SlideViewPage.tsx`):
+   - Bootstrap effect reads `share_date_${slug}` via `readShareDateFromSession()`
+   - Restores `selectedYear`, `selectedMonth`, `customDateRange` state
+   - Overrides default month-to-date for shared studio viewers
+
+5. **Session helpers** (`src/lib/shareSession.ts`):
+   - Added `ShareDateSelection` interface
+   - Added `readShareDateFromSession()` and `writeShareDateToSession()` helpers
+   - Consistent date serialization/deserialization
+
+6. **Type updates** (`src/integrations/supabase/types.ts`):
+   - Updated `share_links` Row/Insert/Update types with new date columns
+
+**Files changed:**
+- Database: Migration applied via MCP (no `.sql` file created per project convention)
+- `src/lib/shareSession.ts` — date helpers
+- `src/pages/SharedReport.tsx` — read date from DB, write to session
+- `src/pages/SlideViewPage.tsx` — restore date from session
+- `src/components/ShareModal.tsx` — pass date to create modal
+- `src/components/CreateShareLinkModal.tsx` — capture and store date
+- `src/integrations/supabase/types.ts` — type definitions
+- `README.md` — updated Sharing System documentation
+- `TODO.md` — this section
+
+**Verification:**
+- ✅ `npm run build` (exit 0, 3585 modules)
+- ✅ `npx tsc --noEmit` (exit 0)
+- ✅ `npm run lint` (0 errors, 95 pre-existing warnings)
+- ✅ `ReadLints` on edited files (0 new errors)
+- ✅ Migration applied via Supabase MCP (columns verified in `share_links` table)
+- [ ] Manual: Create share link with specific date range (e.g., Jan 2026)
+- [ ] Manual: Access as anonymous user → verify correct date displayed
+- [ ] Manual: Verify data loads for the shared date range
+- [ ] Manual: Date filter button shows correct range (not current month)
+- [ ] Manual: Edit existing share link → date is preserved
+- [ ] Manual: Share link without view → uses current date selection
+- [ ] Manual: Share link with view → falls back to view date if share_links date is null
+
+**Next steps:**
+- Test with real share links in production
+- Existing share links will work (date columns nullable, code has fallback logic)
+- New share links will automatically capture current date selection
+
+---
+
 ### Supabase legacy drops — MCP only (2026-03-25)
 
 **Status:** ✅ Complete (DDL applied via Supabase MCP `apply_migration`; no new `.sql` files added for this step)

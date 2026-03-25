@@ -17,6 +17,12 @@ interface ShareModalProps {
   slideReportId?: string | null; // For slide reports
   availableViews?: Array<{ id: string | null; name: string }>; // Available views for slide reports
   currentFilterValues?: Record<string, Record<string, string[]>>; // Current channel-based filter values from SlideViewPage
+  currentDateSelection?: {
+    selectedYear: string;
+    selectedMonth: string;
+    customDateRange?: import("react-day-picker").DateRange;
+    datePreset?: string;
+  };
 }
 
 interface ShareLink {
@@ -26,7 +32,7 @@ interface ShareLink {
   created_at: string;
 }
 
-export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId, slideReportId, availableViews = [], currentFilterValues }: ShareModalProps) => {
+export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId, slideReportId, availableViews = [], currentFilterValues, currentDateSelection }: ShareModalProps) => {
   const { data: userData } = useUser();
   const user = userData?.user || null;
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
@@ -201,6 +207,7 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId
         slideReportId={slideReportId}
         availableViews={availableViews}
         currentFilterValues={currentFilterValues}
+        currentDateSelection={currentDateSelection}
       />
     </>
   );

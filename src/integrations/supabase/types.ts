@@ -821,10 +821,15 @@ export type Database = {
           account_id: string | null
           created_at: string
           created_by: string
+          custom_date_range: Json | null
+          date_preset: string | null
           dimension_filters: Json | null
           id: string
+          locked_dimension_ids: string[]
           password_hash: string
           report_ids: string[]
+          selected_month: string | null
+          selected_year: string | null
           slide_report_id: string | null
           slug: string
           updated_at: string
@@ -834,10 +839,15 @@ export type Database = {
           account_id?: string | null
           created_at?: string
           created_by: string
+          custom_date_range?: Json | null
+          date_preset?: string | null
           dimension_filters?: Json | null
           id?: string
+          locked_dimension_ids?: string[]
           password_hash: string
           report_ids?: string[]
+          selected_month?: string | null
+          selected_year?: string | null
           slide_report_id?: string | null
           slug: string
           updated_at?: string
@@ -847,10 +857,15 @@ export type Database = {
           account_id?: string | null
           created_at?: string
           created_by?: string
+          custom_date_range?: Json | null
+          date_preset?: string | null
           dimension_filters?: Json | null
           id?: string
+          locked_dimension_ids?: string[]
           password_hash?: string
           report_ids?: string[]
+          selected_month?: string | null
+          selected_year?: string | null
           slide_report_id?: string | null
           slug?: string
           updated_at?: string

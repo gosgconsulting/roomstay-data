@@ -14,7 +14,8 @@ import { KPIMetricsCards } from "@/components/KPIMetricsCards";
 import { KPIChart } from "@/components/KPIChart";
 import { PerformanceTable } from "@/components/PerformanceTable";
 import { isChannelBasedFormat, convertReportToChannelFormat } from "@/lib/filterFormatUtils";
-import { getCurrentMonthToDateRange, DEFAULT_REPORT_DATE_PRESET } from "@/lib/monthUtils";
+import { getCurrentMonthToDateRange, DEFAULT_REPORT_DATE_PRESET, formatDateToLocalIso } from "@/lib/monthUtils";
+import { writeShareDateToSession, type ShareDateSelection } from "@/lib/shareSession";
 
 export default function SharedReport() {
   const { slug } = useParams();
@@ -171,6 +172,68 @@ export default function SharedReport() {
         
         // Store locked dimension IDs for Data Studio embed
         sessionStorage.setItem(`share_locked_dimension_ids_${slug}`, JSON.stringify(linkData.locked_dimension_ids || []));
+        
+        // Store date selection for Data Studio embed
+        // Priority: share_links date fields > view date fields > default month-to-date
+        let dateSelection: ShareDateSelection;
+        
+        if (linkData.selected_year || linkData.selected_month || linkData.custom_date_range) {
+          // Use date from share_links (new format)
+          dateSelection = {
+            selectedYear: linkData.selected_year || new Date().getFullYear().toString(),
+            selectedMonth: linkData.selected_month || 'Month to Date',
+            customDateRange: linkData.custom_date_range 
+              ? { from: linkData.custom_date_range.from, to: linkData.custom_date_range.to }
+              : undefined,
+            datePreset: linkData.date_preset,
+          };
+        } else if (hasViewId) {
+          // Fallback: try to load date from view
+          try {
+            const { data: view } = await supabase
+              .from("views")
+              .select("selected_year, selected_month")
+              .eq("id", linkData.view_id)
+              .maybeSingle();
+            
+            if (view) {
+              dateSelection = {
+                selectedYear: view.selected_year || new Date().getFullYear().toString(),
+                selectedMonth: view.selected_month || 'Month to Date',
+              };
+            } else {
+              // View not found, use default
+              const mtd = getCurrentMonthToDateRange();
+              dateSelection = {
+                selectedYear: mtd.to!.getFullYear().toString(),
+                selectedMonth: 'Month to Date',
+                customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
+                datePreset: DEFAULT_REPORT_DATE_PRESET,
+              };
+            }
+          } catch (err) {
+            console.error('Error loading view date:', err);
+            // Fallback to default
+            const mtd = getCurrentMonthToDateRange();
+            dateSelection = {
+              selectedYear: mtd.to!.getFullYear().toString(),
+              selectedMonth: 'Month to Date',
+              customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
+              datePreset: DEFAULT_REPORT_DATE_PRESET,
+            };
+          }
+        } else {
+          // No date info available, use default month-to-date
+          const mtd = getCurrentMonthToDateRange();
+          dateSelection = {
+            selectedYear: mtd.to!.getFullYear().toString(),
+            selectedMonth: 'Month to Date',
+            customDateRange: { from: formatDateToLocalIso(mtd.from!), to: formatDateToLocalIso(mtd.to!) },
+            datePreset: DEFAULT_REPORT_DATE_PRESET,
+          };
+        }
+        
+        writeShareDateToSession(slug, dateSelection);
         
         // Legacy: Store view_id if it exists (for backward compatibility)
         if (hasViewId) {

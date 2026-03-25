@@ -12,6 +12,7 @@ import { useUser } from "@/lib/auth";
 import { ArrowLeft, ArrowRight, Search, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isChannelBasedFormat } from "@/lib/filterFormatUtils";
+import { formatDateToLocalIso } from "@/lib/monthUtils";
 
 interface CreateShareLinkModalProps {
   open: boolean;
@@ -24,11 +25,21 @@ interface CreateShareLinkModalProps {
     dimension_filters?: Record<string, Record<string, string[]>>;
     view_id?: string | null;
     slide_report_id?: string | null;
+    selected_year?: string;
+    selected_month?: string;
+    custom_date_range?: { from: string; to: string };
+    date_preset?: string;
   } | null;
   accountId?: string;
   slideReportId?: string | null; // For slide reports
   availableViews?: Array<{ id: string | null; name: string }>; // Available views for slide reports
   currentFilterValues?: Record<string, Record<string, string[]>>; // Current channel-based filter values from SlideViewPage
+  currentDateSelection?: {
+    selectedYear: string;
+    selectedMonth: string;
+    customDateRange?: import("react-day-picker").DateRange;
+    datePreset?: string;
+  };
 }
 
 interface Report {
@@ -52,7 +63,8 @@ export const CreateShareLinkModal = ({
   accountId,
   slideReportId,
   availableViews = [],
-  currentFilterValues
+  currentFilterValues,
+  currentDateSelection
 }: CreateShareLinkModalProps) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [slug, setSlug] = useState("");
@@ -560,7 +572,20 @@ export const CreateShareLinkModal = ({
         if (selectedViewId !== undefined) {
           updateData.view_id = selectedViewId;
         }
-        
+
+        // Store current date selection
+        if (currentDateSelection) {
+          updateData.selected_year = currentDateSelection.selectedYear;
+          updateData.selected_month = currentDateSelection.selectedMonth;
+          updateData.date_preset = currentDateSelection.datePreset;
+          if (currentDateSelection.customDateRange?.from && currentDateSelection.customDateRange?.to) {
+            updateData.custom_date_range = {
+              from: formatDateToLocalIso(currentDateSelection.customDateRange.from),
+              to: formatDateToLocalIso(currentDateSelection.customDateRange.to),
+            };
+          }
+        }
+
         // Set locked dimensions from view's main_dimension_id
         if (selectedViewId) {
           try {
@@ -569,7 +594,7 @@ export const CreateShareLinkModal = ({
               .select("main_dimension_id")
               .eq("id", selectedViewId)
               .maybeSingle();
-            
+
             if (view?.main_dimension_id) {
               updateData.locked_dimension_ids = [view.main_dimension_id];
             }
@@ -618,6 +643,19 @@ export const CreateShareLinkModal = ({
         // Keep view_id for backward compatibility if provided
         if (selectedViewId) {
           insertData.view_id = selectedViewId;
+        }
+        
+        // Store current date selection
+        if (currentDateSelection) {
+          insertData.selected_year = currentDateSelection.selectedYear;
+          insertData.selected_month = currentDateSelection.selectedMonth;
+          insertData.date_preset = currentDateSelection.datePreset;
+          if (currentDateSelection.customDateRange?.from && currentDateSelection.customDateRange?.to) {
+            insertData.custom_date_range = {
+              from: formatDateToLocalIso(currentDateSelection.customDateRange.from),
+              to: formatDateToLocalIso(currentDateSelection.customDateRange.to),
+            };
+          }
         }
         
         // Set locked dimensions from view's main_dimension_id
