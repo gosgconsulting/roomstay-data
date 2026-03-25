@@ -2784,7 +2784,7 @@ export default function SlideViewPage() {
     let commissionsPaid = 0;
     let commissionsFree = 0;
     for (const ch of channels) {
-      const chData = (effectivePivotData?.channels as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[ch];
+      const chData = (effectivePivotData?.channels as unknown as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[ch];
       const rows = getFilteredPivotRowsForChannel(
         chData,
         ch,
