@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { readShareFiltersFromSession } from "@/lib/shareSession";
 import { useSlideReportPage } from "@/hooks/useSlideReportPage";
 import { useUserAccount } from "@/hooks/useUserAccount";
 import { useChannelMetrics } from "@/hooks/useChannelMetrics";
@@ -182,15 +183,8 @@ export default function SlideViewPage() {
     setIsReadOnlyMode(true);
     
     // Load filters from sessionStorage if available
-    const storedFilters = sessionStorage.getItem(`share_filters_${effectiveSlug}`);
-    if (storedFilters) {
-      try {
-        const channelFilters = JSON.parse(storedFilters);
-        setFilterValues(channelFilters);
-      } catch (e) {
-        console.error('Error parsing share filters:', e);
-      }
-    }
+    const channelFilters = readShareFiltersFromSession(effectiveSlug);
+    if (channelFilters) setFilterValues(channelFilters);
   }, [isPublicShareStudio, effectiveSlug, navigate]);
 
   // Resolve account from URL param or from auth context (short-entry route support).
@@ -647,16 +641,8 @@ export default function SlideViewPage() {
       setIsReadOnlyMode(true);
 
       // Load filters from share link if not already loaded
-      const filtersKey = `share_filters_${slug}`;
-      const storedFilters = sessionStorage.getItem(filtersKey);
-      if (storedFilters) {
-        try {
-          const channelFilters = JSON.parse(storedFilters);
-          setFilterValues(channelFilters);
-        } catch (error) {
-          console.error('[testing] Error parsing share link filters:', error);
-        }
-      }
+      const channelFilters = readShareFiltersFromSession(slug);
+      if (channelFilters) setFilterValues(channelFilters);
 
       // Legacy: Check for view_id from share link (backward compatibility)
       const shareViewId = sessionStorage.getItem(`share_view_id_${slideReportId}`);
@@ -1073,6 +1059,8 @@ export default function SlideViewPage() {
   useEffect(() => {
     // Skip persistence until the slide report has loaded.
     if (!slideReportId || isSlideReportsLoading) return;
+    // Skip persistence for anonymous users or public share studio viewers.
+    if (!user || isPublicShareStudio) return;
     // Skip the very first run after this report loads (that run reflects restored values, not user changes).
     if (uiPersistSkippedForRef.current !== slideReportId) {
       uiPersistSkippedForRef.current = slideReportId;
@@ -1080,6 +1068,8 @@ export default function SlideViewPage() {
     }
     if (uiSettingsPersistTimerRef.current) clearTimeout(uiSettingsPersistTimerRef.current);
     uiSettingsPersistTimerRef.current = setTimeout(async () => {
+      // Double-check user context in case of rapid route/auth changes during debounce.
+      if (!user || isPublicShareStudio) return;
       try {
         const prevConfig = (slideReportConfigRef.current || {}) as any;
         const configuration = {
@@ -1098,7 +1088,7 @@ export default function SlideViewPage() {
     return () => {
       if (uiSettingsPersistTimerRef.current) clearTimeout(uiSettingsPersistTimerRef.current);
     };
-  }, [groupByDimension, breakdownByDimension, chartMetric, chartGranularity, filterValues, slideReportId, isSlideReportsLoading]);
+  }, [groupByDimension, breakdownByDimension, chartMetric, chartGranularity, filterValues, slideReportId, isSlideReportsLoading, user, isPublicShareStudio]);
 
   // Filter option loading is now handled by useDataStudioFilters (derived from rawDataRows in memory).
 
@@ -2979,6 +2969,22 @@ export default function SlideViewPage() {
   // AI Summary feature removed (full removal)
 
   // ========== Loading & empty states (prevent blank page) ==========
+
+  // Public studio: session keys are read synchronously in a useEffect, so there is one
+  // paint where shareAccountId / shareSlideReportId are still null. Show a minimal shell
+  // to avoid rendering the full Data Studio layout without any IDs (safe; redirect for
+  // unauthenticated paths is handled in the same bootstrap effect above).
+  if (isPublicShareStudio && (!shareAccountId || !shareSlideReportId)) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Opening shared report…</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isResolvingAccount) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">

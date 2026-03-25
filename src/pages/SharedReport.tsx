@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -32,11 +32,14 @@ export default function SharedReport() {
   // Report dashboard state
   const [reportId, setReportId] = useState<string | null>(null);
   const [account, setAccount] = useState<any>(null);
+  const [accountLoadState, setAccountLoadState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [loadingComponents, setLoadingComponents] = useState<Set<string>>(new Set());
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
   const [visibilityRefreshTrigger, setVisibilityRefreshTrigger] = useState(0);
   const [loadingGeneration, setLoadingGeneration] = useState(0);
+  // Prevent double-bootstrap when slug/effect deps fire twice
+  const bootstrapDoneRef = useRef(false);
   
   // Filter state — month-to-date by default (same as owner Data Studio / FiltersBar)
   const [filters, setFilters] = useState<FilterState>(() => {
@@ -224,51 +227,113 @@ export default function SharedReport() {
       
       // Load account information if account_id is available
       if (linkData.account_id) {
-        try {
-          const { data: accountData, error: accountError } = await supabase
-            .from('accounts')
-            .select('*')
-            .eq('id', linkData.account_id)
-            .single();
-            
-          if (!accountError && accountData) {
-            setAccount(accountData);
-          }
-        } catch (error) {
-          console.error('Error loading account for shared report:', error);
-        }
+        await fetchAccountWithRetry(linkData.account_id);
       }
     }
   }, [slug, navigate, toast, setLockedDimensionIds, setLoadingGeneration, setLoadingComponents, setIsDataLoading, markComponentLoading, setReportId, setFilters, setAccount]);
 
-  // Consolidated bootstrap: check session auth first, then load from DB if needed
+  // Separated account fetch so it can be called from initializeReport and from retry
+  const fetchAccountWithRetry = useCallback(async (accountId: string) => {
+    setAccountLoadState('loading');
+    const TIMEOUT_MS = 15_000;
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), TIMEOUT_MS)
+      );
+      const fetchPromise = supabase
+        .from('accounts')
+        .select('*')
+        .eq('id', accountId)
+        .single();
+
+      const { data: accountData, error: accountError } = await Promise.race([
+        fetchPromise,
+        timeoutPromise,
+      ]) as Awaited<typeof fetchPromise>;
+
+      if (!accountError && accountData) {
+        setAccount(accountData);
+        setAccountLoadState('success');
+      } else {
+        console.error('Error loading account for shared report:', accountError);
+        setAccountLoadState('error');
+      }
+    } catch (err) {
+      console.error('Account fetch failed/timed out:', err);
+      setAccountLoadState('error');
+    }
+  }, []);
+
+  // Consolidated bootstrap: check session auth first, then load from DB if needed.
+  // Recovery path: if share_auth is set but share_data is missing or corrupt, re-fetch
+  // share_links from DB and rewrite session — avoids leaving the user on a broken password card.
   useEffect(() => {
     if (!slug) return;
-    
+    if (bootstrapDoneRef.current) return;
+    bootstrapDoneRef.current = true;
+
     let mounted = true;
+
+    const loadFromDb = async (): Promise<any | null> => {
+      const { data, error } = await supabase
+        .from("share_links")
+        .select("*")
+        .eq("slug", slug)
+        .single();
+      if (error || !data) return null;
+      return data;
+    };
     
     const bootstrap = async () => {
       const authKey = `share_auth_${slug}`;
       const storedAuth = sessionStorage.getItem(authKey);
       
       if (storedAuth === "true") {
-        // Already authenticated - restore from session
+        // Already authenticated — try to restore from session
+        let linkData: any | null = null;
         const storedData = sessionStorage.getItem(`share_data_${slug}`);
-        if (storedData && mounted) {
-          const linkData = JSON.parse(storedData);
-          setShareLink(linkData);
-          setAuthenticated(true);
-          await initializeReport(linkData);
+        if (storedData) {
+          try {
+            linkData = JSON.parse(storedData);
+          } catch {
+            // Corrupt JSON — fall through to recovery below
+          }
+        }
+
+        if (linkData) {
+          if (mounted) {
+            setShareLink(linkData);
+            setAuthenticated(true);
+            await initializeReport(linkData);
+          }
+        } else {
+          // share_data missing or corrupt — recover by re-fetching from DB
+          const freshData = await loadFromDb();
+          if (!mounted) return;
+          if (freshData) {
+            // Rewrite session so future navigations restore correctly
+            sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(freshData));
+            setShareLink(freshData);
+            setAuthenticated(true);
+            await initializeReport(freshData);
+          } else {
+            // Link no longer exists or request failed — clear stale auth
+            sessionStorage.removeItem(authKey);
+            sessionStorage.removeItem(`share_data_${slug}`);
+            toast({
+              title: "Session expired",
+              description: "Please re-enter the password to continue.",
+              variant: "destructive",
+            });
+            // Reload link so user sees fresh password card (not undefined shareLink)
+            const fallback = await loadFromDb();
+            if (mounted && fallback) setShareLink(fallback);
+          }
         }
       } else {
-        // Not authenticated - load share link from DB
-        const { data, error } = await supabase
-          .from("share_links")
-          .select("*")
-          .eq("slug", slug)
-          .single();
-
-        if (error || !data) {
+        // Not authenticated — load share link from DB so password card can render
+        const data = await loadFromDb();
+        if (!data) {
           if (mounted) {
             toast({
               title: "Not found",
@@ -278,7 +343,6 @@ export default function SharedReport() {
           }
           return;
         }
-
         if (mounted) {
           setShareLink(data);
         }
@@ -291,6 +355,19 @@ export default function SharedReport() {
       mounted = false;
     };
   }, [slug, toast, initializeReport]);
+
+  // Open (no-password) links: `password_hash` is empty or missing after create (`btoa("")` → "").
+  // Without this, first-time visitors stay on the password card because empty submit is blocked.
+  useEffect(() => {
+    if (!slug || authenticated || !shareLink) return;
+    const h = shareLink.password_hash;
+    if (h != null && h !== "") return;
+    const authKey = `share_auth_${slug}`;
+    sessionStorage.setItem(authKey, "true");
+    sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
+    setAuthenticated(true);
+    void initializeReport(shareLink);
+  }, [slug, authenticated, shareLink, initializeReport]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -386,8 +463,32 @@ export default function SharedReport() {
     );
   }
 
-  // If authenticated but no account loaded yet (for classic multi-report shares), show loading
-  if (authenticated && !account && shareLink?.account_id) {
+  // Classic dashboard only: need `account` for FiltersBar / KPI / table. Slide/studio shares navigate away
+  // before account fetch; don't block the UI on a spinner for those.
+  const isSlideOrViewShare = !!(shareLink?.slide_report_id || shareLink?.view_id);
+  const needsAccount = authenticated && !account && shareLink?.account_id && !isSlideOrViewShare;
+
+  if (needsAccount && accountLoadState === 'error') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <CardTitle>Failed to load report</CardTitle>
+            <CardDescription>
+              There was a problem fetching your report data. Please check your connection and try again.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center">
+            <Button onClick={() => fetchAccountWithRetry(shareLink.account_id)}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (needsAccount) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -407,22 +508,6 @@ export default function SharedReport() {
         isVisible={isDataLoading} 
         loadingComponents={loadingComponents}
       /> */}
-
-      {slideReportShare && (
-        <div className="container mx-auto px-6 pt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Shared Data Studio link</CardTitle>
-              <CardDescription>
-                This shared link points to a legacy “slide report” view. The app now supports a single Data Studio view and shared links stay on <code>/shared/:slug</code>.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Ask the owner to re-share the report using the current sharing flow.
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       <DashboardHeader 
         reportId={reportId}

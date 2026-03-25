@@ -202,6 +202,15 @@ Google Sheets / CSV URL
   - `share_slide_report_id_${slug}` — slide report UUID
   - `share_locked_dimension_ids_${slug}` — JSON array of locked dimension UUIDs
   - `share_filters_${slug}` — JSON channel-based filter values
+- **Loading: owner (master) vs shared (first load):**
+  - **Owner `/` (Data Studio):** `ProtectedRoute` → `useUser` + `useUserAccount` → `useSlideReportPage` resolves or creates the account’s `slide_reports` row, then `useDataStudioRawRows` + filtered aggregates. Primary loading signal for the tab surface is `isFetchingRawRows` (top-edge pulse in `SlideViewPage`). Filter options come from in-memory raw rows via `useDataStudioFilters` (no separate “filter values” network round-trip for dropdowns).
+  - **Shared studio `/shared/:slug/studio`:** Not behind `ProtectedRoute`. `SharedReport` (or returning session) writes session keys and `navigate`s here. `SlideViewPage` checks `share_auth_${slug}` first; missing auth redirects to `/shared/:slug`. It then reads `share_account_id_*`, `share_slide_report_id_*`, `share_filters_*` in an effect — **one paint can run with `accountId` null** before session hydration. `slide_report_id` drives `useSlideReport` + `useDataStudioRawRows` (same pipeline as owner once IDs exist). Anonymous users skip `loadOrCreateSlideReport` in `useSlideReportPage` (`user` is null). **UI/filter state is local-only:** debounced persistence of `groupByDimension`, `breakdownByDimension`, chart settings, and filter values is skipped when `!user || isPublicShareStudio` (guards against RLS-rejected `slide_reports` UPDATEs from anonymous viewers).
+  - **Classic shared `/shared/:slug`:** `FiltersBar` + `KPIMetricsCards` + `KPIChart` + `PerformanceTable` each fetch/load independently; parent tracks `loadingComponents` / `isDataLoading` (global loading toast is currently disabled). First load depends on owner-id resolution for dimensions when the viewer is anonymous.
+  - **Passwordless links:** Treat empty / null `password_hash` as open access: auto-persist session and call `initializeReport` so visitors are not stuck behind the password card (see `SharedReport.tsx`).
+  - **Session recovery:** On return to `/shared/:slug` with `share_auth` set but `share_data` missing or corrupt, `SharedReport` re-fetches `share_links` from Supabase and rewrites the session (bootstrap uses `bootstrapDoneRef` to prevent double-invocation). On DB failure, stale auth is cleared and the user sees the password card with a "Session expired" toast.
+  - **Classic shared error resilience:** Account fetch inside `initializeReport` is raced against a 15 s timeout; on error or timeout `accountLoadState` becomes `'error'` and the full-screen spinner is replaced by an inline error card with a Retry button.
+  - **Filter session helper:** `src/lib/shareSession.ts` exports `readShareFiltersFromSession(slug)` — used by both the public-studio bootstrap effect and the legacy `?shared=true` branch in `SlideViewPage`; eliminates duplicated `sessionStorage.getItem` / `JSON.parse` blocks.
+  - **Classic KPI stack (deferred):** Merging `KPIMetricsCards` / `KPIChart` into the Data Studio hook stack (`useFilteredSlideData`, `useChannelChartDataFromRawRows`) is explicitly out of scope for the current effort. Classic shared uses legacy parallel loaders; cross-year date ranges and comparison parity are not guaranteed on that path.
 - **Security note:** Public read-all RLS policies on `reports`, `dimension_data`, `dimensions` (migration `20251030184608`) mean slug + password is the primary gate. Consider tightening with share-scoped policies or SECURITY DEFINER functions.
 
 ### 7. Integrations
@@ -244,6 +253,14 @@ Google Sheets / CSV URL
 | `share_links` | Public share link slugs |
 | `budgets` | Budget data per view |
 | `accounts` | Account records |
+| `price_widgets` | Optional persisted configs for the Price Widget tool (`/tools/price-widget`) |
+| `profiles` | Auth user profile rows (e.g. share modal display names) |
+| `forecast_services` / `forecasts` | Forecasting tools |
+| `fx_rates` | Cached FX rates (`get-fx-rate`) |
+| `api_keys` | Keys for Express `/api/make/*` routes (`server.js`) |
+| `report_shares` | Legacy/internal share records used by `DashboardHeader` |
+
+**Express / Make.com API:** `GET /api/make/reports/:reportId` reads **`dimension_data`** (mapped to snake_case column names), not the removed `report_api_data` table. Default window: previous calendar month through today; `period=current|comparison|both` selects current and/or prior-year comparison ranges when a date dimension exists.
 
 ---
 

@@ -148,12 +148,12 @@ export default function PriceWidgetDetailPage() {
     }
     
     try {
-      const { data, error } = await (supabase
-        .from('price_widgets' as any)
-        .select('*')
-        .eq('id', widgetId)
-        .eq('account_id', accountId)
-        .single());
+      const { data, error } = await supabase
+        .from("price_widgets")
+        .select("*")
+        .eq("id", widgetId)
+        .eq("account_id", accountId)
+        .single();
       
       if (error) {
         if (error.code === 'PGRST116') {

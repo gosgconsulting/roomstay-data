@@ -371,59 +371,145 @@ app.get('/api/make/reports/:reportId', validateApiKey, async (req, res) => {
 
     console.log(`[MAKE-API] Fetching data for report: ${reportId}`, { period, limit, offset });
 
-    // Determine which period to fetch
-    const periodTypes = period === 'comparison' 
-      ? ['comparison'] 
-      : period === 'both'
-      ? ['current', 'comparison']
-      : ['current']; // default to current
+    // Canonical path: live dimension_data (report_api_data table was removed in 2026-03 refactor).
+    const formatDateYmd = (date) => {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, '0');
+      const d = String(date.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    };
 
-    // Fetch API data from report_api_data table
-    const { data: apiData, error: fetchError } = await supabase
-      .from('report_api_data')
-      .select('period_type, date_from, date_to, data')
-      .eq('report_id', reportId)
-      .in('period_type', periodTypes);
+    const dimensionIdToSnakeName = {};
+    let dateDimensionId = null;
 
-    if (fetchError) {
-      console.error('[MAKE-API] Error fetching data:', fetchError);
+    const { data: reportDimensions, error: dimErr } = await supabase
+      .from('dimensions')
+      .select('id, name, type')
+      .eq('report_id', reportId);
+
+    if (!dimErr && reportDimensions?.length) {
+      for (const dim of reportDimensions) {
+        dimensionIdToSnakeName[dim.id] = toSnakeCase(dim.name);
+        if (dim.type === 'date' && !dateDimensionId) dateDimensionId = dim.id;
+      }
+    }
+
+    if (Object.keys(dimensionIdToSnakeName).length === 0) {
+      const { data: dataSources } = await supabase
+        .from('data_sources')
+        .select('column_mappings')
+        .eq('report_id', reportId);
+      for (const ds of dataSources || []) {
+        for (const m of ds.column_mappings || []) {
+          const dimId = m.dimensionId;
+          const dimName = m.dimensionName || m.newDimensionName;
+          const dimType = m.dimensionType || m.newDimensionType || 'text';
+          if (dimId && dimName && dimId !== 'none' && dimId !== 'create_new') {
+            dimensionIdToSnakeName[dimId] = toSnakeCase(dimName);
+            if (String(dimType).toLowerCase() === 'date' && !dateDimensionId) dateDimensionId = dimId;
+            else if (/date/i.test(dimName) && !dateDimensionId) dateDimensionId = dimId;
+          }
+        }
+      }
+    }
+
+    const now = new Date();
+    const currentFromDate = formatDateYmd(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const currentToDate = formatDateYmd(now);
+    const comparisonFrom = new Date(currentFromDate);
+    comparisonFrom.setFullYear(comparisonFrom.getFullYear() - 1);
+    const comparisonTo = new Date(currentToDate);
+    comparisonTo.setFullYear(comparisonTo.getFullYear() - 1);
+    const comparisonFromStr = formatDateYmd(comparisonFrom);
+    const comparisonToStr = formatDateYmd(comparisonTo);
+
+    const fetchRowsForRange = async (dateFrom, dateTo) => {
+      if (!dateDimensionId) {
+        const { data, error } = await supabase
+          .from('dimension_data')
+          .select('dimension_values, row_number, data_source_id')
+          .eq('report_id', reportId)
+          .order('row_number', { ascending: true })
+          .limit(50000);
+        if (error) throw error;
+        return data || [];
+      }
+      const toD = new Date(dateTo);
+      const adj = new Date(toD.getFullYear(), toD.getMonth(), toD.getDate() + 1);
+      const adjStr = adj.toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('dimension_data')
+        .select('dimension_values, row_number, data_source_id')
+        .eq('report_id', reportId)
+        .gte(`dimension_values->>${dateDimensionId}`, dateFrom)
+        .lt(`dimension_values->>${dateDimensionId}`, adjStr)
+        .order('row_number', { ascending: true })
+        .limit(50000);
+      if (error) throw error;
+      return data || [];
+    };
+
+    let currentRows = [];
+    let comparisonRows = [];
+    try {
+      if (period === 'comparison') {
+        comparisonRows = await fetchRowsForRange(comparisonFromStr, comparisonToStr);
+      } else if (period === 'both') {
+        [currentRows, comparisonRows] = await Promise.all([
+          fetchRowsForRange(currentFromDate, currentToDate),
+          fetchRowsForRange(comparisonFromStr, comparisonToStr),
+        ]);
+      } else {
+        currentRows = await fetchRowsForRange(currentFromDate, currentToDate);
+      }
+    } catch (fetchError) {
+      console.error('[MAKE-API] Error fetching dimension_data:', fetchError);
       return res.status(500).json({
         success: false,
         error: 'Failed to fetch data',
         details: fetchError.message,
         count: 0,
-        data: []
+        data: [],
       });
     }
 
-    if (!apiData || apiData.length === 0) {
-      console.log(`[MAKE-API] No data found for report: ${reportId}`);
+    const mapRows = (periodLabel, rows, dateFrom, dateTo) =>
+      rows.map((row, index) => {
+        const dv = row.dimension_values || {};
+        const mapped = {};
+        for (const [dimId, val] of Object.entries(dv)) {
+          mapped[dimensionIdToSnakeName[dimId] || dimId] = val;
+        }
+        return {
+          id: `${reportId}_${periodLabel}_${index}`,
+          report_id: reportId,
+          period: periodLabel,
+          date_from: dateFrom,
+          date_to: dateTo,
+          row_number: row.row_number,
+          ...mapped,
+        };
+      });
+
+    const allData = [
+      ...mapRows('current', currentRows, currentFromDate, currentToDate),
+      ...mapRows('comparison', comparisonRows, comparisonFromStr, comparisonToStr),
+    ];
+
+    if (allData.length === 0) {
+      console.log(`[MAKE-API] No dimension_data rows for report: ${reportId}`);
       return res.status(200).json({
         success: true,
         count: 0,
         data: [],
-        message: 'No data found for this report. Data may not have been synced yet.'
+        message: 'No data found for this report in the selected period. Sync data sources or widen the date range.',
       });
     }
 
-    // Combine data from all requested periods
-    const allData = [];
-    
-    apiData.forEach((periodData) => {
-      if (periodData.data && Array.isArray(periodData.data)) {
-        periodData.data.forEach((row, index) => {
-          allData.push({
-            id: `${reportId}_${periodData.period_type}_${index}`,
-            report_id: reportId,
-            period: periodData.period_type,
-            date_from: periodData.date_from,
-            date_to: periodData.date_to,
-            row_number: row.row_number || index + 1,
-            ...row.dimension_values
-          });
-        });
-      }
-    });
+    const periodsMeta = [
+      { period: 'current', date_from: currentFromDate, date_to: currentToDate, count: currentRows.length },
+      { period: 'comparison', date_from: comparisonFromStr, date_to: comparisonToStr, count: comparisonRows.length },
+    ];
 
     // Apply sorting if requested
     if (sortBy) {
@@ -456,12 +542,7 @@ app.get('/api/make/reports/:reportId', validateApiKey, async (req, res) => {
         offset: offsetNum,
         hasMore: offsetNum + limitNum < allData.length
       },
-      periods: apiData.map(p => ({
-        period: p.period_type,
-        date_from: p.date_from,
-        date_to: p.date_to,
-        count: p.data?.length || 0
-      }))
+      periods: periodsMeta,
     });
 
   } catch (error) {

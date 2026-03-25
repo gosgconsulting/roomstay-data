@@ -957,6 +957,56 @@ export type Database = {
         }
         Relationships: []
       }
+      price_widgets: {
+        Row: {
+          account_id: string
+          check_in_date: string
+          check_out_date: string
+          created_at: string
+          currency_code: string
+          id: string
+          max_crawled_hotels: number | null
+          number_of_adults: number
+          number_of_children: number
+          search_query: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          check_in_date: string
+          check_out_date: string
+          created_at?: string
+          currency_code?: string
+          id?: string
+          max_crawled_hotels?: number | null
+          number_of_adults?: number
+          number_of_children?: number
+          search_query?: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          check_in_date?: string
+          check_out_date?: string
+          created_at?: string
+          currency_code?: string
+          id?: string
+          max_crawled_hotels?: number | null
+          number_of_adults?: number
+          number_of_children?: number
+          search_query?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "price_widgets_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_daily_metrics: {
         Row: {
           account_id: string | null

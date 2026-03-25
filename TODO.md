@@ -34,6 +34,77 @@ After coding:
 
 ## Active tasks
 
+### Supabase refactor — server + schema alignment (2026-03-25)
+
+**Status:** ✅ Complete (code + linked DB migrations applied via MCP)
+
+**Changes:**
+- `server.js` — `/api/make/reports/:reportId` now loads **`dimension_data`** with the same date-window semantics as the public report API (no `report_api_data`).
+- `supabase/migrations/20260325180000_create_price_widgets.sql` — `price_widgets` + RLS (account owner).
+- `src/integrations/supabase/types.ts` — `price_widgets` table typings.
+- `PriceWidgetDetailPage.tsx` — typed `.from('price_widgets')` (requires migration on each environment).
+- Linked project: applied **`query_cache`** (for `get-cached-report-data`) and **`price_widgets`** via MCP `apply_migration`.
+
+**Verify:** `npm run build`, `npm run lint`, `node --check server.js`. After deploy: Make.com route smoke test; optional Price Widget create/load if UI writes widgets.
+
+**Next (optional):** Apply repo migrations `20260318150000_drop_ai_summary_tables.sql` / legacy-table drops on environments that still have `ai_summary_*` or unused cluster/master tables; regenerate types from Supabase CLI if you prefer generated `types.gen.ts` over hand-maintained `types.ts`.
+
+---
+
+### Shared vs master loading — analysis + gaps (2026-03-25)
+
+**Status:** ✅ Complete (all 5 phases shipped 2026-03-25).
+
+#### Findings — what exists
+
+| Surface | Entry | Loading / data |
+|--------|--------|----------------|
+| **Master Data Studio** | `/` (`ProtectedRoute` → `SlideViewPage`) | Account + user resolved; `useSlideReportPage` loads/creates `slide_reports`; `useDataStudioRawRows` + `useFilteredSlideData` + `useChannelChartDataFromRawRows`; UI pulse via `isFetchingRawRows`. |
+| **Shared studio** | `/shared/:slug` → session + `navigate` → `/shared/:slug/studio` | Same `SlideViewPage` + hooks; IDs from `sessionStorage`; no Supabase session; `useSlideReport(slideReportId)` + raw rows once `share_slide_report_id_*` is set. |
+| **Classic shared** | `/shared/:slug` (report_ids-only) | `FiltersBar`, `KPIMetricsCards`, `KPIChart`, `PerformanceTable` — **parallel** loaders + `markComponentLoading`; not unified with Data Studio hook stack. |
+
+#### Duplicates / inconsistency
+
+- **Two chart/KPI stacks:** Data Studio uses `useFilteredSlideData` / `useChannelChartDataFromRawRows`; classic shared uses `KPIMetricsCards` + `KPIChart` (separate fetching and aggregation). Same filters in spirit, different code paths and edge-case behavior (e.g. cross-year).
+- **Two filter hydration paths for studio shares:** `SlideViewPage` reads `share_filters_*` in the public-studio bootstrap effect and again when `?shared=true&slug=` (legacy preview). Easy to drift if one path updates without the other.
+- **Session vs DB:** Studio auth is `sessionStorage` only (not HttpOnly). Partial clears (e.g. `share_auth` true but `share_data` missing) leave weak recovery: bootstrap does not re-fetch the link from DB in that branch.
+
+#### Gaps and bugs (identified)
+
+1. ~~**Undefined `slideReportShare` in `SharedReport.tsx`**~~ — Referenced removed state; would throw at runtime for classic dashboard. **Fixed:** removed dead JSX block.
+2. ~~**Passwordless first visit**~~ — UI required a password even when `password_hash` was empty; empty submit blocked. **Fixed:** `useEffect` auto-authenticates and calls `initializeReport` when hash is null/empty.
+3. ~~**Spinner flash for slide/view shares**~~ — `authenticated && !account && shareLink.account_id` showed full-screen “Loading reports…” while navigating to studio (account never loaded on that path). **Fixed:** exclude `slide_report_id` / `view_id` shares from that gate.
+4. ~~**Anonymous viewer slide_reports UPDATE**~~ - Debounced UI persistence effect (~1059-1087 in `SlideViewPage.tsx`) ran `updateSlideReport.mutateAsync` without checking `user` or `isPublicShareStudio`, causing RLS-rejected UPDATEs and "Failed to update slide report" toasts for anonymous/incognito viewers. **Fixed (2026-03-25):** added `!user || isPublicShareStudio` guard at effect start and inside timeout callback; public studio UI/filter state is now local-only (no server writes).
+5. **First paint studio:** `accountId` / `shareSlideReportId` can be null for one frame before session effect runs - downstream code should stay safe (queries disabled until IDs exist); optional hardening: explicit "Resolving share." shell until session keys are read.
+6. **Classic shared account load failure:** If `accounts` fetch fails, `account` stays null and the loading gate can block indefinitely (when `account_id` present and not a slide share). Needs timeout / error UI.
+7. **`share_auth` without `share_data`:** Restore path does nothing; user sees password card with possibly stale UI. **Plan:** if auth flag set but data missing, re-query `share_links` by slug and repopulate session.
+8. **Unify or document loading UX:** Classic shared has disabled `LoadingToast`; Data Studio has top pulse — product consistency still open.
+
+#### Plan (backlog order)
+
+1. Add **recovery path** when `share_auth_*` is set but `share_data_*` is missing (re-fetch `share_links`, rewrite session).
+2. **Classic shared:** error/timeout when account load fails; avoid infinite spinner.
+3. **Optional:** single loading shell for public studio until `accountId` + `slideReportId` resolved from session.
+4. **Long-term:** reduce duplicate KPI/chart paths (classic vs Data Studio) or document “classic = legacy limitations” permanently.
+
+#### Docs
+
+- `README.md` — new bullets under **Sharing System → Loading: owner vs shared**.
+- This section in `TODO.md`.
+
+**Verify:**
+- ✅ `npm run build` (exit 0)
+- ✅ `npm run lint` (0 errors, 95 pre-existing warnings)
+- [ ] Manual: passwordless link → studio (no password card shown)
+- [ ] Manual: password-protected link → enter password → studio loads
+- [ ] Manual: classic single-report share → KPI / chart / table render
+- [ ] Manual: cold `/shared/:slug/studio` with valid session keys → "Opening shared report…" briefly, then data
+- [ ] Manual: clear only `share_data_*` key → return to `/shared/:slug` → session recovered from DB
+- [ ] Manual: account fetch timeout (throttle in DevTools) → error card with Retry appears
+- [ ] Manual: incognito or logged-out → shared studio → change date/filters → no "Failed to update slide report" toast
+
+---
+
 ### Cross-year date filter + chart granularity fix (2026-03-25)
 
 **Status:** ✅ Complete
@@ -138,8 +209,8 @@ After coding:
 2. **No Data Studio embed:** Slide shares showed placeholder card instead of real Data Studio UI
 3. **Anonymous access blocked:** SlideViewPage behind ProtectedRoute; no public studio route
 4. **Missing account context:** Anonymous users couldn't load dimensions/KPIs because components gated on `user` existence
-5. **FiltersBar side effects:** Views writes not consistently guarded by `isSharedView`
-6. **Duplicate bootstrap:** Two useEffects could both call `initializeReport`
+8. **FiltersBar side effects:** Views writes not consistently guarded by `isSharedView`
+8. **Duplicate bootstrap:** Two useEffects could both call `initializeReport`
 
 **Solution:**
 
