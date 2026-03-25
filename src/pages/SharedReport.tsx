@@ -156,36 +156,55 @@ export default function SharedReport() {
         return;
       }
 
-      // Extract channel-based filters from dimension_filters
-      const channelFilters = linkData.dimension_filters || {};
-      
-      // Store filters in sessionStorage for SlideViewPage to pick up
-      // Use channel-based format: { "metasearch": { "dimensionId": ["value1"] }, ... }
-      if (Object.keys(channelFilters).length > 0) {
-        if (isChannelBasedFormat(channelFilters)) {
-          // Already in channel-based format
-          sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(channelFilters));
-        } else {
-          // Convert from report-based to channel-based format
-          try {
-            const { data: slideReport } = await supabase
-              .from("slide_reports")
-              .select("report_ids")
-              .eq("id", finalSlideReportId)
-              .single();
-            
-            if (slideReport?.report_ids) {
-              const reportIds = slideReport.report_ids as Record<string, string>;
-              const convertedFilters = convertReportToChannelFormat(channelFilters, reportIds);
-              
-              if (Object.keys(convertedFilters).length > 0) {
-                sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(convertedFilters));
+      // Resolve filters to store in sessionStorage.
+      // PRIORITY: When a view_id is set, fetch the view's CURRENT filter_values
+      // so shared links always reflect the latest saved view state (not a stale snapshot).
+      // Fallback: use share_link.dimension_filters when no view_id is set.
+      let filtersToApply: Record<string, Record<string, string[]>> = {};
+
+      if (hasViewId) {
+        try {
+          const { data: viewData } = await supabase
+            .from("views")
+            .select("filter_values")
+            .eq("id", linkData.view_id)
+            .maybeSingle();
+          if (viewData?.filter_values && typeof viewData.filter_values === 'object') {
+            filtersToApply = viewData.filter_values as Record<string, Record<string, string[]>>;
+          }
+        } catch (err) {
+          console.warn('[SharedReport] Failed to fetch view filter_values, falling back to share_link filters:', err);
+        }
+      }
+
+      // Fallback to share_link.dimension_filters if view fetch returned nothing
+      if (Object.keys(filtersToApply).length === 0) {
+        const channelFilters = linkData.dimension_filters || {};
+        if (Object.keys(channelFilters).length > 0) {
+          if (isChannelBasedFormat(channelFilters)) {
+            filtersToApply = channelFilters;
+          } else {
+            // Convert from report-based to channel-based format
+            try {
+              const { data: slideReport } = await supabase
+                .from("slide_reports")
+                .select("report_ids")
+                .eq("id", finalSlideReportId)
+                .single();
+              if (slideReport?.report_ids) {
+                const reportIds = slideReport.report_ids as Record<string, string>;
+                filtersToApply = convertReportToChannelFormat(channelFilters, reportIds);
               }
+            } catch (error) {
+              console.error('Error converting filters:', error);
             }
-          } catch (error) {
-            console.error('Error converting filters:', error);
           }
         }
+      }
+
+      // Store resolved filters in sessionStorage
+      if (Object.keys(filtersToApply).length > 0) {
+        sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(filtersToApply));
       }
       
       // Store slide_report_id and account_id in sessionStorage
