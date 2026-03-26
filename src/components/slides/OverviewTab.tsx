@@ -170,7 +170,16 @@ export function OverviewTab({
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
-                  <XAxis dataKey="label" axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
+                  <XAxis
+                    dataKey="label"
+                    axisLine={false}
+                    tickLine={false}
+                    className="text-xs fill-muted-foreground"
+                    interval={mergedChartData.length > 31 ? Math.ceil(mergedChartData.length / 15) - 1 : mergedChartData.length > 12 ? 1 : 0}
+                    angle={mergedChartData.length > 20 ? -45 : 0}
+                    textAnchor={mergedChartData.length > 20 ? "end" : "middle"}
+                    height={mergedChartData.length > 20 ? 60 : 30}
+                  />
                   <YAxis axisLine={false} tickLine={false} className="text-xs fill-muted-foreground" />
                   <Tooltip 
                     contentStyle={{ 
