@@ -54,9 +54,37 @@ function ChannelPanel({
 }: ChannelPanelProps) {
   const enabledIds = new Set(filterConfigs[channel]?.filterDimensionIds ?? []);
 
-  const candidateDims: AvailableDimension[] = availableDims.length > 0
-    ? availableDims
-    : [...enabledIds].map((id) => ({ id, name: dimensionNames[id] || id, type: 'text' }));
+  // Build candidate list, deduplicating by name.
+  // Enabled IDs may use global UUIDs while availableDims use report-specific IDs.
+  // Prefer the enabled ID when both share the same name so toggling off works correctly.
+  const candidateDims: AvailableDimension[] = useMemo(() => {
+    const seenNames = new Map<string, AvailableDimension>();
+
+    // First pass: add enabled dimensions (so their IDs take priority)
+    for (const id of enabledIds) {
+      const name = (availableDims.find(d => d.id === id)?.name) || dimensionNames[id] || id;
+      const lowerName = name.toLowerCase();
+      if (!seenNames.has(lowerName)) {
+        seenNames.set(lowerName, { id, name, type: 'text' });
+      }
+    }
+
+    // Second pass: add available dims not yet seen by name
+    for (const dim of availableDims) {
+      const lowerName = dim.name.toLowerCase();
+      if (!seenNames.has(lowerName)) {
+        seenNames.set(lowerName, dim);
+      }
+    }
+
+    // Sort: enabled first, then alphabetically
+    return [...seenNames.values()].sort((a, b) => {
+      const aEnabled = enabledIds.has(a.id) ? 0 : 1;
+      const bEnabled = enabledIds.has(b.id) ? 0 : 1;
+      if (aEnabled !== bEnabled) return aEnabled - bEnabled;
+      return a.name.localeCompare(b.name);
+    });
+  }, [availableDims, enabledIds, dimensionNames]);
 
   return (
     <div className="flex flex-col gap-3">
