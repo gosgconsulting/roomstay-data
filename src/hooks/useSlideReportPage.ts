@@ -369,6 +369,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     slideType,
     groupByDimensionId,
     configuredDimensionNames,
+    shareBaseFilterValues,
   });
 
   const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);
