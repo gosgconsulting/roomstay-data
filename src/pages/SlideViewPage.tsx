@@ -2128,7 +2128,13 @@ export default function SlideViewPage() {
           : [...(currentConfig?.filterDimensionIds ?? []), dimensionId],
       },
     } as import('@/hooks/useDataStudioFilters').FilterConfigs;
-    dsFilters.persistFilterConfigs(next);
+
+    // In shared/read-only mode, only update local state — don't persist to DB
+    if (isReadOnlyMode) {
+      dsFilters.setFilterConfigs(next);
+    } else {
+      dsFilters.persistFilterConfigs(next);
+    }
 
     if (isSelected) {
       // Dimension removed — clear its selected filter values
