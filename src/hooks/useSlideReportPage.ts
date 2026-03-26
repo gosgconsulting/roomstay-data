@@ -43,6 +43,11 @@ export interface UseSlideReportPageParams {
    * Prevents 0 KPI on first load when the viewer is unauthenticated and the DB query is slow.
    */
   reportIdsOverride?: Record<string, string> | null;
+  /**
+   * SECURITY: Base filter values for shared views. Enforced as minimum constraint
+   * at the data filtering level to prevent data leaks.
+   */
+  shareBaseFilterValues?: Record<string, Record<string, string[]>> | null;
 }
 
 export interface ViewBudgetItem {
