@@ -431,8 +431,26 @@ export function useDataStudioFilters({
 
   const setFilterValues = useCallback((v: FilterValues) => {
     if (isReadOnly) return;
+    // SECURITY: In shared mode, enforce baseline filters as a floor.
+    // Any dimension that has a baseline constraint must keep at least those values.
+    if (shareBaseFilterValues) {
+      const enforced = { ...v };
+      for (const [chKey, chDims] of Object.entries(shareBaseFilterValues)) {
+        if (!enforced[chKey]) enforced[chKey] = {};
+        for (const [dimId, baseVals] of Object.entries(chDims)) {
+          if (baseVals && baseVals.length > 0) {
+            const currentVals = enforced[chKey]?.[dimId];
+            if (!currentVals || currentVals.length === 0) {
+              enforced[chKey][dimId] = baseVals;
+            }
+          }
+        }
+      }
+      setFilterValuesRaw(enforced);
+      return;
+    }
     setFilterValuesRaw(v);
-  }, [isReadOnly]);
+  }, [isReadOnly, shareBaseFilterValues]);
 
   const setFilterConfigs = useCallback((v: FilterConfigs) => {
     setFilterConfigsRaw(v);
