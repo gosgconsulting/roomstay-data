@@ -3181,7 +3181,7 @@ export default function SlideViewPage() {
         }}
         value={dimensionSettingsValue}
         onApply={persistDimensionSettings}
-        disabled={isReadOnlyMode}
+        disabled={false}
       />
       {/* Data Studio: subtle background refresh indicator (non-blocking) */}
       {isDataStudio && dataStudioRefreshStatus === 'refreshing' && (
