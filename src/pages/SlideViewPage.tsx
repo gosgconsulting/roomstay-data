@@ -1298,6 +1298,9 @@ export default function SlideViewPage() {
       social: { breakdownDimensionIds: next.breakdownsByChannel.social || [] },
     }));
 
+    // In shared/read-only mode, only update local state — don't persist to DB
+    if (isReadOnlyMode) return;
+
     if (!slideReportId || !user) return;
     const prevConfig = (slideReport?.configuration || {}) as any;
     const configuration = {
@@ -2128,7 +2131,13 @@ export default function SlideViewPage() {
           : [...(currentConfig?.filterDimensionIds ?? []), dimensionId],
       },
     } as import('@/hooks/useDataStudioFilters').FilterConfigs;
-    dsFilters.persistFilterConfigs(next);
+
+    // In shared/read-only mode, only update local state — don't persist to DB
+    if (isReadOnlyMode) {
+      dsFilters.setFilterConfigs(next);
+    } else {
+      dsFilters.persistFilterConfigs(next);
+    }
 
     if (isSelected) {
       // Dimension removed — clear its selected filter values
@@ -3181,7 +3190,7 @@ export default function SlideViewPage() {
         }}
         value={dimensionSettingsValue}
         onApply={persistDimensionSettings}
-        disabled={isReadOnlyMode}
+        disabled={false}
       />
       {/* Data Studio: subtle background refresh indicator (non-blocking) */}
       {isDataStudio && dataStudioRefreshStatus === 'refreshing' && (
@@ -3233,7 +3242,7 @@ export default function SlideViewPage() {
             social: (breakdownDimensions.social || []).filter((d) => d.type === 'text'),
           }}
           onToggleDimension={handleFilterDimensionToggle}
-          isReadOnly={isReadOnlyMode}
+          isReadOnly={false}
         />
 
         {/* Comparison Banner */}
