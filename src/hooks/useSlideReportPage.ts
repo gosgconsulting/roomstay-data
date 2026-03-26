@@ -43,6 +43,11 @@ export interface UseSlideReportPageParams {
    * Prevents 0 KPI on first load when the viewer is unauthenticated and the DB query is slow.
    */
   reportIdsOverride?: Record<string, string> | null;
+  /**
+   * SECURITY: Base filter values for shared views. Enforced as minimum constraint
+   * at the data filtering level to prevent data leaks.
+   */
+  shareBaseFilterValues?: Record<string, Record<string, string[]>> | null;
 }
 
 export interface ViewBudgetItem {
@@ -107,6 +112,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     selectedViewId,
     configuredDimensionNames,
     reportIdsOverride,
+    shareBaseFilterValues,
   } = params;
 
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
@@ -363,6 +369,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     slideType,
     groupByDimensionId,
     configuredDimensionNames,
+    shareBaseFilterValues,
   });
 
   const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);

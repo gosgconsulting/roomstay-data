@@ -186,6 +186,12 @@ export interface UseFilteredSlideDataParams {
    * global filter config UUIDs to report-specific row keys via name matching.
    */
   configuredDimensionNames?: Record<string, string>;
+  /**
+   * SECURITY: Base filter values for shared views. When provided, these filters
+   * are always enforced as a minimum constraint — even if the user clears their
+   * selections, data is still filtered by the baseline.
+   */
+  shareBaseFilterValues?: Record<string, Record<string, string[]>> | null;
 }
 
 export interface FilteredSlideData {
@@ -219,7 +225,7 @@ export interface FilteredSlideData {
  */
 export function useFilteredSlideData({
   pivotData,
-  filterValues,
+  filterValues: rawFilterValues,
   filterDimensionValues,
   selectedYear,
   selectedMonth,
@@ -228,7 +234,29 @@ export function useFilteredSlideData({
   slideType,
   groupByDimensionId,
   configuredDimensionNames,
+  shareBaseFilterValues,
 }: UseFilteredSlideDataParams): FilteredSlideData {
+
+  // SECURITY: Enforce share baseline filters as a floor. If any baseline dimension
+  // has values but the current filterValues doesn't, inject the baseline values.
+  // This is a defense-in-depth layer — the UI guards in useDataStudioFilters should
+  // prevent this state, but we enforce it here at the data level too.
+  const filterValues = useMemo(() => {
+    if (!shareBaseFilterValues) return rawFilterValues;
+    const enforced = { ...rawFilterValues };
+    for (const [chKey, chDims] of Object.entries(shareBaseFilterValues)) {
+      if (!enforced[chKey]) enforced[chKey] = {};
+      for (const [dimId, baseVals] of Object.entries(chDims)) {
+        if (baseVals && baseVals.length > 0) {
+          const currentVals = enforced[chKey]?.[dimId];
+          if (!currentVals || currentVals.length === 0) {
+            enforced[chKey] = { ...enforced[chKey], [dimId]: baseVals };
+          }
+        }
+      }
+    }
+    return enforced;
+  }, [rawFilterValues, shareBaseFilterValues]);
   // Build date range for filtering.
   // When customDateRange is set, use exact from/to dates (supports sub-month ranges like 1-5 days).
   // Otherwise fall back to month-boundary range from selectedYear/selectedMonth.

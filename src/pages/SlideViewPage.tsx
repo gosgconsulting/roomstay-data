@@ -467,6 +467,7 @@ export default function SlideViewPage() {
     selectedViewId,
     configuredDimensionNames,
     reportIdsOverride: shareReportIds,
+    shareBaseFilterValues: shareBaseFilters,
   });
   const {
     slideReportId: hookSlideReportId,

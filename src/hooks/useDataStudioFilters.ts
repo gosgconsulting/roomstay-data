@@ -431,8 +431,26 @@ export function useDataStudioFilters({
 
   const setFilterValues = useCallback((v: FilterValues) => {
     if (isReadOnly) return;
+    // SECURITY: In shared mode, enforce baseline filters as a floor.
+    // Any dimension that has a baseline constraint must keep at least those values.
+    if (shareBaseFilterValues) {
+      const enforced = { ...v };
+      for (const [chKey, chDims] of Object.entries(shareBaseFilterValues)) {
+        if (!enforced[chKey]) enforced[chKey] = {};
+        for (const [dimId, baseVals] of Object.entries(chDims)) {
+          if (baseVals && baseVals.length > 0) {
+            const currentVals = enforced[chKey]?.[dimId];
+            if (!currentVals || currentVals.length === 0) {
+              enforced[chKey][dimId] = baseVals;
+            }
+          }
+        }
+      }
+      setFilterValuesRaw(enforced);
+      return;
+    }
     setFilterValuesRaw(v);
-  }, [isReadOnly]);
+  }, [isReadOnly, shareBaseFilterValues]);
 
   const setFilterConfigs = useCallback((v: FilterConfigs) => {
     setFilterConfigsRaw(v);
@@ -533,18 +551,39 @@ export function useDataStudioFilters({
     values: string[]
   ) => {
     if (isReadOnly) return;
+    // SECURITY: In shared mode, if user deselects all values, restore baseline
+    // to prevent exposing other accounts' data.
+    let effectiveValues = values;
+    if (shareBaseFilterValues) {
+      const baseVals = shareBaseFilterValues[channel]?.[dimensionId];
+      if (baseVals && baseVals.length > 0 && (!values || values.length === 0)) {
+        effectiveValues = baseVals;
+      }
+    }
     setFilterValuesRaw({
       ...filterValues,
-      [channel]: { ...(filterValues[channel] || {}), [dimensionId]: values },
+      [channel]: { ...(filterValues[channel] || {}), [dimensionId]: effectiveValues },
     });
-  }, [isReadOnly]);
+  }, [isReadOnly, shareBaseFilterValues]);
 
   const clearChannelFilter = useCallback((channel: Channel, dimensionId: string) => {
     if (isReadOnly) return;
+    // SECURITY: In shared mode, restore baseline value instead of clearing
+    // to prevent data leak.
+    if (shareBaseFilterValues) {
+      const baseVals = shareBaseFilterValues[channel]?.[dimensionId];
+      if (baseVals && baseVals.length > 0) {
+        setFilterValuesRaw({
+          ...filterValues,
+          [channel]: { ...(filterValues[channel] || {}), [dimensionId]: baseVals },
+        });
+        return;
+      }
+    }
     const next = { ...filterValues, [channel]: { ...(filterValues[channel] || {}) } };
     delete next[channel][dimensionId];
     setFilterValuesRaw(next);
-  }, [isReadOnly]);
+  }, [isReadOnly, shareBaseFilterValues]);
 
   const persistFilterConfigs = useCallback((next: FilterConfigs) => {
     setFilterConfigsRaw(next);
