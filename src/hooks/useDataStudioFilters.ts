@@ -533,18 +533,39 @@ export function useDataStudioFilters({
     values: string[]
   ) => {
     if (isReadOnly) return;
+    // SECURITY: In shared mode, if user deselects all values, restore baseline
+    // to prevent exposing other accounts' data.
+    let effectiveValues = values;
+    if (shareBaseFilterValues) {
+      const baseVals = shareBaseFilterValues[channel]?.[dimensionId];
+      if (baseVals && baseVals.length > 0 && (!values || values.length === 0)) {
+        effectiveValues = baseVals;
+      }
+    }
     setFilterValuesRaw({
       ...filterValues,
-      [channel]: { ...(filterValues[channel] || {}), [dimensionId]: values },
+      [channel]: { ...(filterValues[channel] || {}), [dimensionId]: effectiveValues },
     });
-  }, [isReadOnly]);
+  }, [isReadOnly, shareBaseFilterValues]);
 
   const clearChannelFilter = useCallback((channel: Channel, dimensionId: string) => {
     if (isReadOnly) return;
+    // SECURITY: In shared mode, restore baseline value instead of clearing
+    // to prevent data leak.
+    if (shareBaseFilterValues) {
+      const baseVals = shareBaseFilterValues[channel]?.[dimensionId];
+      if (baseVals && baseVals.length > 0) {
+        setFilterValuesRaw({
+          ...filterValues,
+          [channel]: { ...(filterValues[channel] || {}), [dimensionId]: baseVals },
+        });
+        return;
+      }
+    }
     const next = { ...filterValues, [channel]: { ...(filterValues[channel] || {}) } };
     delete next[channel][dimensionId];
     setFilterValuesRaw(next);
-  }, [isReadOnly]);
+  }, [isReadOnly, shareBaseFilterValues]);
 
   const persistFilterConfigs = useCallback((next: FilterConfigs) => {
     setFilterConfigsRaw(next);
