@@ -332,11 +332,7 @@ export function useDataStudioFilters({
         // Resolve the human name for this configured ID. It may be a global UUID not
         // present in dimMap, so fall back to configuredDimensionNames.
         const resolvedName = dimMap[dimId] ?? configuredDimensionNames[dimId];
-        // Guard: skip if the resolved name is known but not valid for this channel.
-        const allowedNames = new Set(
-          (CHANNEL_FILTER_NAMES[channel] || []).map((n) => n.toLowerCase())
-        );
-        if (resolvedName && allowedNames.size > 0 && !allowedNames.has(resolvedName.toLowerCase())) continue;
+        // No allowlist guard — any configured dimension can be a filter.
         result[channel][dimId] = extractUniqueValues(scopedRows, dimId, dimMap, configuredDimensionNames);
       }
     }
