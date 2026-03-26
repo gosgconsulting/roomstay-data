@@ -186,6 +186,12 @@ export interface UseFilteredSlideDataParams {
    * global filter config UUIDs to report-specific row keys via name matching.
    */
   configuredDimensionNames?: Record<string, string>;
+  /**
+   * SECURITY: Base filter values for shared views. When provided, these filters
+   * are always enforced as a minimum constraint — even if the user clears their
+   * selections, data is still filtered by the baseline.
+   */
+  shareBaseFilterValues?: Record<string, Record<string, string[]>> | null;
 }
 
 export interface FilteredSlideData {
