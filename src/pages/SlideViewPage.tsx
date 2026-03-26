@@ -3233,7 +3233,7 @@ export default function SlideViewPage() {
             social: (breakdownDimensions.social || []).filter((d) => d.type === 'text'),
           }}
           onToggleDimension={handleFilterDimensionToggle}
-          isReadOnly={isReadOnlyMode}
+          isReadOnly={false}
         />
 
         {/* Comparison Banner */}
