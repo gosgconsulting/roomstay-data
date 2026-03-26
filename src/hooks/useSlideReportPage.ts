@@ -112,6 +112,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     selectedViewId,
     configuredDimensionNames,
     reportIdsOverride,
+    shareBaseFilterValues,
   } = params;
 
   const [slideReportId, setSlideReportId] = useState<string | null>(null);
