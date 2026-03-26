@@ -179,7 +179,16 @@ export function ChannelTab({
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                    <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval={0} />
+                    <XAxis
+                      dataKey="label"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                      interval={mergedChartData.length > 31 ? Math.ceil(mergedChartData.length / 15) - 1 : mergedChartData.length > 12 ? 1 : 0}
+                      angle={mergedChartData.length > 20 ? -45 : 0}
+                      textAnchor={mergedChartData.length > 20 ? "end" : "middle"}
+                      height={mergedChartData.length > 20 ? 60 : 30}
+                    />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                     <Tooltip
                       formatter={(value: number, name: string) => [

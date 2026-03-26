@@ -65,12 +65,11 @@ export type FilterOptions = Record<Channel, Record<string, string[]>>;
 /** Dimension name lookup: dimensionId -> name. */
 export type DimensionNameMap = Record<string, string>;
 
-// Channel-scoped dimension allowlist (mirrors CHANNEL_DIMENSION_NAMES in SlideViewPage).
-const CHANNEL_FILTER_NAMES: Record<Channel, string[]> = {
-  metasearch: ['Hotel', 'Channel', 'Device', 'Link Type', 'Market'],
-  sem: ['Account', 'Campaign', 'Ad Group'],
-  social: ['Account', 'Campaign', 'Ad Group'],
-};
+// Channel-scoped dimension allowlist removed — any configured dimension can now
+// appear as a filter. The old hardcoded list was:
+//   metasearch: Hotel, Channel, Device, Link Type, Market
+//   sem/social: Account, Campaign, Ad Group
+// Now filter visibility is fully driven by filterConfigs (persisted to slide_reports).
 
 const EMPTY_FILTER_VALUES: FilterValues = {
   metasearch: {},
@@ -333,11 +332,7 @@ export function useDataStudioFilters({
         // Resolve the human name for this configured ID. It may be a global UUID not
         // present in dimMap, so fall back to configuredDimensionNames.
         const resolvedName = dimMap[dimId] ?? configuredDimensionNames[dimId];
-        // Guard: skip if the resolved name is known but not valid for this channel.
-        const allowedNames = new Set(
-          (CHANNEL_FILTER_NAMES[channel] || []).map((n) => n.toLowerCase())
-        );
-        if (resolvedName && allowedNames.size > 0 && !allowedNames.has(resolvedName.toLowerCase())) continue;
+        // No allowlist guard — any configured dimension can be a filter.
         result[channel][dimId] = extractUniqueValues(scopedRows, dimId, dimMap, configuredDimensionNames);
       }
     }
