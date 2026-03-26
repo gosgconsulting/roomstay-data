@@ -1298,6 +1298,9 @@ export default function SlideViewPage() {
       social: { breakdownDimensionIds: next.breakdownsByChannel.social || [] },
     }));
 
+    // In shared/read-only mode, only update local state — don't persist to DB
+    if (isReadOnlyMode) return;
+
     if (!slideReportId || !user) return;
     const prevConfig = (slideReport?.configuration || {}) as any;
     const configuration = {
