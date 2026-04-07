@@ -43,7 +43,7 @@ export function buildMultiMonthDateRange(
 export function buildComparisonDateRange(
   selectedYear: string,
   selectedMonth: string,
-  comparisonType: 'none' | 'previous_period' | 'previous_year'
+  comparisonType: 'none' | 'previous_period' | 'previous_year' | 'previous_month'
 ): { start: Date; end: Date } | undefined {
   if (comparisonType === 'none' || selectedYear === 'all') return undefined;
   const yearNum = parseInt(selectedYear);
@@ -53,6 +53,9 @@ export function buildComparisonDateRange(
     // Full year comparison
     if (comparisonType === 'previous_period' || comparisonType === 'previous_year') {
       return { start: new Date(yearNum - 1, 0, 1), end: new Date(yearNum - 1, 11, 31, 23, 59, 59) };
+    }
+    if (comparisonType === 'previous_month') {
+      return { start: new Date(yearNum - 1, 11, 1), end: new Date(yearNum - 1, 11, 31, 23, 59, 59) };
     }
     return undefined;
   }
@@ -72,6 +75,12 @@ export function buildComparisonDateRange(
       start: new Date(yearNum - 1, minMonth, 1),
       end: new Date(yearNum - 1, maxMonth + 1, 0, 23, 59, 59),
     };
+  } else if (comparisonType === 'previous_month') {
+    // Always shift back exactly 1 calendar month
+    return {
+      start: new Date(yearNum, minMonth - 1, 1),
+      end: new Date(yearNum, minMonth, 0, 23, 59, 59),
+    };
   }
   return undefined;
 }
@@ -82,7 +91,7 @@ export function buildComparisonDateRange(
  */
 export function buildComparisonDateRangeFromExact(
   range: { from: Date; to: Date } | { start: Date; end: Date },
-  comparisonType: 'previous_period' | 'previous_year'
+  comparisonType: 'previous_period' | 'previous_year' | 'previous_month'
 ): { start: Date; end: Date } {
   const start = 'from' in range ? range.from : range.start;
   const end = 'to' in range ? range.to : range.end;
@@ -92,6 +101,14 @@ export function buildComparisonDateRangeFromExact(
       start: new Date(start.getFullYear() - 1, start.getMonth(), start.getDate(), start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds()),
       end: new Date(end.getFullYear() - 1, end.getMonth(), end.getDate(), end.getHours(), end.getMinutes(), end.getSeconds(), end.getMilliseconds()),
     };
+  }
+
+  if (comparisonType === 'previous_month') {
+    // Compare to the full previous calendar month (e.g. Mar 1–31 → Feb 1–28).
+    // Always uses the 1st through last day of the month before the start date's month.
+    const prevMonthStart = new Date(start.getFullYear(), start.getMonth() - 1, 1);
+    const prevMonthEnd = new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999); // day 0 = last day of prev month
+    return { start: prevMonthStart, end: prevMonthEnd };
   }
 
   // "Month-anchored" range: starts on the 1st of a month and ends within that same month

@@ -57,7 +57,7 @@ export function calculateOverviewMetrics(
  */
 export function calculateComparisonMetrics(
   comparisonTotals: ChannelMetrics | null,
-  comparisonType: 'none' | 'previous_period' | 'previous_year'
+  comparisonType: 'none' | 'previous_period' | 'previous_year' | 'previous_month'
 ): (DerivedMetrics & { label: string }) | null {
   if (!comparisonTotals || comparisonType === 'none') {
     return null;
@@ -67,15 +67,11 @@ export function calculateComparisonMetrics(
   const derived = calculateDerivedMetrics(overview);
 
   if (comparisonType === 'previous_period') {
-    return {
-      ...derived,
-      label: 'vs Previous Period',
-    };
+    return { ...derived, label: 'vs Previous Period' };
   } else if (comparisonType === 'previous_year') {
-    return {
-      ...derived,
-      label: 'vs Previous Year',
-    };
+    return { ...derived, label: 'vs Previous Year' };
+  } else if (comparisonType === 'previous_month') {
+    return { ...derived, label: 'vs Previous Month' };
   }
 
   return null;
@@ -87,7 +83,7 @@ export function calculateComparisonMetrics(
 export function calculateChannelComparisonMetrics(
   channel: 'metasearch' | 'sem' | 'social',
   comparisonTotals: ChannelMetrics | null,
-  comparisonType: 'none' | 'previous_period' | 'previous_year'
+  comparisonType: 'none' | 'previous_period' | 'previous_year' | 'previous_month'
 ): (DerivedMetrics & { label: string }) | null {
   if (!comparisonTotals || comparisonType === 'none') {
     return null;
@@ -101,15 +97,11 @@ export function calculateChannelComparisonMetrics(
   const derived = calculateDerivedMetrics(channelComparisonData);
 
   if (comparisonType === 'previous_period') {
-    return {
-      ...derived,
-      label: 'vs Previous Period',
-    };
+    return { ...derived, label: 'vs Previous Period' };
   } else if (comparisonType === 'previous_year') {
-    return {
-      ...derived,
-      label: 'vs Previous Year',
-    };
+    return { ...derived, label: 'vs Previous Year' };
+  } else if (comparisonType === 'previous_month') {
+    return { ...derived, label: 'vs Previous Month' };
   }
 
   return null;

@@ -796,13 +796,13 @@ export default function SlideViewPage() {
       if (!exactRange) return undefined;
       return buildComparisonDateRangeFromExact(
         { from: exactRange.start, to: exactRange.end },
-        comparisonType as 'previous_period' | 'previous_year'
+        comparisonType as 'previous_period' | 'previous_year' | 'previous_month'
       );
     }
     return buildComparisonDateRange(
       selectedYear,
       selectedMonth,
-      comparisonType as 'none' | 'previous_period' | 'previous_year'
+      comparisonType as 'none' | 'previous_period' | 'previous_year' | 'previous_month'
     );
   }, [comparisonType, chartDateRange, customDateRange, selectedYear, selectedMonth]);
 
@@ -950,7 +950,7 @@ export default function SlideViewPage() {
     filterValues,
     filterDimensionValues,
     slideType,
-    comparisonType: comparisonType as 'none' | 'previous_period' | 'previous_year',
+    comparisonType: comparisonType as 'none' | 'previous_period' | 'previous_year' | 'previous_month',
     customDateRange,
   });
 
@@ -2773,6 +2773,10 @@ export default function SlideViewPage() {
 
   const PERFORMANCE_MODEL_KEYS = new Set(['commissionsPaid', 'commissionsFree', 'grossProfit']);
 
+  // Gross Profit and other Performance Model KPIs/columns are only shown for the Performance Model
+  // view in the authenticated (owner) context — never in shared/public views.
+  const showPerformanceModelKPIs = isPerformanceModelView && !isPublicShareStudio && !isSharedPreview;
+
   const overviewMetricsBase = useOverviewMetrics(currentTotals);
 
   const performanceModelOverviewPatch = useMemo(() => {
@@ -2846,7 +2850,7 @@ export default function SlideViewPage() {
     const hasAnyCompData = totals.impressions > 0 || totals.clicks > 0 || totals.cost > 0 || totals.revenue > 0 || totals.bookings > 0;
     if (!hasAnyCompData) return null;
     const derived = calculateDerivedMetrics(totals);
-    const label = comparisonType === 'previous_period' ? 'vs prev period' : 'vs prev year';
+    const label = comparisonType === 'previous_period' ? 'vs prev period' : comparisonType === 'previous_month' ? 'vs prev month' : 'vs prev year';
 
     if (!isPerformanceModelView) {
       return { ...derived, label };
@@ -2854,8 +2858,8 @@ export default function SlideViewPage() {
 
     const exactCurrentRange = exactDateRangeFromDayPicker(customDateRange);
     const comparisonDateRange = exactCurrentRange
-      ? buildComparisonDateRangeFromExact(exactCurrentRange, comparisonType as 'previous_period' | 'previous_year')
-      : buildComparisonDateRange(selectedYear, selectedMonth, comparisonType as 'previous_period' | 'previous_year');
+      ? buildComparisonDateRangeFromExact(exactCurrentRange, comparisonType as 'previous_period' | 'previous_year' | 'previous_month')
+      : buildComparisonDateRange(selectedYear, selectedMonth, comparisonType as 'previous_period' | 'previous_year' | 'previous_month');
 
     if (!comparisonDateRange) {
       return { ...derived, label };
@@ -2912,7 +2916,7 @@ export default function SlideViewPage() {
         (ch.bookings || 0) > 0;
       if (!hasAnyCompData) return null;
       const derived = calculateDerivedMetrics(ch);
-      const label = comparisonType === 'previous_period' ? 'vs prev period' : 'vs prev year';
+      const label = comparisonType === 'previous_period' ? 'vs prev period' : comparisonType === 'previous_month' ? 'vs prev month' : 'vs prev year';
 
       if (!isPerformanceModelView) {
         return { ...derived, label };
@@ -2920,8 +2924,8 @@ export default function SlideViewPage() {
 
       const exactCurrentRange = exactDateRangeFromDayPicker(customDateRange);
       const comparisonDateRange = exactCurrentRange
-        ? buildComparisonDateRangeFromExact(exactCurrentRange, comparisonType as 'previous_period' | 'previous_year')
-        : buildComparisonDateRange(selectedYear, selectedMonth, comparisonType as 'previous_period' | 'previous_year');
+        ? buildComparisonDateRangeFromExact(exactCurrentRange, comparisonType as 'previous_period' | 'previous_year' | 'previous_month')
+        : buildComparisonDateRange(selectedYear, selectedMonth, comparisonType as 'previous_period' | 'previous_year' | 'previous_month');
 
       if (!comparisonDateRange) {
         return { ...derived, label };
@@ -2960,7 +2964,7 @@ export default function SlideViewPage() {
   );
 
   const renderKPICards = useCallback((cards: any[], comparisonMetrics?: any) => {
-    const visible = isPerformanceModelView
+    const visible = showPerformanceModelKPIs
       ? cards
       : cards.filter((kpi: any) => !PERFORMANCE_MODEL_KEYS.has(kpi.key));
     const enriched = visible.map((kpi: any) => {
@@ -2980,7 +2984,7 @@ export default function SlideViewPage() {
       };
     });
     return <KPICardsSection cards={enriched} comparisonMetrics={comparisonMetrics} />;
-  }, [isPerformanceModelView]);
+  }, [showPerformanceModelKPIs]);
 
   const renderKPICardsSkeleton = useCallback(() => <KPICardsSkeleton />, []);
 
@@ -3343,7 +3347,7 @@ export default function SlideViewPage() {
                   setDimensionSettingsOpen(true);
                 }}
                 configuredDimensionNames={configuredDimensionNames}
-                isPerformanceModelView={isPerformanceModelView}
+                isPerformanceModelView={showPerformanceModelKPIs}
               />
             </TabsContent>
           ))}

@@ -26,7 +26,7 @@ export function ComparisonBanner({
   const customExactRange = exactDateRangeFromDayPicker(customDateRange);
   if (
     customExactRange &&
-    (comparisonType === "previous_period" || comparisonType === "previous_year")
+    (comparisonType === "previous_period" || comparisonType === "previous_year" || comparisonType === "previous_month")
   ) {
     const comparisonRange = buildComparisonDateRangeFromExact(customExactRange, comparisonType);
     const formatRange = (start: Date, end: Date) => {
@@ -71,6 +71,14 @@ export function ComparisonBanner({
         return { month: selectedMonth !== 'all' ? selectedMonth : null, year: year - 1 };
       }
       return { month: null, year: null };
+    } else if (comparisonType === "previous_month") {
+      if (selectedMonth !== 'all' && selectedYear !== 'all') {
+        const monthIndex = MONTH_NAMES.indexOf(selectedMonth);
+        const year = parseInt(selectedYear);
+        const previousDate = new Date(year, monthIndex - 1, 1);
+        return { month: MONTH_NAMES[previousDate.getMonth()], year: previousDate.getFullYear() };
+      }
+      return { month: null, year: null };
     }
     return { month: null, year: null };
   };
@@ -95,6 +103,16 @@ export function ComparisonBanner({
       {comparisonType === "previous_year" && (
         <span>
           Comparing {currentPeriod} vs Previous Year
+          {prevInfo.year !== null && (
+            <span>
+              {' '}({prevInfo.month ? `${prevInfo.month} ` : ''}{prevInfo.year})
+            </span>
+          )}
+        </span>
+      )}
+      {comparisonType === "previous_month" && (
+        <span>
+          Comparing {currentPeriod} vs Previous Month
           {prevInfo.year !== null && (
             <span>
               {' '}({prevInfo.month ? `${prevInfo.month} ` : ''}{prevInfo.year})

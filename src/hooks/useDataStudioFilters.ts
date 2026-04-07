@@ -35,6 +35,8 @@ export type ApplyViewOptions = {
   skipDateRestore?: boolean;
   /** After applying filter values, set date to current month-to-date (master default). Used with skipDateRestore for owner share-preview URLs. */
   applyMasterDefaultDate?: boolean;
+  /** When true, keep the current comparison type instead of overwriting it from the view. Used for interactive view switches so the active comparison period is preserved. */
+  skipComparisonRestore?: boolean;
 };
 
 /** Which dimension IDs are enabled as filter dropdowns per channel. */
@@ -487,9 +489,11 @@ export function useDataStudioFilters({
 
   const applyView = useCallback((view: SlideReportView | null, options?: ApplyViewOptions) => {
     if (!view) {
-      // Reset to master — clear filters, comparison, and date back to month-to-date.
+      // Reset to master — clear filters and date back to month-to-date.
       setFilterValuesRaw(EMPTY_FILTER_VALUES);
-      setComparisonTypeRaw('none');
+      if (!options?.skipComparisonRestore) {
+        setComparisonTypeRaw('none');
+      }
       if (!options?.skipDateRestore) {
         const range = getCurrentMonthToDateRange();
         const next = dateRangeToSlideSelection(range);
@@ -535,9 +539,11 @@ export function useDataStudioFilters({
       }
     }
     
-    // Always restore comparison_type from the view — including 'none', so switching
-    // views doesn't silently keep a comparison active from a previous view.
-    setComparisonTypeRaw(view.comparison_type ?? 'none');
+    // Restore comparison_type from the view unless the caller opts out (e.g. interactive
+    // view switches where the user wants to keep their active comparison period).
+    if (!options?.skipComparisonRestore) {
+      setComparisonTypeRaw(view.comparison_type ?? 'none');
+    }
   }, [setSelectedYear, setSelectedMonth]);
 
   const setChannelFilterValue = useCallback((
