@@ -101,7 +101,9 @@ export function ReportSidebar({
                 if (newViewId !== "unsaved") {
                   handleApplyView(
                     newViewId,
-                    newViewId ? { skipDateRestore: true } : undefined
+                    newViewId
+                      ? { skipDateRestore: true, skipComparisonRestore: true }
+                      : { skipComparisonRestore: true }
                   );
                 }
               }}
