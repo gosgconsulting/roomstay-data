@@ -595,7 +595,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                 <TableHead className="text-right">Revenue</TableHead>
                 <TableHead className="text-right">ROAS</TableHead>
                 <TableHead className="text-right">Cost of Sale</TableHead>
-                <TableHead className="text-right">Gross Profit</TableHead>
+                {isPerformanceModelView && <TableHead className="text-right">Gross Profit</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -627,7 +627,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                     <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.revenue, 'currency', displayCurrency))}</TableCell>
                     <TableCell className="text-right">{renderMetricCell(`${group.metrics.roas.toFixed(1)}x`)}</TableCell>
                     <TableCell className="text-right">{renderMetricCell(formatCostOfSalePercent(group.metrics.costOfSale))}</TableCell>
-                    <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.grossProfit, 'currency', displayCurrency))}</TableCell>
+                    {isPerformanceModelView && <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.grossProfit, 'currency', displayCurrency))}</TableCell>}
                   </TableRow>
                   {expandedRow === group.groupValue && getExpandedBreakdownData.length > 0 && (
                     <>
@@ -655,9 +655,11 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                           <TableCell className="text-right text-muted-foreground">
                             {formatCostOfSalePercent(item.metrics.costOfSale)}
                           </TableCell>
-                          <TableCell className="text-right text-muted-foreground">
-                            {formatNumber(item.metrics.grossProfit, 'currency', displayCurrency)}
-                          </TableCell>
+                          {isPerformanceModelView && (
+                            <TableCell className="text-right text-muted-foreground">
+                              {formatNumber(item.metrics.grossProfit, 'currency', displayCurrency)}
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))}
                     </>
@@ -679,7 +681,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                 <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.revenue, 'currency', displayCurrency))}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(`${totalMetrics.roas.toFixed(1)}x`)}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(formatCostOfSalePercent(totalMetrics.costOfSale))}</TableCell>
-                <TableCell className="text-right">{renderMetricCell(formatNumber(totalGrossProfit, 'currency', displayCurrency))}</TableCell>
+                {isPerformanceModelView && <TableCell className="text-right">{renderMetricCell(formatNumber(totalGrossProfit, 'currency', displayCurrency))}</TableCell>}
               </TableRow>
             </TableBody>
           </Table>
