@@ -250,6 +250,7 @@ const DateRangeFilter: React.FC<DateRangeFilterProps> = ({
               <div className="flex flex-col gap-0.5">
                 {[
                   { id: "previous_period", label: "Previous period" },
+                  { id: "previous_month", label: "Previous month" },
                   { id: "previous_year", label: "Previous year" },
                 ].map((opt) => (
                   <div

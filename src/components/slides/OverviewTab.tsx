@@ -88,7 +88,7 @@ export function OverviewTab({
   }, [overviewChartData, comparisonChartData]);
 
   const showComparison = comparisonType && comparisonType !== 'none';
-  const compLabel = comparisonType === 'previous_period' ? 'Previous Period' : 'Previous Year';
+  const compLabel = comparisonType === 'previous_period' ? 'Previous Period' : comparisonType === 'previous_month' ? 'Previous Month' : 'Previous Year';
 
   // Show skeletons whenever any loading is in flight — no blur/stale-dim.
   const isLoading = isSlideReportsLoading || isLoadingData;

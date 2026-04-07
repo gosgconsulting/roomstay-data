@@ -61,6 +61,6 @@ export type ChartMetric =
   | 'roas'
   | 'costOfSale';
 
-export type ComparisonType = 'none' | 'previous_period' | 'previous_year';
+export type ComparisonType = 'none' | 'previous_period' | 'previous_year' | 'previous_month';
 
 export type SlideType = 'master-report' | 'brady' | 'default';
