@@ -1131,6 +1131,14 @@ export default function SlideViewPage() {
     slideReportConfigRef.current = slideReport?.configuration ?? null;
   }, [slideReport?.configuration]);
 
+  // Ref that always holds the latest filterConfigs state. Updated immediately on every state change
+  // so the debounced auto-save never overwrites freshly-persisted filterConfigs with a stale copy
+  // from slideReportConfigRef (which lags behind until the query refetch completes).
+  const latestFilterConfigsRef = useRef<FilterConfigs>(filterConfigs);
+  useEffect(() => {
+    latestFilterConfigsRef.current = filterConfigs;
+  }, [filterConfigs]);
+
   // Debounce-persist UI settings (groupBy, breakdownBy, chartMetric, chartGranularity, filterValues)
   // so they survive page reload. Uses a 2s debounce to batch rapid changes (e.g. clicking dropdowns).
   const uiSettingsPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1159,6 +1167,9 @@ export default function SlideViewPage() {
           chartMetric,
           chartGranularity,
           activeFilterValues: filterValues,
+          // Always use the latest filterConfigs from the ref — prevents race condition where
+          // the refetch hasn't completed yet and prevConfig.filterConfigs is stale.
+          filterConfigs: latestFilterConfigsRef.current ?? prevConfig.filterConfigs,
         };
         await updateSlideReport.mutateAsync({ id: slideReportId, configuration } as any);
       } catch {
