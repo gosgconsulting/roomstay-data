@@ -55,7 +55,9 @@ export function formatChartMetricValue(
 ): string {
   const format = CHART_METRIC_FORMATS[metric];
   if (format === 'currency') {
-    return formatNumber(value, 'currency', displayCurrency);
+    // CPC and AOV need 2 decimal places; other currency metrics use 0
+    const fractionDigits = (metric === 'cpc' || metric === 'aov') ? 2 : 0;
+    return formatNumber(value, 'currency', displayCurrency, fractionDigits);
   }
   if (format === 'percent') {
     return `${value.toFixed(2)}%`;
