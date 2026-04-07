@@ -104,11 +104,11 @@ export function buildComparisonDateRangeFromExact(
   }
 
   if (comparisonType === 'previous_month') {
-    // Always shift back exactly 1 calendar month
-    return {
-      start: new Date(start.getFullYear(), start.getMonth() - 1, start.getDate(), start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds()),
-      end: new Date(end.getFullYear(), end.getMonth() - 1, end.getDate(), end.getHours(), end.getMinutes(), end.getSeconds(), end.getMilliseconds()),
-    };
+    // Compare to the full previous calendar month (e.g. Mar 1–31 → Feb 1–28).
+    // Always uses the 1st through last day of the month before the start date's month.
+    const prevMonthStart = new Date(start.getFullYear(), start.getMonth() - 1, 1);
+    const prevMonthEnd = new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999); // day 0 = last day of prev month
+    return { start: prevMonthStart, end: prevMonthEnd };
   }
 
   // "Month-anchored" range: starts on the 1st of a month and ends within that same month
