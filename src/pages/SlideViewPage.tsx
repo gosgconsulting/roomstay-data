@@ -1084,22 +1084,25 @@ export default function SlideViewPage() {
       if (config.selectedValueDimensionIds) {
         setSelectedValueDimensionIds(config.selectedValueDimensionIds);
       }
-      // Restore persisted UI settings so they survive page reload.
-      if (config.groupByDimension) {
-        setGroupByDimensionRaw(prev => ({ ...prev, ...config.groupByDimension }));
-      }
-      if (config.breakdownByDimension) {
-        setBreakdownByDimensionRaw(prev => ({ ...prev, ...config.breakdownByDimension }));
-      }
-      // For shared/public views, always default to 'revenue' regardless of saved config
-      setChartMetric(isPublicShareStudio ? DEFAULT_CHART_METRIC : parseChartMetric(config.chartMetric));
-      if (config.chartGranularity) {
-        setChartGranularity(config.chartGranularity as ChartGranularity);
-      }
     }
     const isNewReport = lastSyncedSlideReportIdRef.current !== slideReportId;
     if (isNewReport) {
       lastSyncedSlideReportIdRef.current = slideReportId;
+      // Restore debounce-persisted UI settings only on initial/report-switch load.
+      // These must NOT run on every refetch — they are saved via a 2s debounce, so a
+      // refetch triggered by any other save (e.g. persistFilterConfigs) would arrive
+      // before the debounce fires and incorrectly overwrite the user's unsaved change.
+      if (config?.groupByDimension) {
+        setGroupByDimensionRaw(prev => ({ ...prev, ...config.groupByDimension }));
+      }
+      if (config?.breakdownByDimension) {
+        setBreakdownByDimensionRaw(prev => ({ ...prev, ...config.breakdownByDimension }));
+      }
+      // For shared/public views, always default to 'revenue' regardless of saved config
+      setChartMetric(isPublicShareStudio ? DEFAULT_CHART_METRIC : parseChartMetric(config?.chartMetric));
+      if (config?.chartGranularity) {
+        setChartGranularity(config.chartGranularity as ChartGranularity);
+      }
       
       // For public share studio, date is already initialized from sessionStorage - don't reset it
       if (!isPublicShareStudio) {
