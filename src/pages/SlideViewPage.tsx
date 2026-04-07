@@ -2702,6 +2702,10 @@ export default function SlideViewPage() {
 
   const PERFORMANCE_MODEL_KEYS = new Set(['commissionsPaid', 'commissionsFree', 'grossProfit']);
 
+  // Gross Profit and other Performance Model KPIs/columns are only shown for the Performance Model
+  // view in the authenticated (owner) context — never in shared/public views.
+  const showPerformanceModelKPIs = isPerformanceModelView && !isPublicShareStudio && !isSharedPreview;
+
   const overviewMetricsBase = useOverviewMetrics(currentTotals);
 
   const performanceModelOverviewPatch = useMemo(() => {
@@ -2889,9 +2893,6 @@ export default function SlideViewPage() {
   );
 
   const renderKPICards = useCallback((cards: any[], comparisonMetrics?: any) => {
-    // Gross Profit and other Performance Model KPIs are only shown for the Performance Model
-    // view in the authenticated (owner) context — never in shared/public views.
-    const showPerformanceModelKPIs = isPerformanceModelView && !isPublicShareStudio && !isSharedPreview;
     const visible = showPerformanceModelKPIs
       ? cards
       : cards.filter((kpi: any) => !PERFORMANCE_MODEL_KEYS.has(kpi.key));
@@ -2912,7 +2913,7 @@ export default function SlideViewPage() {
       };
     });
     return <KPICardsSection cards={enriched} comparisonMetrics={comparisonMetrics} />;
-  }, [isPerformanceModelView, isPublicShareStudio, isSharedPreview]);
+  }, [showPerformanceModelKPIs]);
 
   const renderKPICardsSkeleton = useCallback(() => <KPICardsSkeleton />, []);
 
@@ -3275,7 +3276,7 @@ export default function SlideViewPage() {
                   setDimensionSettingsOpen(true);
                 }}
                 configuredDimensionNames={configuredDimensionNames}
-                isPerformanceModelView={isPerformanceModelView}
+                isPerformanceModelView={showPerformanceModelKPIs}
               />
             </TabsContent>
           ))}
