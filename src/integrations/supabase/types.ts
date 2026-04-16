@@ -529,19 +529,43 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          role: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           email: string
           id: string
+          role?: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           email?: string
           id?: string
+          role?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      user_account_access: {
+        Row: {
+          id: string
+          user_id: string
+          account_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          account_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          account_id?: string
+          created_at?: string
         }
         Relationships: []
       }

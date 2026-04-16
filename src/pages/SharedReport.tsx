@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Mail } from "lucide-react";
+import { Mail, Eye, EyeOff } from "lucide-react";
 import { isChannelBasedFormat, convertReportToChannelFormat } from "@/lib/filterFormatUtils";
 import { getCurrentMonthToDateRange, DEFAULT_REPORT_DATE_PRESET, formatDateToLocalIso } from "@/lib/monthUtils";
 import { writeShareDateToSession, type ShareDateSelection } from "@/lib/shareSession";
@@ -18,6 +18,9 @@ export default function SharedReport() {
   
   // Authentication state
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [shareLink, setShareLink] = useState<any>(null);
   const [authenticated, setAuthenticated] = useState(false);
@@ -381,6 +384,23 @@ export default function SharedReport() {
     void initializeReport(shareLink);
   }, [slug, authenticated, shareLink, initializeReport]);
 
+  // If the viewer already has an active Supabase session, auto-authorize if their email is allowed.
+  useEffect(() => {
+    if (!slug || authenticated || !shareLink) return;
+    const allowedEmails: string[] = (shareLink.allowed_emails ?? []).map((e: string) => e.toLowerCase());
+    if (allowedEmails.length === 0) return; // handled by the open-link effect above
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user?.email) return;
+      if (!allowedEmails.includes(session.user.email.toLowerCase())) return;
+      const authKey = `share_auth_${slug}`;
+      sessionStorage.setItem(authKey, "true");
+      sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
+      setAuthenticated(true);
+      void initializeReport(shareLink);
+    });
+  }, [slug, authenticated, shareLink, initializeReport]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -389,35 +409,63 @@ export default function SharedReport() {
       toast({ title: "Email required", description: "Please enter your email address.", variant: "destructive" });
       return;
     }
+    if (!password) {
+      toast({ title: "Password required", description: "Please enter your password.", variant: "destructive" });
+      return;
+    }
 
     setLoading(true);
 
-    const allowedEmails: string[] = (shareLink.allowed_emails ?? []).map((e: string) => e.toLowerCase());
+    try {
+      // Sign up or sign in via Supabase auth
+      let userEmail: string;
+      if (isSignUp) {
+        const { data, error } = await supabase.auth.signUp({ email: trimmedEmail, password });
+        if (error) {
+          toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
+          setLoading(false);
+          return;
+        }
+        userEmail = data.user?.email ?? trimmedEmail;
+        if (!data.session) {
+          // Email confirmation required
+          toast({ title: "Check your email", description: "We sent you a confirmation link. Please verify your email then come back to access the report." });
+          setLoading(false);
+          return;
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password });
+        if (error) {
+          toast({ title: "Sign in failed", description: error.message, variant: "destructive" });
+          setLoading(false);
+          return;
+        }
+        userEmail = data.user?.email ?? trimmedEmail;
+      }
 
-    // Legacy password-protected links — fall back to password check
-    const hasPasswordGate = shareLink.password_hash != null && shareLink.password_hash !== "";
-    if (hasPasswordGate && allowedEmails.length === 0) {
-      toast({ title: "Access denied", description: "This link uses password protection.", variant: "destructive" });
+      // Check email against the share link allowlist
+      const allowedEmails: string[] = (shareLink.allowed_emails ?? []).map((e: string) => e.toLowerCase());
+      if (allowedEmails.length > 0 && !allowedEmails.includes(userEmail.toLowerCase())) {
+        toast({ title: "Access denied", description: "This email address is not authorised to view this report.", variant: "destructive" });
+        await supabase.auth.signOut();
+        setLoading(false);
+        return;
+      }
+
+      const authKey = `share_auth_${slug}`;
+      sessionStorage.setItem(authKey, "true");
+      sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
+      setAuthenticated(true);
+      toast({ title: "Access granted", description: "Loading report..." });
+      await initializeReport(shareLink);
+    } catch (err) {
+      toast({ title: "Error", description: "Something went wrong. Please try again.", variant: "destructive" });
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (!allowedEmails.includes(trimmedEmail)) {
-      toast({ title: "Access denied", description: "This email address is not authorised to view this report.", variant: "destructive" });
-      setLoading(false);
-      return;
-    }
-
-    const authKey = `share_auth_${slug}`;
-    sessionStorage.setItem(authKey, "true");
-    sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
-    setAuthenticated(true);
-    toast({ title: "Access granted", description: "Loading report..." });
-    await initializeReport(shareLink);
-    setLoading(false);
   };
 
-  // If not authenticated, show email gate
+  // If not authenticated, show sign in / sign up gate
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -426,9 +474,11 @@ export default function SharedReport() {
             <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
               <Mail className="w-6 h-6 text-primary" />
             </div>
-            <CardTitle>Access Report</CardTitle>
+            <CardTitle>{isSignUp ? "Create Account" : "Access Report"}</CardTitle>
             <CardDescription>
-              Enter your email address to access this shared report.
+              {isSignUp
+                ? "Create an account to access this shared report."
+                : "Sign in to access this shared report."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -444,9 +494,56 @@ export default function SharedReport() {
                   autoComplete="email"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={isSignUp ? "Create a password" : "Enter your password"}
+                    autoComplete={isSignUp ? "new-password" : "current-password"}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Verifying..." : "Access Report"}
+                {loading ? (isSignUp ? "Creating account..." : "Signing in...") : (isSignUp ? "Sign Up" : "Sign In")}
               </Button>
+              <div className="text-center text-sm text-muted-foreground">
+                {isSignUp ? (
+                  <>
+                    Already have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => setIsSignUp(false)}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Sign in
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    Don't have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => setIsSignUp(true)}
+                      className="text-primary hover:underline font-medium"
+                    >
+                      Sign up
+                    </button>
+                  </>
+                )}
+              </div>
             </form>
           </CardContent>
         </Card>

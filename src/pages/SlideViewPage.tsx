@@ -3179,6 +3179,7 @@ export default function SlideViewPage() {
         onSignOut={handleSignOut}
         onDataSources={() => navigate(accountId ? `/tools/data-sources/${accountId}` : '/tools/data-sources')}
         onDimensions={() => navigate(accountId ? `/tools/dimensions/${accountId}` : '/tools/dimensions')}
+        onUsers={() => navigate(accountId ? `/tools/users/${accountId}` : '/tools/users')}
         selectedViewId={selectedViewId}
         setSelectedViewId={setSelectedViewId}
         availableViews={availableViews}

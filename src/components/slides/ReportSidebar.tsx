@@ -12,6 +12,7 @@ import {
   LineChart,
   BookmarkPlus,
   Trash2,
+  UserCog,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ interface ReportSidebarProps {
   onTabChange: (tab: string) => void;
   onDataSources: () => void;
   onDimensions: () => void;
+  onUsers: () => void;
   reportName?: string;
   /** View selector (above Reports) */
   selectedViewId: string | null;
@@ -59,6 +61,7 @@ export function ReportSidebar({
   onTabChange,
   onDataSources,
   onDimensions,
+  onUsers,
   reportName,
   selectedViewId,
   setSelectedViewId,
@@ -195,6 +198,13 @@ export function ReportSidebar({
           >
             <Layers className="h-4 w-4" />
             Dimensions
+          </button>
+          <button
+            onClick={onUsers}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-left"
+          >
+            <UserCog className="h-4 w-4" />
+            Users
           </button>
 
           <p className="mt-3 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
