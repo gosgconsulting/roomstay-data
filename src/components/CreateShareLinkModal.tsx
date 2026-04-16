@@ -272,7 +272,7 @@ export const CreateShareLinkModal = ({
           }
           throw error;
         }
-        toast({ title: "Share link created", description: `Access at /${slug}` });
+        toast({ title: "Share link created", description: `Access at /shared/${slug}` });
       }
 
       onSuccess();

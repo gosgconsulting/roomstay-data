@@ -106,7 +106,7 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId
   };
 
   const handleCopyLink = (slug: string) => {
-    const url = `${window.location.origin}/${slug}`;
+    const url = `${window.location.origin}/shared/${slug}`;
     navigator.clipboard.writeText(url);
     toast({
       title: "Link copied",
@@ -132,7 +132,7 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId
           <DialogHeader>
             <DialogTitle>Share Links</DialogTitle>
             <DialogDescription>
-              Create password-protected links to share reports publicly
+              Create email-restricted links to share reports with specific people.
             </DialogDescription>
           </DialogHeader>
 
@@ -153,7 +153,7 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId
                         <div className="flex-1 min-w-0 mr-4">
                           <div className="flex items-center gap-2 mb-1">
                             <LinkIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            <span className="text-sm font-medium truncate">/{link.slug}</span>
+                            <span className="text-sm font-medium truncate">/shared/{link.slug}</span>
                           </div>
                           <p className="text-xs text-muted-foreground">
                             {link.report_ids.length} report{link.report_ids.length !== 1 ? 's' : ''}

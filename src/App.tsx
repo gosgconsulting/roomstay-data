@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import ForecastingDashboard from "./pages/ForecastingDashboard";
 import Auth from "./pages/Auth";
 import SharedReport from "./pages/SharedReport";
@@ -18,6 +18,12 @@ import Integrations from "./pages/Integrations";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
+
+/** Redirect legacy short-URL share links (/:slug) → /shared/:slug */
+function LegacySlugRedirect() {
+  const { slug } = useParams<{ slug: string }>();
+  return <Navigate to={`/shared/${slug}`} replace />;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -54,8 +60,8 @@ const App = () => (
           <Route path="/tools/reports/:accountId" element={<Navigate to="/" replace />} />
           <Route path="/tools/reports/:accountId/data-studio" element={<Navigate to="/" replace />} />
 
-          {/* Catch-all slug for shared reports, then 404 */}
-          <Route path="/:slug" element={<SharedReport />} />
+          {/* Legacy short-URL redirect: /:slug → /shared/:slug */}
+          <Route path="/:slug" element={<LegacySlugRedirect />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
