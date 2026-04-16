@@ -10,6 +10,10 @@ type RequestBody = {
   selectedMonth?: string;
   forceRefresh?: boolean;
   cacheVersion?: number;
+  /** Server-side dimension filters: { dimensionId: allowedValues[] }.
+   *  When provided, rows not matching ALL filters are excluded before the response is sent.
+   *  Used by shared links to prevent unauthorised data from reaching the browser. */
+  dimensionFilters?: Record<string, string[]>;
 };
 
 type CachedDataRow = {
@@ -186,6 +190,79 @@ async function fetchAllRowsParallel(
   return allRows;
 }
 
+/**
+ * Server-side dimension filter. Excludes rows that don't match every filter entry.
+ *
+ * `dimensionFilters` keys may be:
+ *   a) A dimension UUID that is a direct key in the row  (report-specific ID)
+ *   b) A dimension UUID whose *name* (via dimMap) matches a different row key  (global ID)
+ *
+ * Matching is case-insensitive and trimmed, consistent with the client-side
+ * `filterRawDataRows` in slideViewHelpers.ts.
+ */
+function applyDimensionFilters(
+  rows: Record<string, unknown>[],
+  dimMap: Record<string, string>,
+  dimensionFilters: Record<string, string[]>
+): Record<string, unknown>[] {
+  const entries = Object.entries(dimensionFilters).filter(
+    ([, vals]) => Array.isArray(vals) && vals.length > 0
+  );
+  if (entries.length === 0) return rows;
+
+  // Build a reverse map: dimension name (lowercase) → row key(s) for that dimension.
+  // A single sample row is enough to discover all keys.
+  const nameToRowKeys = new Map<string, string[]>();
+  if (rows.length > 0) {
+    for (const key of Object.keys(rows[0])) {
+      if (key === '_row_number') continue;
+      const name = (dimMap[key] ?? key).toLowerCase();
+      const existing = nameToRowKeys.get(name) ?? [];
+      existing.push(key);
+      nameToRowKeys.set(name, existing);
+    }
+  }
+
+  // Pre-resolve each filter to the actual row key(s) + lowercase allowed values.
+  const resolved: { rowKeys: string[]; allowed: Set<string> }[] = [];
+  for (const [filterDimId, allowedValues] of entries) {
+    const allowed = new Set(allowedValues.map(v => String(v).trim().toLowerCase()));
+
+    // 1) If filterDimId is a direct row key
+    if (rows.length > 0 && filterDimId in rows[0]) {
+      resolved.push({ rowKeys: [filterDimId], allowed });
+      continue;
+    }
+
+    // 2) Resolve via dimMap: filterDimId → name → row key
+    const filterName = (dimMap[filterDimId] ?? filterDimId).toLowerCase();
+    const keys = nameToRowKeys.get(filterName);
+    if (keys && keys.length > 0) {
+      resolved.push({ rowKeys: keys, allowed });
+    }
+    // If unresolvable, skip this filter (don't break the response)
+  }
+
+  if (resolved.length === 0) return rows;
+
+  return rows.filter(row => {
+    for (const { rowKeys, allowed } of resolved) {
+      let matched = false;
+      for (const key of rowKeys) {
+        const val = row[key];
+        if (val !== undefined && val !== null) {
+          if (allowed.has(String(val).trim().toLowerCase())) {
+            matched = true;
+            break;
+          }
+        }
+      }
+      if (!matched) return false;
+    }
+    return true;
+  });
+}
+
 async function computePayload(
   supabase: ReturnType<typeof createClient>,
   reportId: string,
@@ -299,6 +376,12 @@ Deno.serve(async (req: Request) => {
   try {
     // Cache removed - always compute fresh payload from database
     const payload = await computePayload(supabase, reportId, selectedYear, selectedMonth);
+
+    // Server-side dimension filtering: exclude rows the caller isn't authorised to see.
+    // Used by shared links to prevent sensitive data from reaching the browser.
+    if (body.dimensionFilters && typeof body.dimensionFilters === 'object') {
+      payload.rows = applyDimensionFilters(payload.rows, payload.dimMap, body.dimensionFilters);
+    }
 
     return jsonResponse({
       success: true,

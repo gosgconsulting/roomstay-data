@@ -174,15 +174,22 @@ async function fetchChannelRowsDirect(
 
 async function fetchChannelRows(
   channelReportId: string,
-  selectedYear: string
+  selectedYear: string,
+  dimensionFilters?: Record<string, string[]>
 ): Promise<{ rows: Record<string, any>[]; dimMap: Record<string, string> }> {
   try {
+    const body: Record<string, unknown> = {
+      reportId: channelReportId,
+      selectedYear,
+      selectedMonth: 'all',
+    };
+    // Pass dimension filters to edge function for server-side row filtering.
+    // Only sent for shared links; authenticated owners don't send this.
+    if (dimensionFilters && Object.keys(dimensionFilters).length > 0) {
+      body.dimensionFilters = dimensionFilters;
+    }
     const { data, error } = await supabase.functions.invoke('get-cached-report-data', {
-      body: {
-        reportId: channelReportId,
-        selectedYear,
-        selectedMonth: 'all',
-      },
+      body,
     });
 
     if (error) throw error;
@@ -227,6 +234,8 @@ export function useDataStudioRawRows(
   enabled: boolean = false,
   selectedYear: string = 'all',
   reportIdsOverride?: Record<string, string> | null,
+  /** Per-channel dimension filters enforced server-side. Only used by shared links. */
+  channelDimensionFilters?: Record<string, Record<string, string[]>> | null,
 ) {
   const queryClient = useQueryClient();
 
@@ -250,8 +259,14 @@ export function useDataStudioRawRows(
   // Shared views must NOT cache aggressively — stale empty results cause 0-KPI bugs.
   const isAnon = !slideReport?.user_id;
 
+  // Stable fingerprint of dimension filters so query key changes when filters change.
+  const dimFilterFingerprint = useMemo(() => {
+    if (!channelDimensionFilters) return '';
+    return JSON.stringify(channelDimensionFilters);
+  }, [channelDimensionFilters]);
+
   const queryResult = useQuery({
-    queryKey: ['data-studio-raw-rows', stableCacheId, selectedYear, Object.keys(reportIds).sort().join(',')],
+    queryKey: ['data-studio-raw-rows', stableCacheId, selectedYear, Object.keys(reportIds).sort().join(','), dimFilterFingerprint],
     queryFn: async (): Promise<DataStudioSourceResult> => {
       const { user } = await getUser();
       if (!user) {
@@ -266,7 +281,8 @@ export function useDataStudioRawRows(
         const channelReportId = reportIds[channel];
         if (!channelReportId) return { channel, rows: [] as any[], dimMap: {} };
 
-        const { rows, dimMap } = await fetchChannelRows(channelReportId, selectedYear);
+        const channelFilters = channelDimensionFilters?.[channel] ?? undefined;
+        const { rows, dimMap } = await fetchChannelRows(channelReportId, selectedYear, channelFilters);
 
         return { channel, rows, dimMap };
       });

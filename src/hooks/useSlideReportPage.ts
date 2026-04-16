@@ -254,12 +254,25 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
 
   const [primaryYear0, primaryYear1, primaryYear2] = primaryYears;
 
+  // Server-side dimension filters for shared links. Converts shareBaseFilterValues
+  // (channel → { dimId: string[] }) into the format expected by useDataStudioRawRows.
+  // Only populated when a share link has enforced filters; null for authenticated owners.
+  const serverDimensionFilters = useMemo((): Record<string, Record<string, string[]>> | null => {
+    if (!shareBaseFilterValues) return null;
+    const hasAnyFilter = Object.values(shareBaseFilterValues).some(
+      chFilters => chFilters && Object.values(chFilters).some(vals => Array.isArray(vals) && vals.length > 0)
+    );
+    if (!hasAnyFilter) return null;
+    return shareBaseFilterValues as Record<string, Record<string, string[]>>;
+  }, [shareBaseFilterValues]);
+
   // Primary year fetch (always active when slideReport is ready)
   const { data: dataStudioResult, isLoading: isLoadingRawRows, isFetching: isFetchingRawRows } = useDataStudioRawRows(
     slideReport,
     !!slideReportId,
     primaryYear0 || selectedYear,
     effectiveReportIdsForFetch,
+    serverDimensionFilters,
   );
 
   // Second year of primary range (only enabled when customDateRange spans ≥2 years)
@@ -268,6 +281,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     !!slideReportId && primaryYear1 !== '',
     primaryYear1 || 'all',
     effectiveReportIdsForFetch,
+    serverDimensionFilters,
   );
 
   // Third year of primary range (only enabled when customDateRange spans 3 years)
@@ -276,6 +290,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     !!slideReportId && primaryYear2 !== '',
     primaryYear2 || 'all',
     effectiveReportIdsForFetch,
+    serverDimensionFilters,
   );
 
   // When the comparison period falls in a different calendar year than the current view,
@@ -313,6 +328,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     !!slideReportId && comparisonYear !== '',
     comparisonYear || 'all',
     effectiveReportIdsForFetch,
+    serverDimensionFilters,
   );
 
   const effectivePivotData = useMemo((): SlideReportPivotData | null => {
