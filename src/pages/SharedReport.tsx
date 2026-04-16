@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Lock, Eye, EyeOff } from "lucide-react";
+import { Mail } from "lucide-react";
 import { isChannelBasedFormat, convertReportToChannelFormat } from "@/lib/filterFormatUtils";
 import { getCurrentMonthToDateRange, DEFAULT_REPORT_DATE_PRESET, formatDateToLocalIso } from "@/lib/monthUtils";
 import { writeShareDateToSession, type ShareDateSelection } from "@/lib/shareSession";
@@ -17,8 +17,7 @@ export default function SharedReport() {
   const { toast } = useToast();
   
   // Authentication state
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [shareLink, setShareLink] = useState<any>(null);
   const [authenticated, setAuthenticated] = useState(false);
@@ -368,12 +367,13 @@ export default function SharedReport() {
     };
   }, [slug, toast, initializeReport]);
 
-  // Open (no-password) links: `password_hash` is empty or missing after create (`btoa("")` → "").
-  // Without this, first-time visitors stay on the password card because empty submit is blocked.
+  // Open links (no allowed_emails and no password): auto-authenticate.
   useEffect(() => {
     if (!slug || authenticated || !shareLink) return;
-    const h = shareLink.password_hash;
-    if (h != null && h !== "") return;
+    const emails: string[] | null = shareLink.allowed_emails;
+    const hasEmailGate = Array.isArray(emails) && emails.length > 0;
+    const hasPasswordGate = shareLink.password_hash != null && shareLink.password_hash !== "";
+    if (hasEmailGate || hasPasswordGate) return;
     const authKey = `share_auth_${slug}`;
     sessionStorage.setItem(authKey, "true");
     sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
@@ -384,86 +384,65 @@ export default function SharedReport() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!password) {
-      toast({
-        title: "Password required",
-        description: "Please enter the password",
-        variant: "destructive",
-      });
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      toast({ title: "Email required", description: "Please enter your email address.", variant: "destructive" });
       return;
     }
 
     setLoading(true);
 
-    // Simple hash check (same as used when creating)
-    const passwordHash = btoa(password);
+    const allowedEmails: string[] = (shareLink.allowed_emails ?? []).map((e: string) => e.toLowerCase());
 
-    if (passwordHash === shareLink.password_hash) {
-      // Store authentication in session storage with the share link data
-      const authKey = `share_auth_${slug}`;
-      sessionStorage.setItem(authKey, "true");
-      sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
-      
-      setAuthenticated(true);
-      toast({
-        title: "Access granted",
-        description: "Loading report...",
-      });
-
-      // Initialize the report directly
-      await initializeReport(shareLink);
-    } else {
-      toast({
-        title: "Incorrect password",
-        description: "Please try again",
-        variant: "destructive",
-      });
+    // Legacy password-protected links — fall back to password check
+    const hasPasswordGate = shareLink.password_hash != null && shareLink.password_hash !== "";
+    if (hasPasswordGate && allowedEmails.length === 0) {
+      toast({ title: "Access denied", description: "This link uses password protection.", variant: "destructive" });
+      setLoading(false);
+      return;
     }
 
+    if (!allowedEmails.includes(trimmedEmail)) {
+      toast({ title: "Access denied", description: "This email address is not authorised to view this report.", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
+    const authKey = `share_auth_${slug}`;
+    sessionStorage.setItem(authKey, "true");
+    sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
+    setAuthenticated(true);
+    toast({ title: "Access granted", description: "Loading report..." });
+    await initializeReport(shareLink);
     setLoading(false);
   };
 
-  // If not authenticated, show password form
+  // If not authenticated, show email gate
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Lock className="w-6 h-6 text-primary" />
+              <Mail className="w-6 h-6 text-primary" />
             </div>
-            <CardTitle>Protected Report</CardTitle>
+            <CardTitle>Access Report</CardTitle>
             <CardDescription>
-              This report is password protected. Please enter the password to continue.
+              Enter your email address to access this shared report.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password"
-                    className="pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
+                <Label htmlFor="email">Email address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? "Verifying..." : "Access Report"}

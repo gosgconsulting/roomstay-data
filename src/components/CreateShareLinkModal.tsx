@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/lib/auth";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import { isChannelBasedFormat } from "@/lib/filterFormatUtils";
 import { formatDateToLocalIso } from "@/lib/monthUtils";
 import {
@@ -33,6 +33,7 @@ interface CreateShareLinkModalProps {
     selected_month?: string;
     custom_date_range?: { from: string; to: string };
     date_preset?: string;
+    allowed_emails?: string[];
   } | null;
   accountId?: string;
   slideReportId?: string | null;
@@ -51,6 +52,10 @@ type DimensionFilters = Record<string, Record<string, string[]>>;
 
 const CHANNELS: Channel[] = ['metasearch', 'sem', 'social'];
 
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
 export const CreateShareLinkModal = ({
   open,
   onOpenChange,
@@ -64,7 +69,8 @@ export const CreateShareLinkModal = ({
   channelReportIds,
 }: CreateShareLinkModalProps) => {
   const [slug, setSlug] = useState("");
-  const [password, setPassword] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [allowedEmails, setAllowedEmails] = useState<string[]>([]);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -81,17 +87,45 @@ export const CreateShareLinkModal = ({
     if (!open) return;
     if (editingLink) {
       setSlug(editingLink.slug);
-      setPassword("");
+      setEmailInput("");
+      setAllowedEmails(editingLink.allowed_emails ?? []);
       setSelectedViewId(editingLink.view_id ?? null);
     } else {
       setSlug("");
-      setPassword("");
+      setEmailInput("");
+      setAllowedEmails([]);
       setSelectedViewId(null);
     }
   }, [open, editingLink]);
 
   const handleSlugChange = (value: string) => {
     if (/^[a-z0-9-]*$/.test(value)) setSlug(value);
+  };
+
+  const handleAddEmail = () => {
+    const trimmed = emailInput.trim().toLowerCase();
+    if (!trimmed) return;
+    if (!isValidEmail(trimmed)) {
+      toast({ title: "Invalid email", description: "Please enter a valid email address.", variant: "destructive" });
+      return;
+    }
+    if (allowedEmails.includes(trimmed)) {
+      toast({ title: "Already added", description: `${trimmed} is already in the list.`, variant: "destructive" });
+      return;
+    }
+    setAllowedEmails(prev => [...prev, trimmed]);
+    setEmailInput("");
+  };
+
+  const handleRemoveEmail = (email: string) => {
+    setAllowedEmails(prev => prev.filter(e => e !== email));
+  };
+
+  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddEmail();
+    }
   };
 
   // Build filters to store — prefer saved view filters when a view is selected
@@ -164,18 +198,10 @@ export const CreateShareLinkModal = ({
       });
       return;
     }
-    if (!editingLink && !password) {
+    if (allowedEmails.length === 0) {
       toast({
-        title: "Password required",
-        description: "Please enter a password for the share link.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (password && password.length < 6) {
-      toast({
-        title: "Password too short",
-        description: "Password must be at least 6 characters.",
+        title: "At least one email required",
+        description: "Add at least one email address that can access this link.",
         variant: "destructive",
       });
       return;
@@ -184,7 +210,6 @@ export const CreateShareLinkModal = ({
     setLoading(true);
 
     try {
-      const passwordHash = btoa(password || editingLink?.slug || "");
       const [filtersToStore, lockedDimensionIds] = await Promise.all([
         buildFiltersToStore(),
         resolveLockedDimensionIds(),
@@ -196,6 +221,9 @@ export const CreateShareLinkModal = ({
         account_id: accountId,
         locked_dimension_ids: lockedDimensionIds,
         view_id: selectedViewId ?? null,
+        allowed_emails: allowedEmails,
+        // Clear any legacy password hash so the email gate is used
+        password_hash: "",
       };
 
       if (currentDateSelection) {
@@ -214,12 +242,9 @@ export const CreateShareLinkModal = ({
       }
 
       if (editingLink) {
-        const updateData: Record<string, unknown> = { ...baseData };
-        if (password) updateData.password_hash = passwordHash;
-
         const { error } = await supabase
           .from("share_links")
-          .update(updateData)
+          .update(baseData)
           .eq("id", editingLink.id);
 
         if (error) throw error;
@@ -228,7 +253,6 @@ export const CreateShareLinkModal = ({
         const insertData: Record<string, unknown> = {
           ...baseData,
           slug: slug.toLowerCase().trim(),
-          password_hash: passwordHash,
           created_by: user.id,
           report_ids: channelReportIds
             ? Object.values(channelReportIds).filter(Boolean)
@@ -272,7 +296,7 @@ export const CreateShareLinkModal = ({
             {editingLink ? "Edit Share Link" : "Create Share Link"}
           </DialogTitle>
           <DialogDescription>
-            Configure a password-protected link to share this report.
+            Configure an email-restricted link to share this report.
           </DialogDescription>
         </DialogHeader>
 
@@ -296,25 +320,50 @@ export const CreateShareLinkModal = ({
             </p>
           </div>
 
-          {/* Password */}
+          {/* Email allowlist */}
           <div className="space-y-2">
-            <Label htmlFor="password">
-              Password{editingLink ? " (leave empty to keep current)" : ""}
-            </Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="Enter password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">Minimum 6 characters.</p>
+            <Label>Allowed Emails</Label>
+            <div className="flex gap-2">
+              <Input
+                type="email"
+                placeholder="name@example.com"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                onKeyDown={handleEmailKeyDown}
+                className="flex-1"
+              />
+              <Button type="button" variant="outline" size="icon" onClick={handleAddEmail}>
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Only these email addresses will be able to access the link.
+            </p>
+            {allowedEmails.length > 0 && (
+              <div className="flex flex-col gap-1 mt-1">
+                {allowedEmails.map((email) => (
+                  <div
+                    key={email}
+                    className="flex items-center justify-between rounded-md border px-3 py-1.5 text-sm bg-muted/40"
+                  >
+                    <span className="truncate">{email}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveEmail(email)}
+                      className="ml-2 text-muted-foreground hover:text-destructive shrink-0"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* View selection */}
           {slideReportId && availableViews.length > 0 && (
             <div className="space-y-2">
-              <Label>View</Label>
+              <Label>View to Share <span className="text-muted-foreground font-normal">(Optional)</span></Label>
               <Select
                 value={selectedViewId ?? "none"}
                 onValueChange={(v) => setSelectedViewId(v === "none" ? null : v)}
@@ -335,9 +384,21 @@ export const CreateShareLinkModal = ({
               </Select>
               <p className="text-xs text-muted-foreground">
                 {selectedViewId
-                  ? "The selected view's filters (including account) will be enforced for viewers."
+                  ? "Selected view's filters will be applied for viewers."
                   : "Viewers can change filters freely."}
               </p>
+            </div>
+          )}
+
+          {/* Active channels preview */}
+          {activeChannels.length > 0 && (
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              <span className="font-medium">Channels included in this share: </span>
+              {activeChannels.map((ch) => (
+                <span key={ch} className="inline-flex items-center rounded-full border px-2 py-0.5 mr-1 bg-background capitalize">
+                  {ch}
+                </span>
+              ))}
             </div>
           )}
 
@@ -350,7 +411,7 @@ export const CreateShareLinkModal = ({
             ) : editingLink ? (
               "Update Link"
             ) : (
-              "Create Link"
+              "Next →"
             )}
           </Button>
         </div>

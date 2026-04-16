@@ -31,6 +31,14 @@ interface ShareLink {
   slug: string;
   report_ids: string[];
   created_at: string;
+  allowed_emails?: string[];
+  view_id?: string | null;
+  slide_report_id?: string | null;
+  locked_dimension_ids?: string[];
+  selected_year?: string;
+  selected_month?: string;
+  custom_date_range?: { from: string; to: string };
+  date_preset?: string;
 }
 
 export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId, slideReportId, availableViews = [], currentFilterValues, currentDateSelection, channelReportIds }: ShareModalProps) => {

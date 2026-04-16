@@ -618,6 +618,7 @@ export type Database = {
       share_links: {
         Row: {
           account_id: string | null
+          allowed_emails: string[] | null
           created_at: string
           created_by: string
           custom_date_range: Json | null
@@ -636,6 +637,7 @@ export type Database = {
         }
         Insert: {
           account_id?: string | null
+          allowed_emails?: string[] | null
           created_at?: string
           created_by: string
           custom_date_range?: Json | null
@@ -643,7 +645,7 @@ export type Database = {
           dimension_filters?: Json | null
           id?: string
           locked_dimension_ids?: string[] | null
-          password_hash: string
+          password_hash?: string
           report_ids?: string[]
           selected_month?: string | null
           selected_year?: string | null
@@ -654,6 +656,7 @@ export type Database = {
         }
         Update: {
           account_id?: string | null
+          allowed_emails?: string[] | null
           created_at?: string
           created_by?: string
           custom_date_range?: Json | null
