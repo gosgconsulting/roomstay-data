@@ -11,6 +11,28 @@ import { isChannelBasedFormat, convertReportToChannelFormat } from "@/lib/filter
 import { getCurrentMonthToDateRange, DEFAULT_REPORT_DATE_PRESET, formatDateToLocalIso } from "@/lib/monthUtils";
 import { writeShareDateToSession, type ShareDateSelection } from "@/lib/shareSession";
 
+/**
+ * Columns we actually need from share_links.
+ * SECURITY: password_hash is intentionally excluded — it must NEVER reach the browser.
+ * The edge function `share-link-auth` handles password verification server-side using
+ * the service-role key, so the client never sees the hash.
+ */
+const SAFE_SHARE_LINK_COLUMNS = [
+  'id', 'slug', 'report_ids', 'created_at', 'created_by', 'updated_at',
+  'account_id', 'slide_report_id', 'view_id',
+  'dimension_filters', 'locked_dimension_ids',
+  'selected_year', 'selected_month', 'custom_date_range', 'date_preset',
+].join(', ');
+
+/**
+ * Strip any sensitive fields that might have ended up in a share link object
+ * (e.g. from stale sessionStorage from before this fix was deployed).
+ */
+function sanitizeShareLinkData(data: Record<string, unknown>): Record<string, unknown> {
+  const { password_hash, allowed_emails, ...safe } = data;
+  return safe;
+}
+
 export default function SharedReport() {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -236,7 +258,7 @@ export default function SharedReport() {
       // Store share link data for authentication persistence
       const authKey = `share_auth_${slug}`;
       sessionStorage.setItem(authKey, "true");
-      sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(linkData));
+      sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(sanitizeShareLinkData(linkData)));
 
       // Navigate to Data Studio embed for ALL shares (unified pipeline)
       // Put critical IDs in the URL so SlideViewPage never depends on sessionStorage for core loading.
@@ -278,12 +300,26 @@ export default function SharedReport() {
     let mounted = true;
 
     const loadFromDb = async (): Promise<any | null> => {
+      // SECURITY: Only fetch safe columns — password_hash is never sent to the browser.
       const { data, error } = await supabase
         .from("share_links")
-        .select("*")
+        .select(SAFE_SHARE_LINK_COLUMNS)
         .eq("slug", slug)
         .single();
       if (error || !data) return null;
+
+      // Check whether this link has a password set via the secure edge function.
+      // The hash never leaves the server — only a boolean `has_password` is returned.
+      try {
+        const { data: checkData } = await supabase.functions.invoke('share-link-auth', {
+          body: { action: 'check', slug },
+        });
+        (data as any).has_password = !!(checkData?.has_password);
+      } catch {
+        // If the check fails, assume password-protected to be safe
+        (data as any).has_password = true;
+      }
+
       return data;
     };
 
@@ -320,7 +356,7 @@ export default function SharedReport() {
           if (!mounted) return;
           if (freshData) {
             // Rewrite session so future navigations restore correctly
-            sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(freshData));
+            sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(sanitizeShareLinkData(freshData)));
             setShareLink(freshData);
             setAuthenticated(true);
             await initializeReport(freshData);
@@ -371,11 +407,10 @@ export default function SharedReport() {
   // Open links (no password set): auto-authenticate.
   useEffect(() => {
     if (!slug || authenticated || !shareLink) return;
-    const hasPasswordGate = shareLink.password_hash != null && shareLink.password_hash !== "";
-    if (hasPasswordGate) return;
+    if (shareLink.has_password) return;
     const authKey = `share_auth_${slug}`;
     sessionStorage.setItem(authKey, "true");
-    sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
+    sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(sanitizeShareLinkData(shareLink)));
     setAuthenticated(true);
     void initializeReport(shareLink);
   }, [slug, authenticated, shareLink, initializeReport]);
@@ -410,7 +445,7 @@ export default function SharedReport() {
 
       const authKey = `share_auth_${slug}`;
       sessionStorage.setItem(authKey, "true");
-      sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
+      sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(sanitizeShareLinkData(shareLink)));
       setAuthenticated(true);
       toast({ title: "Access granted", description: "Loading report..." });
       await initializeReport(shareLink);

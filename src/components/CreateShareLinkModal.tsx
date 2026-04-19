@@ -33,7 +33,7 @@ interface CreateShareLinkModalProps {
     selected_month?: string;
     custom_date_range?: { from: string; to: string };
     date_preset?: string;
-    password_hash?: string;
+    has_password?: boolean;
   } | null;
   accountId?: string;
   slideReportId?: string | null;
@@ -285,7 +285,7 @@ export const CreateShareLinkModal = ({
     }
   };
 
-  const hasExistingPassword = !!(editingLink?.password_hash);
+  const hasExistingPassword = !!(editingLink?.has_password);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

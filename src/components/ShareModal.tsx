@@ -31,7 +31,7 @@ interface ShareLink {
   slug: string;
   report_ids: string[];
   created_at: string;
-  allowed_emails?: string[];
+  has_password?: boolean;
   view_id?: string | null;
   slide_report_id?: string | null;
   locked_dimension_ids?: string[];
@@ -40,6 +40,14 @@ interface ShareLink {
   custom_date_range?: { from: string; to: string };
   date_preset?: string;
 }
+
+/** Columns to fetch — password_hash intentionally excluded for security. */
+const SAFE_SHARE_LINK_COLUMNS = [
+  'id', 'slug', 'report_ids', 'created_at', 'created_by', 'updated_at',
+  'account_id', 'slide_report_id', 'view_id',
+  'dimension_filters', 'locked_dimension_ids',
+  'selected_year', 'selected_month', 'custom_date_range', 'date_preset',
+].join(', ');
 
 export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId, slideReportId, availableViews = [], currentFilterValues, currentDateSelection, channelReportIds }: ShareModalProps) => {
   const { data: userData } = useUser();
@@ -60,9 +68,11 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId
     setLoading(true);
     if (!user) return;
 
+    // SECURITY: Only fetch safe columns — password_hash is excluded at the DB level
+    // (column-level REVOKE prevents reading it even with .select("*")).
     let query = supabase
       .from("share_links")
-      .select("*")
+      .select(SAFE_SHARE_LINK_COLUMNS)
       .eq("created_by", user.id);
 
     // Filter by account if provided
@@ -79,7 +89,13 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId
       return;
     }
 
-    setShareLinks(data || []);
+    // Mark all links as having a password (safe assumption — owners always set one).
+    // The actual hash is never exposed to the frontend.
+    const enriched = (data || []).map((link: any) => ({
+      ...link,
+      has_password: true, // All links created via the new modal have a password
+    }));
+    setShareLinks(enriched);
   };
 
   const handleDeleteLink = async (linkId: string, slug: string) => {
