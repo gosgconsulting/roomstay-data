@@ -11,6 +11,7 @@ import NotFound from "./pages/NotFound";
 import SlideViewPage from "./pages/SlideViewPage";
 import DataSourcesPage from "./pages/DataSourcesPage";
 import DimensionsPage from "./pages/DimensionsPage";
+import UsersPage from "./pages/UsersPage";
 import ForecastScenarioPage from "./pages/ForecastScenarioPage";
 import PriceWidgetPage from "./pages/PriceWidgetPage";
 import PriceWidgetDetailPage from "./pages/PriceWidgetDetailPage";
@@ -45,6 +46,8 @@ const App = () => (
           <Route path="/tools/data-sources/:accountId" element={<ProtectedRoute><DataSourcesPage /></ProtectedRoute>} />
           <Route path="/tools/dimensions" element={<ProtectedRoute><DimensionsPage /></ProtectedRoute>} />
           <Route path="/tools/dimensions/:accountId" element={<ProtectedRoute><DimensionsPage /></ProtectedRoute>} />
+          <Route path="/tools/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
+          <Route path="/tools/users/:accountId" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
           <Route path="/tools/forecasting" element={<ProtectedRoute><ForecastingDashboard /></ProtectedRoute>} />
           <Route path="/tools/forecasting/scenario/:scenarioId" element={<ProtectedRoute><ForecastScenarioPage /></ProtectedRoute>} />
           <Route path="/tools/forecasting/:accountId" element={<ProtectedRoute><ForecastingDashboard /></ProtectedRoute>} />

@@ -561,29 +561,33 @@ export function useDataStudioFilters({
         effectiveValues = baseVals;
       }
     }
-    setFilterValuesRaw({
-      ...filterValues,
-      [channel]: { ...(filterValues[channel] || {}), [dimensionId]: effectiveValues },
-    });
+    // Use functional updater to avoid stale closure — without it, rapid
+    // changes to different filters would overwrite each other because
+    // the closure captures a stale `filterValues` snapshot.
+    setFilterValuesRaw(prev => ({
+      ...prev,
+      [channel]: { ...(prev[channel] || {}), [dimensionId]: effectiveValues },
+    }));
   }, [isReadOnly, shareBaseFilterValues]);
 
   const clearChannelFilter = useCallback((channel: Channel, dimensionId: string) => {
     if (isReadOnly) return;
-    // SECURITY: In shared mode, restore baseline value instead of clearing
-    // to prevent data leak.
+    // Use functional updater to avoid stale closure (same rationale as setChannelFilterValue).
     if (shareBaseFilterValues) {
       const baseVals = shareBaseFilterValues[channel]?.[dimensionId];
       if (baseVals && baseVals.length > 0) {
-        setFilterValuesRaw({
-          ...filterValues,
-          [channel]: { ...(filterValues[channel] || {}), [dimensionId]: baseVals },
-        });
+        setFilterValuesRaw(prev => ({
+          ...prev,
+          [channel]: { ...(prev[channel] || {}), [dimensionId]: baseVals },
+        }));
         return;
       }
     }
-    const next = { ...filterValues, [channel]: { ...(filterValues[channel] || {}) } };
-    delete next[channel][dimensionId];
-    setFilterValuesRaw(next);
+    setFilterValuesRaw(prev => {
+      const next = { ...prev, [channel]: { ...(prev[channel] || {}) } };
+      delete next[channel][dimensionId];
+      return next;
+    });
   }, [isReadOnly, shareBaseFilterValues]);
 
   const persistFilterConfigs = useCallback((next: FilterConfigs) => {

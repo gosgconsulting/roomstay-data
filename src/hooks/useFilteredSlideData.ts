@@ -13,7 +13,6 @@ import { buildMultiMonthDateRange, parseSelectedMonths } from '@/lib/monthUtils'
 import {
   filterRawDataRows,
   hasAnyActiveFilters,
-  hasAnyPositiveFilters,
   getChannelsWithFilters,
   buildMetricNameToIdsMap,
   getMetricKeys,
@@ -277,11 +276,6 @@ export function useFilteredSlideData({
     return hasAnyActiveFilters(filterValues);
   }, [filterValues]);
 
-  // Check if any POSITIVE filters are active (used for exclusive filtering rule)
-  const hasPositiveGlobalFilters = useMemo(() => {
-    return hasAnyPositiveFilters(filterValues);
-  }, [filterValues]);
-
   // Get channels with active filters
   const channelsWithFilters = useMemo(() => {
     return getChannelsWithFilters(filterValues);
@@ -324,12 +318,7 @@ export function useFilteredSlideData({
         ? { ...dimensionMap, ...configuredDimensionNames }
         : dimensionMap;
 
-      if (hasPositiveGlobalFilters && !hasChannelFilters) {
-        // ── EXCLUSIVE FILTER PATH ──────────────────────────────────────────────
-        // Exclude this channel completely since another channel is actively filtered with positive selections
-        filteredRawRows[channel] = [];
-        channelTotals[channel] = { ...EMPTY_METRICS };
-      } else if (hasChannelFilters) {
+      if (hasChannelFilters) {
         // ── FILTERED PATH ──────────────────────────────────────────────────────
         if (rawDataRows.length > 0) {
           // Filter rows by dimension values + date range, then aggregate

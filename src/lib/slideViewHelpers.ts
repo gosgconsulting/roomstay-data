@@ -509,6 +509,7 @@ export const buildMetricNameToIdsMap = (
       cost: ['cost', 'spend', 'amount spent', 'total cost', 'ad spend', 'ad cost', 'total spend', 'cost (usd)', 'cost (aud)', 'spend (usd)', 'spend (aud)'],
       revenue: ['revenue', 'conversion value', 'purchase value'],
       bookings: ['bookings', 'conversions', 'conversion'],
+      leads: ['leads', 'lead', 'results', 'lead generation', 'lead gen'],
     };
 
     for (const [standardName, variations] of Object.entries(metricVariations)) {
@@ -621,8 +622,8 @@ export const getMetricKeys = (
 export function aggregateRowsToMetrics(
   rows: Array<{ dimension_values?: Record<string, unknown> } | Record<string, unknown>>,
   dimensionMap: Record<string, string>
-): { impressions: number; clicks: number; cost: number; revenue: number; bookings: number } {
-  const metrics = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+): { impressions: number; clicks: number; cost: number; revenue: number; bookings: number; leads: number } {
+  const metrics = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0, leads: 0 };
   if (rows.length === 0) return metrics;
 
   const nameToIdsMap = buildMetricNameToIdsMap(dimensionMap);
@@ -640,6 +641,7 @@ export function aggregateRowsToMetrics(
   const costKeys = getMetricKeys('cost', nameToIdsMap);
   const revenueKeys = getMetricKeys('revenue', nameToIdsMap);
   const bookingsKeys = getMetricKeys('bookings', nameToIdsMap);
+  const leadsKeys = getMetricKeys('leads', nameToIdsMap);
 
   for (const row of rows) {
     const rowData = ((row as any).dimension_values || row) as Record<string, unknown>;
@@ -648,6 +650,7 @@ export function aggregateRowsToMetrics(
     metrics.cost += getVal(rowData, costKeys);
     metrics.revenue += getVal(rowData, revenueKeys);
     metrics.bookings += getVal(rowData, bookingsKeys);
+    metrics.leads += getVal(rowData, leadsKeys);
   }
 
   return metrics;

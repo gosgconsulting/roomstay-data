@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useUser } from "@/lib/auth";
-import { Loader2, Plus, X } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 import { isChannelBasedFormat } from "@/lib/filterFormatUtils";
 import { formatDateToLocalIso } from "@/lib/monthUtils";
 import {
@@ -33,7 +33,7 @@ interface CreateShareLinkModalProps {
     selected_month?: string;
     custom_date_range?: { from: string; to: string };
     date_preset?: string;
-    allowed_emails?: string[];
+    password_hash?: string;
   } | null;
   accountId?: string;
   slideReportId?: string | null;
@@ -52,10 +52,6 @@ type DimensionFilters = Record<string, Record<string, string[]>>;
 
 const CHANNELS: Channel[] = ['metasearch', 'sem', 'social'];
 
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-}
-
 export const CreateShareLinkModal = ({
   open,
   onOpenChange,
@@ -69,8 +65,8 @@ export const CreateShareLinkModal = ({
   channelReportIds,
 }: CreateShareLinkModalProps) => {
   const [slug, setSlug] = useState("");
-  const [emailInput, setEmailInput] = useState("");
-  const [allowedEmails, setAllowedEmails] = useState<string[]>([]);
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [selectedViewId, setSelectedViewId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -87,45 +83,19 @@ export const CreateShareLinkModal = ({
     if (!open) return;
     if (editingLink) {
       setSlug(editingLink.slug);
-      setEmailInput("");
-      setAllowedEmails(editingLink.allowed_emails ?? []);
+      setPassword(""); // Never pre-fill password for security
+      setShowPassword(false);
       setSelectedViewId(editingLink.view_id ?? null);
     } else {
       setSlug("");
-      setEmailInput("");
-      setAllowedEmails([]);
+      setPassword("");
+      setShowPassword(false);
       setSelectedViewId(null);
     }
   }, [open, editingLink]);
 
   const handleSlugChange = (value: string) => {
     if (/^[a-z0-9-]*$/.test(value)) setSlug(value);
-  };
-
-  const handleAddEmail = () => {
-    const trimmed = emailInput.trim().toLowerCase();
-    if (!trimmed) return;
-    if (!isValidEmail(trimmed)) {
-      toast({ title: "Invalid email", description: "Please enter a valid email address.", variant: "destructive" });
-      return;
-    }
-    if (allowedEmails.includes(trimmed)) {
-      toast({ title: "Already added", description: `${trimmed} is already in the list.`, variant: "destructive" });
-      return;
-    }
-    setAllowedEmails(prev => [...prev, trimmed]);
-    setEmailInput("");
-  };
-
-  const handleRemoveEmail = (email: string) => {
-    setAllowedEmails(prev => prev.filter(e => e !== email));
-  };
-
-  const handleEmailKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      handleAddEmail();
-    }
   };
 
   // Build filters to store — prefer saved view filters when a view is selected
@@ -186,6 +156,16 @@ export const CreateShareLinkModal = ({
     }
   };
 
+  /** Hash the password via the share-link-auth edge function (bcrypt, server-side). */
+  const hashPassword = async (plaintext: string): Promise<string> => {
+    const { data, error } = await supabase.functions.invoke('share-link-auth', {
+      body: { action: 'hash', password: plaintext },
+    });
+    if (error) throw error;
+    if (!data?.hash) throw new Error('Failed to hash password');
+    return data.hash as string;
+  };
+
   const handleSubmit = async () => {
     if (!user) return;
 
@@ -198,10 +178,21 @@ export const CreateShareLinkModal = ({
       });
       return;
     }
-    if (allowedEmails.length === 0) {
+
+    // Password is required for new links. For edits, empty = keep existing password.
+    if (!editingLink && !password.trim()) {
       toast({
-        title: "At least one email required",
-        description: "Add at least one email address that can access this link.",
+        title: "Password required",
+        description: "Enter a password to protect this share link.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password.trim() && password.trim().length < 4) {
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 4 characters.",
         variant: "destructive",
       });
       return;
@@ -221,10 +212,16 @@ export const CreateShareLinkModal = ({
         account_id: accountId,
         locked_dimension_ids: lockedDimensionIds,
         view_id: selectedViewId ?? null,
-        allowed_emails: allowedEmails,
-        // Clear any legacy password hash so the email gate is used
-        password_hash: "",
+        // Clear legacy email allowlist — password-only access now
+        allowed_emails: [],
       };
+
+      // Hash the password if provided (bcrypt via edge function)
+      if (password.trim()) {
+        const hash = await hashPassword(password.trim());
+        baseData.password_hash = hash;
+      }
+      // If editing and no password entered, don't overwrite the existing hash
 
       if (currentDateSelection) {
         baseData.selected_year = currentDateSelection.selectedYear;
@@ -288,6 +285,8 @@ export const CreateShareLinkModal = ({
     }
   };
 
+  const hasExistingPassword = !!(editingLink?.password_hash);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
@@ -296,7 +295,7 @@ export const CreateShareLinkModal = ({
             {editingLink ? "Edit Share Link" : "Create Share Link"}
           </DialogTitle>
           <DialogDescription>
-            Configure an email-restricted link to share this report.
+            Configure a password-protected link to share this report.
           </DialogDescription>
         </DialogHeader>
 
@@ -320,44 +319,33 @@ export const CreateShareLinkModal = ({
             </p>
           </div>
 
-          {/* Email allowlist */}
+          {/* Password */}
           <div className="space-y-2">
-            <Label>Allowed Emails</Label>
-            <div className="flex gap-2">
+            <Label htmlFor="share-password">Password</Label>
+            <div className="relative">
               <Input
-                type="email"
-                placeholder="name@example.com"
-                value={emailInput}
-                onChange={(e) => setEmailInput(e.target.value)}
-                onKeyDown={handleEmailKeyDown}
-                className="flex-1"
+                id="share-password"
+                type={showPassword ? "text" : "password"}
+                placeholder={editingLink && hasExistingPassword ? "Leave empty to keep current password" : "Enter a password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                className="pr-10"
               />
-              <Button type="button" variant="outline" size="icon" onClick={handleAddEmail}>
-                <Plus className="h-4 w-4" />
-              </Button>
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Only these email addresses will be able to access the link.
+              {editingLink && hasExistingPassword
+                ? "Leave empty to keep the existing password. Enter a new password to change it."
+                : "Anyone with this password can access the shared report."}
             </p>
-            {allowedEmails.length > 0 && (
-              <div className="flex flex-col gap-1 mt-1">
-                {allowedEmails.map((email) => (
-                  <div
-                    key={email}
-                    className="flex items-center justify-between rounded-md border px-3 py-1.5 text-sm bg-muted/40"
-                  >
-                    <span className="truncate">{email}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveEmail(email)}
-                      className="ml-2 text-muted-foreground hover:text-destructive shrink-0"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
 
           {/* View selection */}
@@ -406,12 +394,12 @@ export const CreateShareLinkModal = ({
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {editingLink ? "Updating…" : "Creating…"}
+                {editingLink ? "Updating..." : "Creating..."}
               </>
             ) : editingLink ? (
               "Update Link"
             ) : (
-              "Next →"
+              "Create Link"
             )}
           </Button>
         </div>

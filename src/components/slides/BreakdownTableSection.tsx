@@ -15,12 +15,12 @@
  * @module BreakdownTableSection
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   calculateDerivedMetrics,
@@ -100,6 +100,7 @@ type BreakdownAggRow = {
   cost: number;
   revenue: number;
   bookings: number;
+  leads: number;
   commissionsPaid?: number;
   commissionsFree?: number;
 };
@@ -269,6 +270,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                 cost: 0,
                 revenue: 0,
                 bookings: 0,
+                leads: 0,
                 ...(isPerformanceModelView ? { commissionsPaid: 0, commissionsFree: 0 } : {}),
               };
             }
@@ -278,6 +280,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
             allBreakdowns[groupValue].cost += agg.cost;
             allBreakdowns[groupValue].revenue += agg.revenue;
             allBreakdowns[groupValue].bookings += agg.bookings;
+            allBreakdowns[groupValue].leads += agg.leads;
             if (isPerformanceModelView) {
               const ch = channel as 'metasearch' | 'sem' | 'social';
               const split = computePerformanceModelCommissionSplit(ch, groupRows, dimensionMap);
@@ -306,6 +309,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                 cost: 0,
                 revenue: 0,
                 bookings: 0,
+                leads: 0,
               };
             }
             allBreakdowns[groupValue].impressions += row.impressions || 0;
@@ -313,6 +317,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
             allBreakdowns[groupValue].cost += row.cost || 0;
             allBreakdowns[groupValue].revenue += row.revenue || 0;
             allBreakdowns[groupValue].bookings += row.bookings || 0;
+            allBreakdowns[groupValue].leads += row.leads || 0;
           });
         }
       }
@@ -327,11 +332,12 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
             cost: Number(data.cost) || 0,
             revenue: Number(data.revenue) || 0,
             bookings: Number(data.bookings) || 0,
+            leads: Number(data.leads) || 0,
           };
 
           return {
             groupValue,
-            metrics: mergePerformanceModelGrossProfit(cleanData, data, isPerformanceModelView),
+            metrics: { ...mergePerformanceModelGrossProfit(cleanData, data, isPerformanceModelView), leads: cleanData.leads },
             rawData: cleanData,
           };
         });
@@ -366,7 +372,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
       const groupByName = groupByDim?.name || groupBy;
       const groupByDimId = groupByDim?.id || groupBy;
 
-      const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number }> = {};
+      const allBreakdowns: Record<string, { impressions: number; clicks: number; cost: number; revenue: number; bookings: number; leads: number }> = {};
 
       const channelsToCheck =
         selectedChannel && selectedChannel !== 'overview'
@@ -405,7 +411,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
 
         Object.entries(groupedRows).forEach(([groupValue, groupRows]) => {
           if (!allBreakdowns[groupValue]) {
-            allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 };
+            allBreakdowns[groupValue] = { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0, leads: 0 };
           }
           const agg = aggregateRowsToMetrics(groupRows, dimensionMap);
           allBreakdowns[groupValue].impressions += agg.impressions;
@@ -413,18 +419,22 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
           allBreakdowns[groupValue].cost += agg.cost;
           allBreakdowns[groupValue].revenue += agg.revenue;
           allBreakdowns[groupValue].bookings += agg.bookings;
+          allBreakdowns[groupValue].leads += agg.leads;
         });
       }
 
-      const result: Record<string, ReturnType<typeof calculateDerivedMetrics>> = {};
+      const result: Record<string, ReturnType<typeof calculateDerivedMetrics> & { leads: number }> = {};
       Object.entries(allBreakdowns).forEach(([groupValue, data]) => {
-        result[groupValue] = calculateDerivedMetrics({
-          impressions: Number(data.impressions) || 0,
-          clicks: Number(data.clicks) || 0,
-          cost: Number(data.cost) || 0,
-          revenue: Number(data.revenue) || 0,
-          bookings: Number(data.bookings) || 0,
-        });
+        result[groupValue] = {
+          ...calculateDerivedMetrics({
+            impressions: Number(data.impressions) || 0,
+            clicks: Number(data.clicks) || 0,
+            cost: Number(data.cost) || 0,
+            revenue: Number(data.revenue) || 0,
+            bookings: Number(data.bookings) || 0,
+          }),
+          leads: Number(data.leads) || 0,
+        };
       });
       return result;
     }, [showComparison, comparisonDateRange, pivotData, groupBy, availableDimensions, selectedChannel, filterValues, configuredDimensionNames]);
@@ -506,6 +516,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
               cost: 0,
               revenue: 0,
               bookings: 0,
+              leads: 0,
               ...(isPerformanceModelView ? { commissionsPaid: 0, commissionsFree: 0 } : {}),
             };
           }
@@ -518,6 +529,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
             allBreakdowns[breakdownValue].cost += getMetricValueFromRow(rowData, 'cost', nameToIdsMap);
             allBreakdowns[breakdownValue].revenue += getMetricValueFromRow(rowData, 'revenue', nameToIdsMap);
             allBreakdowns[breakdownValue].bookings += getMetricValueFromRow(rowData, 'bookings', nameToIdsMap);
+            allBreakdowns[breakdownValue].leads += getMetricValueFromRow(rowData, 'leads', nameToIdsMap);
           });
 
           if (isPerformanceModelView) {
@@ -536,17 +548,20 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
         .sort(([, a], [, b]) => b.revenue - a.revenue)
         .map(([value, data]) => ({
           value,
-          metrics: mergePerformanceModelGrossProfit(
-            {
-              impressions: data.impressions,
-              clicks: data.clicks,
-              cost: data.cost,
-              revenue: data.revenue,
-              bookings: data.bookings,
-            },
-            data,
-            isPerformanceModelView
-          ),
+          metrics: {
+            ...mergePerformanceModelGrossProfit(
+              {
+                impressions: data.impressions,
+                clicks: data.clicks,
+                cost: data.cost,
+                revenue: data.revenue,
+                bookings: data.bookings,
+              },
+              data,
+              isPerformanceModelView
+            ),
+            leads: data.leads,
+          },
         }));
     }, [
       expandedRow,
@@ -570,8 +585,9 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
         cost: acc.cost + (group.rawData?.cost || group.metrics.cost || 0),
         revenue: acc.revenue + (group.rawData?.revenue || group.metrics.revenue || 0),
         bookings: acc.bookings + (group.rawData?.bookings || group.metrics.bookings || 0),
+        leads: acc.leads + (group.rawData?.leads || group.metrics.leads || 0),
       }),
-      { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
+      { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0, leads: 0 }
     );
     const totalMetrics = calculateDerivedMetrics(totals);
     const totalGrossProfit = isPerformanceModelView
@@ -588,16 +604,57 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
           cost: acc.cost + m.cost,
           revenue: acc.revenue + m.revenue,
           bookings: acc.bookings + m.bookings,
+          leads: acc.leads + (m.leads || 0),
         }),
-        { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0 }
+        { impressions: 0, clicks: 0, cost: 0, revenue: 0, bookings: 0, leads: 0 }
       );
-      return calculateDerivedMetrics(base);
+      return { ...calculateDerivedMetrics(base), leads: base.leads };
     }, [showComparison, comparisonGroupedMap]);
 
+    const isSocial = selectedChannel === 'social';
     const groupByDim = availableDimensions.find((d) => d.id === groupBy);
     const breakdownByDim = availableDimensions.find((d) => d.id === breakdownBy);
     const groupByOptions = availableDimensions;
     const breakdownByOptions = availableDimensions.filter((d) => d.id !== groupBy);
+
+    // ── Sorting ──────────────────────────────────────────────────────────────────
+    type SortKey = 'impressions' | 'clicks' | 'ctr' | 'bookings' | 'leads' | 'conversionRate' | 'cpc' | 'cost' | 'aov' | 'revenue' | 'roas' | 'costOfSale' | 'grossProfit';
+    const [sortKey, setSortKey] = useState<SortKey | null>(null);
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+    const handleSort = (key: SortKey) => {
+      if (sortKey === key) {
+        setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+      } else {
+        setSortKey(key);
+        setSortDir('desc');
+      }
+    };
+
+    const sortedGroupedData = useMemo(() => {
+      if (!sortKey) return groupedData;
+      return [...groupedData].sort((a, b) => {
+        const aVal = (a.metrics as any)[sortKey] ?? 0;
+        const bVal = (b.metrics as any)[sortKey] ?? 0;
+        return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
+      });
+    }, [groupedData, sortKey, sortDir]);
+
+    const SortIcon = ({ k }: { k: SortKey }) => {
+      if (sortKey !== k) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-40 inline-block" />;
+      return sortDir === 'desc'
+        ? <ArrowDown className="ml-1 h-3 w-3 text-primary inline-block" />
+        : <ArrowUp className="ml-1 h-3 w-3 text-primary inline-block" />;
+    };
+
+    const SortableHead = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
+      <TableHead
+        className={cn('text-right cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap', className)}
+        onClick={() => handleSort(k)}
+      >
+        {label}<SortIcon k={k} />
+      </TableHead>
+    );
 
     const renderMetricCell = (currentDisplay: string, comparisonValue?: number, currentValue?: number, isCostMetric?: boolean) => {
       const hasComp = showComparison && comparisonValue !== undefined && currentValue !== undefined;
@@ -696,22 +753,23 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
               <TableRow>
                 <TableHead className="w-8"></TableHead>
                 <TableHead>{groupByDim?.name || 'Group'}</TableHead>
-                <TableHead className="text-right">Impressions</TableHead>
-                <TableHead className="text-right">Clicks</TableHead>
-                <TableHead className="text-right">CTR</TableHead>
-                <TableHead className="text-right">Bookings</TableHead>
-                <TableHead className="text-right">Conv. Rate</TableHead>
-                <TableHead className="text-right">CPC</TableHead>
-                <TableHead className="text-right">Cost</TableHead>
-                <TableHead className="text-right">AOV</TableHead>
-                <TableHead className="text-right">Revenue</TableHead>
-                <TableHead className="text-right">ROAS</TableHead>
-                <TableHead className="text-right">Cost of Sale</TableHead>
-                {isPerformanceModelView && <TableHead className="text-right">Gross Profit</TableHead>}
+                <SortableHead k="impressions" label="Impressions" />
+                <SortableHead k="clicks" label="Clicks" />
+                <SortableHead k="ctr" label="CTR" />
+                <SortableHead k="bookings" label="Bookings" />
+                {isSocial && <SortableHead k="leads" label="Leads" />}
+                <SortableHead k="conversionRate" label="Conv. Rate" />
+                <SortableHead k="cpc" label="CPC" />
+                <SortableHead k="cost" label="Cost" />
+                <SortableHead k="aov" label="AOV" />
+                <SortableHead k="revenue" label="Revenue" />
+                <SortableHead k="roas" label="ROAS" />
+                <SortableHead k="costOfSale" label="Cost of Sale" />
+                {isPerformanceModelView && <SortableHead k="grossProfit" label="Gross Profit" />}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {groupedData.map((group) => (
+              {sortedGroupedData.map((group) => (
                 <React.Fragment key={group.groupValue}>
                   <TableRow
                     className="hover:bg-muted/50 cursor-pointer"
@@ -736,6 +794,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                           <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.clicks), comp?.clicks, group.metrics.clicks)}</TableCell>
                           <TableCell className="text-right">{renderMetricCell(`${group.metrics.ctr.toFixed(2)}%`, comp?.ctr, group.metrics.ctr)}</TableCell>
                           <TableCell className="text-right">{renderMetricCell(group.metrics.bookings.toFixed(2), comp?.bookings, group.metrics.bookings)}</TableCell>
+                          {isSocial && <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.leads), comp?.leads, group.metrics.leads)}</TableCell>}
                           <TableCell className="text-right">{renderMetricCell(`${group.metrics.conversionRate.toFixed(2)}%`, comp?.conversionRate, group.metrics.conversionRate)}</TableCell>
                           <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.cpc, 'currency', displayCurrency, currencyMaxFractionDigitsForCpc(group.metrics.cpc)), comp?.cpc, group.metrics.cpc, true)}</TableCell>
                           <TableCell className="text-right">{renderMetricCell(formatNumber(group.metrics.cost, 'currency', displayCurrency), comp?.cost, group.metrics.cost, true)}</TableCell>
@@ -761,6 +820,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                           <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.clicks)}</TableCell>
                           <TableCell className="text-right text-muted-foreground">{item.metrics.ctr.toFixed(2)}%</TableCell>
                           <TableCell className="text-right text-muted-foreground">{item.metrics.bookings.toFixed(2)}</TableCell>
+                          {isSocial && <TableCell className="text-right text-muted-foreground">{formatNumber(item.metrics.leads)}</TableCell>}
                           <TableCell className="text-right text-muted-foreground">{item.metrics.conversionRate.toFixed(2)}%</TableCell>
                           <TableCell className="text-right text-muted-foreground">
                             {formatNumber(item.metrics.cpc, 'currency', displayCurrency, currencyMaxFractionDigitsForCpc(item.metrics.cpc))}
@@ -793,6 +853,7 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
                 <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.clicks), compTotalMetrics?.clicks, totalMetrics.clicks)}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(`${totalMetrics.ctr.toFixed(2)}%`, compTotalMetrics?.ctr, totalMetrics.ctr)}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(totalMetrics.bookings.toFixed(2), compTotalMetrics?.bookings, totalMetrics.bookings)}</TableCell>
+                {isSocial && <TableCell className="text-right">{renderMetricCell(formatNumber(totals.leads), compTotalMetrics?.leads, totals.leads)}</TableCell>}
                 <TableCell className="text-right">{renderMetricCell(`${totalMetrics.conversionRate.toFixed(2)}%`, compTotalMetrics?.conversionRate, totalMetrics.conversionRate)}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.cpc, 'currency', displayCurrency, currencyMaxFractionDigitsForCpc(totalMetrics.cpc)), compTotalMetrics?.cpc, totalMetrics.cpc, true)}</TableCell>
                 <TableCell className="text-right">{renderMetricCell(formatNumber(totalMetrics.cost, 'currency', displayCurrency), compTotalMetrics?.cost, totalMetrics.cost, true)}</TableCell>

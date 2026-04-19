@@ -12,6 +12,7 @@ import {
   LineChart,
   BookmarkPlus,
   Trash2,
+  UserCog,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ interface ReportSidebarProps {
   onTabChange: (tab: string) => void;
   onDataSources: () => void;
   onDimensions: () => void;
+  onUsers: () => void;
   reportName?: string;
   /** View selector (above Reports) */
   selectedViewId: string | null;
@@ -50,6 +52,8 @@ interface ReportSidebarProps {
   setIsSaveViewDialogOpen: (open: boolean) => void;
   setIsSaveOrUpdateViewDialogOpen: (open: boolean) => void;
   isReadOnlyMode: boolean;
+  /** True for non-owner users with restricted view access — hides admin UI */
+  isRestrictedUser?: boolean;
   userLabel?: string;
   onSignOut?: () => Promise<void> | void;
 }
@@ -59,6 +63,7 @@ export function ReportSidebar({
   onTabChange,
   onDataSources,
   onDimensions,
+  onUsers,
   reportName,
   selectedViewId,
   setSelectedViewId,
@@ -68,6 +73,7 @@ export function ReportSidebar({
   setIsSaveViewDialogOpen,
   setIsSaveOrUpdateViewDialogOpen,
   isReadOnlyMode,
+  isRestrictedUser = false,
   userLabel,
   onSignOut,
 }: ReportSidebarProps) {
@@ -86,7 +92,8 @@ export function ReportSidebar({
       </div>
 
       {/* View: [dropdown] save icon — above Reports */}
-      {!isReadOnlyMode && (
+      {/* Show view selector for owners (non-read-only) AND restricted/viewer-mode users */}
+      {(!isReadOnlyMode || isRestrictedUser) && (
         <div className="px-2 py-3 border-b space-y-2">
           <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             View
@@ -107,7 +114,7 @@ export function ReportSidebar({
                   );
                 }
               }}
-              disabled={isReadOnlyMode}
+              disabled={isReadOnlyMode || isRestrictedUser}
             >
               <SelectTrigger className="h-8 flex-1 min-w-0 text-xs bg-background">
                 <SelectValue />
@@ -120,7 +127,7 @@ export function ReportSidebar({
                 ))}
               </SelectContent>
             </Select>
-            {!isReadOnlyMode && (
+            {!isReadOnlyMode && !isRestrictedUser && (
               <>
                 <Button
                   variant="ghost"
@@ -176,64 +183,74 @@ export function ReportSidebar({
         ))}
       </nav>
 
-      {/* Bottom actions */}
-      {!isReadOnlyMode && (
+      {/* Bottom actions — show for owners AND restricted/viewer-mode users (sign out) */}
+      {(!isReadOnlyMode || isRestrictedUser) && (
         <div className="px-2 py-3 border-t space-y-0.5">
-          <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-            Manage
-          </p>
-          <button
-            onClick={onDataSources}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-left"
-          >
-            <Database className="h-4 w-4" />
-            Data Sources
-          </button>
-          <button
-            onClick={onDimensions}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-left"
-          >
-            <Layers className="h-4 w-4" />
-            Dimensions
-          </button>
+          {!isRestrictedUser && (
+            <>
+              <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                Manage
+              </p>
+              <button
+                onClick={onDataSources}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-left"
+              >
+                <Database className="h-4 w-4" />
+                Data Sources
+              </button>
+              <button
+                onClick={onDimensions}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-left"
+              >
+                <Layers className="h-4 w-4" />
+                Dimensions
+              </button>
+              <button
+                onClick={onUsers}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-left"
+              >
+                <UserCog className="h-4 w-4" />
+                Users
+              </button>
 
-          <p className="mt-3 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-            DEV
-          </p>
-          <button
-            onClick={() => onTabChange("budget")}
-            className={cn(
-              "w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors text-left",
-              selectedTab === "budget"
-                ? "bg-primary/10 text-primary font-semibold"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            )}
-          >
-            <DollarSign className="h-4 w-4" />
-            Budget
-          </button>
-          {/* DEV items are intentionally disabled until these tools are ready. */}
-          <button
-            disabled
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground/70 cursor-not-allowed text-left"
-          >
-            <BookOpen className="h-4 w-4" />
-            Booking
-          </button>
-          <button
-            disabled
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground/70 cursor-not-allowed text-left"
-          >
-            <Tag className="h-4 w-4" />
-            Prie check
-          </button>
-          <button
-            disabled
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground/70 cursor-not-allowed text-left"
-          >
-            <LineChart className="h-4 w-4" />
-            Widget
-          </button>
+              <p className="mt-3 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                DEV
+              </p>
+              <button
+                onClick={() => onTabChange("budget")}
+                className={cn(
+                  "w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors text-left",
+                  selectedTab === "budget"
+                    ? "bg-primary/10 text-primary font-semibold"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                )}
+              >
+                <DollarSign className="h-4 w-4" />
+                Budget
+              </button>
+              <button
+                disabled
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground/70 cursor-not-allowed text-left"
+              >
+                <BookOpen className="h-4 w-4" />
+                Booking
+              </button>
+              <button
+                disabled
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground/70 cursor-not-allowed text-left"
+              >
+                <Tag className="h-4 w-4" />
+                Prie check
+              </button>
+              <button
+                disabled
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground/70 cursor-not-allowed text-left"
+              >
+                <LineChart className="h-4 w-4" />
+                Widget
+              </button>
+            </>
+          )}
           {onSignOut && (
             <button
               onClick={() => void onSignOut()}

@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { Settings2 } from "lucide-react";
+import { Settings2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { SlideReport } from "@/types/slideReports";
 import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
 import { cn } from "@/lib/utils";
@@ -96,6 +96,36 @@ export function OverviewTab({
 
   // Show skeletons whenever any loading is in flight — no blur/stale-dim.
   const isLoading = isSlideReportsLoading || isLoadingData;
+
+  // ── Sorting ──────────────────────────────────────────────────────────────────
+  type SortKey = 'impressions' | 'clicks' | 'ctr' | 'bookings' | 'conversionRate' | 'cpc' | 'cost' | 'revenue' | 'roas' | 'costOfSale';
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortKey(key);
+      setSortDir('desc');
+    }
+  };
+
+  const SortIcon = ({ k }: { k: SortKey }) => {
+    if (sortKey !== k) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-40 inline-block" />;
+    return sortDir === 'desc'
+      ? <ArrowDown className="ml-1 h-3 w-3 text-primary inline-block" />
+      : <ArrowUp className="ml-1 h-3 w-3 text-primary inline-block" />;
+  };
+
+  const SortableHead = ({ k, label }: { k: SortKey; label: string }) => (
+    <TableHead
+      className="text-right cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap"
+      onClick={() => handleSort(k)}
+    >
+      {label}<SortIcon k={k} />
+    </TableHead>
+  );
 
   return (
     <div className="space-y-6">
@@ -235,16 +265,16 @@ export function OverviewTab({
                 <TableHeader>
                   <TableRow>
                     <TableHead>Report</TableHead>
-                    <TableHead className="text-right">Impressions</TableHead>
-                    <TableHead className="text-right">Clicks</TableHead>
-                    <TableHead className="text-right">CTR</TableHead>
-                    <TableHead className="text-right">Bookings</TableHead>
-                    <TableHead className="text-right">Conv. Rate</TableHead>
-                    <TableHead className="text-right">CPC</TableHead>
-                    <TableHead className="text-right">Cost</TableHead>
-                    <TableHead className="text-right">Revenue</TableHead>
-                    <TableHead className="text-right">ROAS</TableHead>
-                    <TableHead className="text-right">Cost of Sale</TableHead>
+                    <SortableHead k="impressions" label="Impressions" />
+                    <SortableHead k="clicks" label="Clicks" />
+                    <SortableHead k="ctr" label="CTR" />
+                    <SortableHead k="bookings" label="Bookings" />
+                    <SortableHead k="conversionRate" label="Conv. Rate" />
+                    <SortableHead k="cpc" label="CPC" />
+                    <SortableHead k="cost" label="Cost" />
+                    <SortableHead k="revenue" label="Revenue" />
+                    <SortableHead k="roas" label="ROAS" />
+                    <SortableHead k="costOfSale" label="Cost of Sale" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -263,9 +293,16 @@ export function OverviewTab({
                         ...derived,
                       };
                     });
-                    const rowsWithData = rows.filter(row =>
+                    const rowsFiltered = rows.filter(row =>
                       row.impressions > 0 || row.clicks > 0 || row.cost > 0 || row.revenue > 0 || row.bookings > 0
                     );
+                    const rowsWithData = sortKey
+                      ? [...rowsFiltered].sort((a, b) => {
+                          const aVal = (a as any)[sortKey] ?? 0;
+                          const bVal = (b as any)[sortKey] ?? 0;
+                          return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
+                        })
+                      : rowsFiltered;
 
                     const totals = rowsWithData.reduce((acc, row) => ({
                       impressions: acc.impressions + row.impressions,
