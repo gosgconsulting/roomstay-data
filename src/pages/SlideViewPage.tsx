@@ -1184,8 +1184,10 @@ export default function SlideViewPage() {
   useEffect(() => {
     // Skip persistence until the slide report has loaded.
     if (!slideReportId || isSlideReportsLoading) return;
-    // Skip persistence for anonymous users or public share studio viewers.
+    // Skip persistence for anonymous users, public share studio viewers,
+    // or non-owner users (granted via user_account_access — they can't update the report).
     if (!user || isPublicShareStudio) return;
+    if (allowedViewIds !== null) return; // restricted user — skip persistence
     // Skip the very first run after this report loads (that run reflects restored values, not user changes).
     if (uiPersistSkippedForRef.current !== slideReportId) {
       uiPersistSkippedForRef.current = slideReportId;
