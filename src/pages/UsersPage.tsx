@@ -5,7 +5,7 @@ import { useUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, ShieldCheck, User2, Plus, X, Loader2 } from "lucide-react";
+import { ArrowLeft, ShieldCheck, User2, Plus, X, Loader2, Check } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -27,17 +27,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface UserProfile {
   id: string;
   email: string;
   role: string;
   accountAccess: Array<{ id: string; name: string }>;
+  viewAccess: Array<{ id: string; name: string }>;
 }
 
 interface Account {
   id: string;
   name: string;
+}
+
+interface View {
+  id: string;
+  name: string;
+  account_id: string | null;
 }
 
 export default function UsersPage() {
@@ -49,6 +62,7 @@ export default function UsersPage() {
 
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [views, setViews] = useState<View[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [grantDialogUserId, setGrantDialogUserId] = useState<string | null>(null);
@@ -56,42 +70,56 @@ export default function UsersPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch all profiles
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, email, role")
-        .order("email");
-      if (profilesError) throw profilesError;
+      const [profilesRes, accountsRes, accessRes, viewsRes, viewAccessRes] = await Promise.all([
+        supabase.from("profiles").select("id, email, role").order("email"),
+        supabase.from("accounts").select("id, name").order("name"),
+        supabase.from("user_account_access").select("user_id, account_id"),
+        supabase.from("views").select("id, name, account_id").not("account_id", "is", null).order("name"),
+        supabase.from("user_view_access").select("user_id, view_id"),
+      ]);
 
-      // Fetch all accounts
-      const { data: accountsData, error: accountsError } = await supabase
-        .from("accounts")
-        .select("id, name")
-        .order("name");
-      if (accountsError) throw accountsError;
-      setAccounts(accountsData || []);
+      if (profilesRes.error) throw profilesRes.error;
+      if (accountsRes.error) throw accountsRes.error;
+      if (accessRes.error) throw accessRes.error;
+      if (viewsRes.error) throw viewsRes.error;
+      if (viewAccessRes.error) throw viewAccessRes.error;
 
-      // Fetch all user_account_access rows
-      const { data: accessRows, error: accessError } = await supabase
-        .from("user_account_access")
-        .select("user_id, account_id");
-      if (accessError) throw accessError;
+      setAccounts(accountsRes.data || []);
 
-      // Build user list with their access
-      const accountMap = Object.fromEntries((accountsData || []).map((a) => [a.id, a.name]));
+      // Deduplicate views by name (keep first occurrence per unique name)
+      const seenNames = new Set<string>();
+      const uniqueViews = (viewsRes.data || []).filter((v) => {
+        if (seenNames.has(v.name)) return false;
+        seenNames.add(v.name);
+        return true;
+      });
+      setViews(uniqueViews);
+
+      const accountMap = Object.fromEntries((accountsRes.data || []).map((a) => [a.id, a.name]));
+      const viewMap = Object.fromEntries(uniqueViews.map((v) => [v.id, v.name]));
+
       const accessByUser: Record<string, Array<{ id: string; name: string }>> = {};
-      for (const row of accessRows || []) {
+      for (const row of accessRes.data || []) {
         if (!accessByUser[row.user_id]) accessByUser[row.user_id] = [];
         if (accountMap[row.account_id]) {
           accessByUser[row.user_id].push({ id: row.account_id, name: accountMap[row.account_id] });
         }
       }
 
-      const enriched: UserProfile[] = (profiles || []).map((p) => ({
+      const viewAccessByUser: Record<string, Array<{ id: string; name: string }>> = {};
+      for (const row of viewAccessRes.data || []) {
+        if (!viewAccessByUser[row.user_id]) viewAccessByUser[row.user_id] = [];
+        if (viewMap[row.view_id]) {
+          viewAccessByUser[row.user_id].push({ id: row.view_id, name: viewMap[row.view_id] });
+        }
+      }
+
+      const enriched: UserProfile[] = (profilesRes.data || []).map((p) => ({
         id: p.id,
         email: p.email,
         role: p.role ?? "user",
         accountAccess: accessByUser[p.id] ?? [],
+        viewAccess: viewAccessByUser[p.id] ?? [],
       }));
 
       setUsers(enriched);
@@ -109,48 +137,39 @@ export default function UsersPage() {
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     setSavingUserId(userId);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ role: newRole })
-      .eq("id", userId);
+    const { error } = await supabase.from("profiles").update({ role: newRole }).eq("id", userId);
     setSavingUserId(null);
     if (error) {
       toast({ title: "Failed to update role", description: error.message, variant: "destructive" });
     } else {
-      setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
-      );
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u)));
       toast({ title: "Role updated" });
     }
   };
 
-  const handleRevokeAccess = async (userId: string, accountId: string) => {
+  const handleRevokeAccess = async (userId: string, accId: string) => {
     const { error } = await supabase
       .from("user_account_access")
       .delete()
       .eq("user_id", userId)
-      .eq("account_id", accountId);
+      .eq("account_id", accId);
     if (error) {
       toast({ title: "Failed to revoke access", description: error.message, variant: "destructive" });
     } else {
       setUsers((prev) =>
         prev.map((u) =>
-          u.id === userId
-            ? { ...u, accountAccess: u.accountAccess.filter((a) => a.id !== accountId) }
-            : u
+          u.id === userId ? { ...u, accountAccess: u.accountAccess.filter((a) => a.id !== accId) } : u
         )
       );
     }
   };
 
-  const handleGrantAccess = async (userId: string, accountId: string) => {
-    const { error } = await supabase
-      .from("user_account_access")
-      .insert({ user_id: userId, account_id: accountId });
+  const handleGrantAccess = async (userId: string, accId: string) => {
+    const { error } = await supabase.from("user_account_access").insert({ user_id: userId, account_id: accId });
     if (error) {
       toast({ title: "Failed to grant access", description: error.message, variant: "destructive" });
     } else {
-      const account = accounts.find((a) => a.id === accountId);
+      const account = accounts.find((a) => a.id === accId);
       if (account) {
         setUsers((prev) =>
           prev.map((u) =>
@@ -162,6 +181,44 @@ export default function UsersPage() {
       }
       setGrantDialogUserId(null);
       toast({ title: "Access granted" });
+    }
+  };
+
+  // Toggle a view on/off for a user
+  const handleToggleView = async (userId: string, viewId: string, currentlyGranted: boolean) => {
+    if (currentlyGranted) {
+      const { error } = await supabase
+        .from("user_view_access")
+        .delete()
+        .eq("user_id", userId)
+        .eq("view_id", viewId);
+      if (error) {
+        toast({ title: "Failed to remove view", description: error.message, variant: "destructive" });
+        return;
+      }
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId
+            ? { ...u, viewAccess: u.viewAccess.filter((v) => v.id !== viewId) }
+            : u
+        )
+      );
+    } else {
+      const { error } = await supabase.from("user_view_access").insert({ user_id: userId, view_id: viewId });
+      if (error) {
+        toast({ title: "Failed to grant view", description: error.message, variant: "destructive" });
+        return;
+      }
+      const view = views.find((v) => v.id === viewId);
+      if (view) {
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.id === userId
+              ? { ...u, viewAccess: [...u.viewAccess, { id: view.id, name: view.name }] }
+              : u
+          )
+        );
+      }
     }
   };
 
@@ -201,10 +258,10 @@ export default function UsersPage() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
-                  <TableHead className="w-[280px]">Account / Email</TableHead>
-                  <TableHead className="w-[160px]">Role</TableHead>
-                  <TableHead>Access</TableHead>
-                  <TableHead className="w-[80px]" />
+                  <TableHead className="w-[240px]">Account / Email</TableHead>
+                  <TableHead className="w-[150px]">Role</TableHead>
+                  <TableHead className="w-[200px]">Access</TableHead>
+                  <TableHead>View</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -274,11 +331,7 @@ export default function UsersPage() {
                             <span className="text-xs text-muted-foreground italic">No access</span>
                           ) : (
                             user.accountAccess.map((acc) => (
-                              <Badge
-                                key={acc.id}
-                                variant="outline"
-                                className="gap-1 pr-1 text-xs"
-                              >
+                              <Badge key={acc.id} variant="outline" className="gap-1 pr-1 text-xs">
                                 {acc.name}
                                 <button
                                   onClick={() => handleRevokeAccess(user.id, acc.id)}
@@ -300,8 +353,88 @@ export default function UsersPage() {
                       )}
                     </TableCell>
 
-                    {/* Empty actions col */}
-                    <TableCell />
+                    {/* View — multi-select popover */}
+                    <TableCell>
+                      {user.role === "admin" ? (
+                        <Badge variant="secondary" className="gap-1">
+                          <ShieldCheck className="h-3 w-3" />
+                          Master
+                        </Badge>
+                      ) : (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <div className="flex flex-wrap gap-1.5 items-center cursor-pointer min-h-[28px]">
+                              {user.viewAccess.length === 0 ? (
+                                <span className="text-xs text-muted-foreground italic hover:text-primary flex items-center gap-1">
+                                  <Plus className="h-3.5 w-3.5" />
+                                  Add view
+                                </span>
+                              ) : (
+                                <>
+                                  {user.viewAccess.map((v) => (
+                                    <Badge key={v.id} variant="outline" className="text-xs">
+                                      {v.name}
+                                    </Badge>
+                                  ))}
+                                  <span className="text-xs text-muted-foreground hover:text-primary">
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-52 p-1" align="start">
+                            <p className="text-xs font-medium text-muted-foreground px-2 py-1.5">
+                              Select views
+                            </p>
+                            {/* Master option */}
+                            <button
+                              className={cn(
+                                "w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted transition-colors",
+                                user.viewAccess.length === 0 && "font-medium"
+                              )}
+                              onClick={() => {
+                                // Clear all views = Master access
+                                Promise.all(
+                                  user.viewAccess.map((v) =>
+                                    supabase
+                                      .from("user_view_access")
+                                      .delete()
+                                      .eq("user_id", user.id)
+                                      .eq("view_id", v.id)
+                                  )
+                                ).then(() => {
+                                  setUsers((prev) =>
+                                    prev.map((u) =>
+                                      u.id === user.id ? { ...u, viewAccess: [] } : u
+                                    )
+                                  );
+                                });
+                              }}
+                            >
+                              <span>Master (all views)</span>
+                              {user.viewAccess.length === 0 && (
+                                <Check className="h-3.5 w-3.5 text-primary" />
+                              )}
+                            </button>
+                            <div className="my-1 border-t" />
+                            {views.map((view) => {
+                              const granted = user.viewAccess.some((v) => v.id === view.id);
+                              return (
+                                <button
+                                  key={view.id}
+                                  className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted transition-colors"
+                                  onClick={() => handleToggleView(user.id, view.id, granted)}
+                                >
+                                  <span>{view.name}</span>
+                                  {granted && <Check className="h-3.5 w-3.5 text-primary" />}
+                                </button>
+                              );
+                            })}
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
