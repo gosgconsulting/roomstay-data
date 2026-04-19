@@ -523,7 +523,10 @@ export default function SlideViewPage() {
 
   const persistFilterConfigs = useCallback(async (next: FilterConfigs) => {
     if (!slideReportId || !user) return;
-    const prevConfig = (slideReport?.configuration || {}) as any;
+    // Use slideReportConfigRef (always the latest config) instead of slideReport?.configuration
+    // to avoid a race where the debounced save wrote newer activeFilterValues but
+    // slideReport?.configuration hasn't refetched yet, causing us to overwrite with stale values.
+    const prevConfig = (slideReportConfigRef.current || {}) as any;
     const configuration = {
       ...prevConfig,
       filterConfigs: {
@@ -533,13 +536,19 @@ export default function SlideViewPage() {
         social: { filterDimensionIds: next.social.filterDimensionIds },
       },
     };
+    // Cancel any pending debounced save to prevent it from overwriting this write
+    // with stale data after the refetch.
+    if (uiSettingsPersistTimerRef.current) {
+      clearTimeout(uiSettingsPersistTimerRef.current);
+      uiSettingsPersistTimerRef.current = null;
+    }
     try {
       await updateSlideReport.mutateAsync({ id: slideReportId, configuration } as any);
       toast({ title: 'Filter settings saved' });
     } catch {
       toast({ title: 'Failed to save filter settings', variant: 'destructive' });
     }
-  }, [slideReportId, slideReport?.configuration, updateSlideReport, user]);
+  }, [slideReportId, updateSlideReport, user]);
 
   const dsFilters = useDataStudioFilters({
     effectivePivotData: effectivePivotData as any,
