@@ -294,6 +294,8 @@ interface FiltersRowProps {
    */
   lockedDimensionIds?: string[];
   allowDataFilterChanges?: boolean;
+  /** True for non-owner users with restricted view access — hides Share + Refresh */
+  isRestrictedUser?: boolean;
 }
 
 export function FiltersRow({
@@ -319,6 +321,7 @@ export function FiltersRow({
   showRefreshButton,
   lockedDimensionIds = [],
   allowDataFilterChanges = false,
+  isRestrictedUser = false,
 }: FiltersRowProps) {
   // Build inline filter entries — only on channel tabs (not overview or other tabs)
   const inlineFilters = useMemo(() => {
@@ -438,7 +441,7 @@ export function FiltersRow({
           <Filter className="h-3.5 w-3.5" />
           Filters
         </Button>
-        {!isReadOnlyMode && (
+        {!isReadOnlyMode && !isRestrictedUser && (
           <Button
             variant="outline"
             size="sm"
@@ -449,7 +452,7 @@ export function FiltersRow({
             Share
           </Button>
         )}
-        {!isReadOnlyMode && showRefreshButton && (
+        {!isReadOnlyMode && !isRestrictedUser && showRefreshButton && (
           <Button
             variant="default"
             size="sm"

@@ -3229,6 +3229,7 @@ export default function SlideViewPage() {
         setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
         setIsSaveOrUpdateViewDialogOpen={setIsSaveOrUpdateViewDialogOpen}
         isReadOnlyMode={isReadOnlyMode}
+        isRestrictedUser={allowedViewIds !== null}
       />
 
       {/* Main column: topbar + content */}
@@ -3285,6 +3286,7 @@ export default function SlideViewPage() {
             showRefreshButton={!slideReport?.configuration?.isChildReport}
             lockedDimensionIds={isPublicShareStudio ? shareLockedDimensionIds : undefined}
             allowDataFilterChanges={viewerMayAdjustDataFilters}
+            isRestrictedUser={allowedViewIds !== null}
           />
         </div>
 
