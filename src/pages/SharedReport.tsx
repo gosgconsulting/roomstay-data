@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Eye, EyeOff } from "lucide-react";
+import { Lock, Eye, EyeOff } from "lucide-react";
 import { isChannelBasedFormat, convertReportToChannelFormat } from "@/lib/filterFormatUtils";
 import { getCurrentMonthToDateRange, DEFAULT_REPORT_DATE_PRESET, formatDateToLocalIso } from "@/lib/monthUtils";
 import { writeShareDateToSession, type ShareDateSelection } from "@/lib/shareSession";
@@ -15,26 +15,24 @@ export default function SharedReport() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   // Authentication state
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [shareLink, setShareLink] = useState<any>(null);
   const [authenticated, setAuthenticated] = useState(false);
-  
+
   // Prevent double-bootstrap when slug/effect deps fire twice
   const bootstrapDoneRef = useRef(false);
 
   const initializeReport = useCallback(async (linkData: any) => {
     // ALL share links now redirect to Data Studio (/shared/:slug/studio)
     // This unifies the data fetching pipeline and enables cross-year dates, multi-year parallel fetch, etc.
-    
+
     const perfStart = performance.now();
     console.log('[SharedReport] Starting initialization for slug:', slug);
-    
+
     try {
       let finalSlideReportId = linkData.slide_report_id;
       let accountId = linkData.account_id;
@@ -75,13 +73,13 @@ export default function SharedReport() {
       } else if (linkData.report_ids && linkData.report_ids.length > 0) {
         // Legacy classic share link with report_ids array but no slide_report_id
         // Auto-create or find the account's Data Studio slide report
-        
+
         // PERFORMANCE: Fetch all report details in parallel (single query with .in())
         const { data: allReports } = await supabase
           .from("reports")
           .select("id, account_id, name, channel")
           .in("id", linkData.report_ids);
-        
+
         // Get account_id from first report if not provided
         if (!accountId && allReports && allReports.length > 0) {
           accountId = allReports[0].account_id;
@@ -101,7 +99,7 @@ export default function SharedReport() {
           } else {
             // Create a new Data Studio slide report for this account
             console.log('[SharedReport] Auto-creating Data Studio slide report for account:', accountId);
-            
+
             // Build report_ids mapping from the fetched reports (already have all data)
             const reportIdsMap: Record<string, string> = {};
             if (allReports) {
@@ -139,7 +137,7 @@ export default function SharedReport() {
           .select("account_id")
           .eq("id", linkData.report_ids[0])
           .maybeSingle();
-        
+
         if (report?.account_id) {
           accountId = report.account_id;
         }
@@ -208,14 +206,14 @@ export default function SharedReport() {
       if (Object.keys(filtersToApply).length > 0) {
         sessionStorage.setItem(`share_filters_${slug}`, JSON.stringify(filtersToApply));
       }
-      
+
       // Store slide_report_id and account_id in sessionStorage
       sessionStorage.setItem(`share_slide_report_id_${slug}`, finalSlideReportId);
       sessionStorage.setItem(`share_account_id_${slug}`, accountId);
-      
+
       // Store locked dimension IDs for Data Studio embed
       sessionStorage.setItem(`share_locked_dimension_ids_${slug}`, JSON.stringify(linkData.locked_dimension_ids || []));
-      
+
       // Always use month-to-date on shared views — identical default to master view.
       // Pinned dates stored on share_links (selected_year, custom_date_range, date_preset)
       // are intentionally ignored so viewers always see current, up-to-date data.
@@ -227,14 +225,14 @@ export default function SharedReport() {
         datePreset: DEFAULT_REPORT_DATE_PRESET,
       };
       writeShareDateToSession(slug, dateSelection);
-      
+
       // Store view_id from share_links if it exists so SlideViewPage can apply the saved view once.
       // Note: ?viewId= query-string sync is intentionally NOT supported — master and shared both
       // use session storage exclusively so the view application path is identical.
       if (hasViewId) {
         sessionStorage.setItem(`share_view_id_${finalSlideReportId}`, linkData.view_id);
       }
-      
+
       // Store share link data for authentication persistence
       const authKey = `share_auth_${slug}`;
       sessionStorage.setItem(authKey, "true");
@@ -288,14 +286,14 @@ export default function SharedReport() {
       if (error || !data) return null;
       return data;
     };
-    
+
     const bootstrap = async () => {
       const bootstrapStart = performance.now();
       console.log('[SharedReport] Bootstrap starting for slug:', slug);
-      
+
       const authKey = `share_auth_${slug}`;
       const storedAuth = sessionStorage.getItem(authKey);
-      
+
       if (storedAuth === "true") {
         // Already authenticated — try to restore from session
         let linkData: any | null = null;
@@ -358,25 +356,23 @@ export default function SharedReport() {
           setShareLink(data);
         }
       }
-      
+
       const bootstrapEnd = performance.now();
       console.log(`[SharedReport] Bootstrap complete in ${(bootstrapEnd - bootstrapStart).toFixed(2)}ms`);
     };
-    
+
     bootstrap();
-    
+
     return () => {
       mounted = false;
     };
   }, [slug, toast, initializeReport]);
 
-  // Open links (no allowed_emails and no password): auto-authenticate.
+  // Open links (no password set): auto-authenticate.
   useEffect(() => {
     if (!slug || authenticated || !shareLink) return;
-    const emails: string[] | null = shareLink.allowed_emails;
-    const hasEmailGate = Array.isArray(emails) && emails.length > 0;
     const hasPasswordGate = shareLink.password_hash != null && shareLink.password_hash !== "";
-    if (hasEmailGate || hasPasswordGate) return;
+    if (hasPasswordGate) return;
     const authKey = `share_auth_${slug}`;
     sessionStorage.setItem(authKey, "true");
     sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
@@ -384,70 +380,30 @@ export default function SharedReport() {
     void initializeReport(shareLink);
   }, [slug, authenticated, shareLink, initializeReport]);
 
-  // If the viewer already has an active Supabase session, auto-authorize if their email is allowed.
-  useEffect(() => {
-    if (!slug || authenticated || !shareLink) return;
-    const allowedEmails: string[] = (shareLink.allowed_emails ?? []).map((e: string) => e.toLowerCase());
-    if (allowedEmails.length === 0) return; // handled by the open-link effect above
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user?.email) return;
-      if (!allowedEmails.includes(session.user.email.toLowerCase())) return;
-      const authKey = `share_auth_${slug}`;
-      sessionStorage.setItem(authKey, "true");
-      sessionStorage.setItem(`share_data_${slug}`, JSON.stringify(shareLink));
-      setAuthenticated(true);
-      void initializeReport(shareLink);
-    });
-  }, [slug, authenticated, shareLink, initializeReport]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail) {
-      toast({ title: "Email required", description: "Please enter your email address.", variant: "destructive" });
-      return;
-    }
     if (!password) {
-      toast({ title: "Password required", description: "Please enter your password.", variant: "destructive" });
+      toast({ title: "Password required", description: "Please enter the password.", variant: "destructive" });
       return;
     }
 
     setLoading(true);
 
     try {
-      // Sign up or sign in via Supabase auth
-      let userEmail: string;
-      if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({ email: trimmedEmail, password });
-        if (error) {
-          toast({ title: "Sign up failed", description: error.message, variant: "destructive" });
-          setLoading(false);
-          return;
-        }
-        userEmail = data.user?.email ?? trimmedEmail;
-        if (!data.session) {
-          // Email confirmation required
-          toast({ title: "Check your email", description: "We sent you a confirmation link. Please verify your email then come back to access the report." });
-          setLoading(false);
-          return;
-        }
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password });
-        if (error) {
-          toast({ title: "Sign in failed", description: error.message, variant: "destructive" });
-          setLoading(false);
-          return;
-        }
-        userEmail = data.user?.email ?? trimmedEmail;
+      // Verify password against bcrypt hash via edge function (server-side comparison)
+      const { data, error } = await supabase.functions.invoke('share-link-auth', {
+        body: { action: 'verify', slug, password: password.trim() },
+      });
+
+      if (error) {
+        toast({ title: "Error", description: "Could not verify password. Please try again.", variant: "destructive" });
+        setLoading(false);
+        return;
       }
 
-      // Check email against the share link allowlist
-      const allowedEmails: string[] = (shareLink.allowed_emails ?? []).map((e: string) => e.toLowerCase());
-      if (allowedEmails.length > 0 && !allowedEmails.includes(userEmail.toLowerCase())) {
-        toast({ title: "Access denied", description: "This email address is not authorised to view this report.", variant: "destructive" });
-        await supabase.auth.signOut();
+      if (!data?.valid) {
+        toast({ title: "Incorrect password", description: "The password you entered is incorrect.", variant: "destructive" });
         setLoading(false);
         return;
       }
@@ -465,35 +421,22 @@ export default function SharedReport() {
     }
   };
 
-  // If not authenticated, show sign in / sign up gate
+  // If not authenticated, show password gate
   if (!authenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-              <Mail className="w-6 h-6 text-primary" />
+              <Lock className="w-6 h-6 text-primary" />
             </div>
-            <CardTitle>{isSignUp ? "Create Account" : "Access Report"}</CardTitle>
+            <CardTitle>Access Report</CardTitle>
             <CardDescription>
-              {isSignUp
-                ? "Create an account to access this shared report."
-                : "Sign in to access this shared report."}
+              Enter the password to view this shared report.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                />
-              </div>
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
                 <div className="relative">
@@ -502,9 +445,10 @@ export default function SharedReport() {
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={isSignUp ? "Create a password" : "Enter your password"}
-                    autoComplete={isSignUp ? "new-password" : "current-password"}
+                    placeholder="Enter password"
+                    autoComplete="off"
                     className="pr-10"
+                    autoFocus
                   />
                   <button
                     type="button"
@@ -516,34 +460,9 @@ export default function SharedReport() {
                   </button>
                 </div>
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? (isSignUp ? "Creating account..." : "Signing in...") : (isSignUp ? "Sign Up" : "Sign In")}
+              <Button type="submit" className="w-full" disabled={loading || !shareLink}>
+                {loading ? "Verifying..." : "Access Report"}
               </Button>
-              <div className="text-center text-sm text-muted-foreground">
-                {isSignUp ? (
-                  <>
-                    Already have an account?{" "}
-                    <button
-                      type="button"
-                      onClick={() => setIsSignUp(false)}
-                      className="text-primary hover:underline font-medium"
-                    >
-                      Sign in
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    Don't have an account?{" "}
-                    <button
-                      type="button"
-                      onClick={() => setIsSignUp(true)}
-                      className="text-primary hover:underline font-medium"
-                    >
-                      Sign up
-                    </button>
-                  </>
-                )}
-              </div>
             </form>
           </CardContent>
         </Card>

@@ -119,9 +119,80 @@ async function fetchAllRowsParallel(reportId: string): Promise<CachedDataRow[]> 
   return allRows;
 }
 
+/**
+ * Client-side dimension filter — same logic as the edge function's applyDimensionFilters.
+ * Used in the direct-DB fallback path to ensure restricted users never receive
+ * rows they shouldn't see, even when the edge function is bypassed.
+ *
+ * Matching is case-insensitive and trimmed, consistent with the edge function and
+ * the client-side filterRawDataRows in slideViewHelpers.ts.
+ */
+function applyLocalDimensionFilters(
+  rows: Record<string, any>[],
+  dimMap: Record<string, string>,
+  dimensionFilters: Record<string, string[]>
+): Record<string, any>[] {
+  const entries = Object.entries(dimensionFilters).filter(
+    ([, vals]) => Array.isArray(vals) && vals.length > 0
+  );
+  if (entries.length === 0) return rows;
+
+  // Build reverse map: dimension name (lowercase) → row key(s).
+  const nameToRowKeys = new Map<string, string[]>();
+  if (rows.length > 0) {
+    for (const key of Object.keys(rows[0])) {
+      if (key === '_row_number') continue;
+      const name = (dimMap[key] ?? key).toLowerCase();
+      const existing = nameToRowKeys.get(name) ?? [];
+      existing.push(key);
+      nameToRowKeys.set(name, existing);
+    }
+  }
+
+  // Pre-resolve each filter to the actual row key(s) + lowercase allowed values.
+  const resolved: { rowKeys: string[]; allowed: Set<string> }[] = [];
+  for (const [filterDimId, allowedValues] of entries) {
+    const allowed = new Set(allowedValues.map(v => String(v).trim().toLowerCase()));
+
+    // 1) If filterDimId is a direct row key
+    if (rows.length > 0 && filterDimId in rows[0]) {
+      resolved.push({ rowKeys: [filterDimId], allowed });
+      continue;
+    }
+
+    // 2) Resolve via dimMap: filterDimId → name → row key
+    const filterName = (dimMap[filterDimId] ?? filterDimId).toLowerCase();
+    const keys = nameToRowKeys.get(filterName);
+    if (keys && keys.length > 0) {
+      resolved.push({ rowKeys: keys, allowed });
+    }
+    // If unresolvable, skip this filter (don't break the response)
+  }
+
+  if (resolved.length === 0) return rows;
+
+  return rows.filter(row => {
+    for (const { rowKeys, allowed } of resolved) {
+      let matched = false;
+      for (const key of rowKeys) {
+        const val = row[key];
+        if (val !== undefined && val !== null) {
+          if (allowed.has(String(val).trim().toLowerCase())) {
+            matched = true;
+            break;
+          }
+        }
+      }
+      if (!matched) return false;
+    }
+    return true;
+  });
+}
+
 async function fetchChannelRowsDirect(
   channelReportId: string,
-  selectedYear: string
+  selectedYear: string,
+  dimensionFilters?: Record<string, string[]>
 ): Promise<{ rows: Record<string, any>[]; dimMap: Record<string, string> }> {
   const isAllTime = !selectedYear || selectedYear === 'all';
 
@@ -149,15 +220,17 @@ async function fetchChannelRowsDirect(
         }
       }
       const dimMap = await buildDimensionNameMap(Array.from(allDimIds));
-      return {
-        rows: rows.map((r, i) => ({ ...r, _row_number: i + 1 })),
-        dimMap,
-      };
+      let filteredRows = rows.map((r, i) => ({ ...r, _row_number: i + 1 }));
+      // SECURITY: Apply dimension filters in fallback path to prevent data leaks.
+      if (dimensionFilters && Object.keys(dimensionFilters).length > 0) {
+        filteredRows = applyLocalDimensionFilters(filteredRows, dimMap, dimensionFilters);
+      }
+      return { rows: filteredRows, dimMap };
     }
   }
 
   const cachedRows = await fetchAllRowsParallel(channelReportId);
-  const allRawRows = cachedRows.map((row) => ({
+  let allRawRows: Record<string, any>[] = cachedRows.map((row) => ({
     ...(row.dimension_values || {}),
     _row_number: row.row_number,
   }));
@@ -168,6 +241,11 @@ async function fetchChannelRowsDirect(
     for (const id of Object.keys(dv)) allDimIds.add(id);
   }
   const dimMap = await buildDimensionNameMap(Array.from(allDimIds));
+
+  // SECURITY: Apply dimension filters in fallback path to prevent data leaks.
+  if (dimensionFilters && Object.keys(dimensionFilters).length > 0) {
+    allRawRows = applyLocalDimensionFilters(allRawRows, dimMap, dimensionFilters);
+  }
 
   return { rows: allRawRows, dimMap };
 }
@@ -207,7 +285,7 @@ async function fetchChannelRows(
       console.warn(
         `[DataStudio] cache miss returned 0 rows for report ${channelReportId}, falling back to direct DB fetch`
       );
-      return await fetchChannelRowsDirect(channelReportId, selectedYear);
+      return await fetchChannelRowsDirect(channelReportId, selectedYear, dimensionFilters);
     }
 
     return { rows, dimMap };
@@ -216,7 +294,7 @@ async function fetchChannelRows(
       `[DataStudio] cached edge fetch failed for report ${channelReportId}, using direct DB path`,
       error
     );
-    return await fetchChannelRowsDirect(channelReportId, selectedYear);
+    return await fetchChannelRowsDirect(channelReportId, selectedYear, dimensionFilters);
   }
 }
 

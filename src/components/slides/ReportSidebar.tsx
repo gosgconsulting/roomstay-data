@@ -92,7 +92,8 @@ export function ReportSidebar({
       </div>
 
       {/* View: [dropdown] save icon — above Reports */}
-      {!isReadOnlyMode && (
+      {/* Show view selector for owners (non-read-only) AND restricted/viewer-mode users */}
+      {(!isReadOnlyMode || isRestrictedUser) && (
         <div className="px-2 py-3 border-b space-y-2">
           <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             View
@@ -182,8 +183,8 @@ export function ReportSidebar({
         ))}
       </nav>
 
-      {/* Bottom actions */}
-      {!isReadOnlyMode && (
+      {/* Bottom actions — show for owners AND restricted/viewer-mode users (sign out) */}
+      {(!isReadOnlyMode || isRestrictedUser) && (
         <div className="px-2 py-3 border-t space-y-0.5">
           {!isRestrictedUser && (
             <>

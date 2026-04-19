@@ -64,6 +64,11 @@ export function useCreateSlideReportView() {
           [dimensionId: string]: string[];
         };
       };
+      filter_configs?: {
+        [channel: string]: {
+          filterDimensionIds: string[];
+        };
+      } | null;
     }) => {
       const { data, error } = await supabase
         .from("views")
@@ -79,6 +84,7 @@ export function useCreateSlideReportView() {
           chart_time_range: view.chart_time_range || null,
           price_check_chart_time_range: view.price_check_chart_time_range || null,
           filter_values: view.filter_values as unknown as Json,
+          filter_configs: (view.filter_configs ?? null) as unknown as Json,
         })
         .select()
         .single();
@@ -119,8 +125,8 @@ export function useUpdateSlideReportView() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ 
-      id, 
+    mutationFn: async ({
+      id,
       name,
       selected_year,
       selected_month,
@@ -128,9 +134,10 @@ export function useUpdateSlideReportView() {
       chart_time_range,
       price_check_chart_time_range,
       filter_values,
-      ...rest 
-    }: Partial<SlideReportView> & { id: string }) => {
-      const updateData: any = { ...rest, updated_at: new Date().toISOString() };
+      filter_configs,
+      ...rest
+    }: Partial<SlideReportView> & { id: string; filter_configs?: Record<string, { filterDimensionIds: string[] }> | null }) => {
+      const updateData: any = { updated_at: new Date().toISOString() };
       if (name !== undefined) updateData.name = name;
       if (selected_year !== undefined) updateData.selected_year = selected_year;
       if (selected_month !== undefined) updateData.selected_month = selected_month;
@@ -138,6 +145,7 @@ export function useUpdateSlideReportView() {
       if (chart_time_range !== undefined) updateData.chart_time_range = chart_time_range;
       if (price_check_chart_time_range !== undefined) updateData.price_check_chart_time_range = price_check_chart_time_range;
       if (filter_values !== undefined) updateData.filter_values = filter_values as unknown as Json;
+      if (filter_configs !== undefined) updateData.filter_configs = filter_configs as unknown as Json;
 
       const { data, error } = await supabase
         .from("views")
@@ -152,10 +160,8 @@ export function useUpdateSlideReportView() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: slideReportViewKeys.detail(data.id) });
       queryClient.invalidateQueries({ queryKey: slideReportViewKeys.list(data.slide_report_id) });
-      toast({ 
-        title: "View updated", 
-        description: `View "${data.name}" has been updated.` 
-      });
+      // Toast intentionally omitted here — callers that want user feedback show it themselves.
+      // This prevents silent auto-saves (filter persistence) from triggering repeated toasts.
     },
     onError: (error) => {
       console.error("Error updating slide report view:", error);

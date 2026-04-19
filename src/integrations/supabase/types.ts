@@ -788,6 +788,7 @@ export type Database = {
           date_range_end: string | null
           date_range_preset: string | null
           date_range_start: string | null
+          filter_configs: Json | null
           filter_dimensions: string[] | null
           filter_values: Json | null
           group_by_dimensions: string[] | null
@@ -823,6 +824,7 @@ export type Database = {
           date_range_end?: string | null
           date_range_preset?: string | null
           date_range_start?: string | null
+          filter_configs?: Json | null
           filter_dimensions?: string[] | null
           filter_values?: Json | null
           group_by_dimensions?: string[] | null
@@ -858,6 +860,7 @@ export type Database = {
           date_range_end?: string | null
           date_range_preset?: string | null
           date_range_start?: string | null
+          filter_configs?: Json | null
           filter_dimensions?: string[] | null
           filter_values?: Json | null
           group_by_dimensions?: string[] | null

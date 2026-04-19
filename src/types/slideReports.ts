@@ -62,6 +62,11 @@ export interface SlideReportView {
       [dimensionId: string]: string[];
     };
   };
+  filter_configs?: {
+    [channel: string]: {
+      filterDimensionIds: string[];
+    };
+  } | null;
   main_dimension_id?: string | null;
   main_dimension_name?: string | null;
   created_at: string;

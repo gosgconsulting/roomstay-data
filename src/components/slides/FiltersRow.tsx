@@ -350,12 +350,23 @@ export function FiltersRow({
 
       for (const dimId of enabledIds) {
         const options = chOptions[dimId] ?? [];
+        const rawSelected = chSelected[dimId];
+        // Normalize: if the selected values include every available option,
+        // treat as "All" (undefined). This prevents restricted users from seeing
+        // "4 selected" in red when those 4 ARE all the hotels they can access.
+        const selected =
+          rawSelected &&
+          options.length > 0 &&
+          rawSelected.length >= options.length &&
+          options.every(opt => rawSelected.includes(opt))
+            ? undefined
+            : rawSelected;
         entries.push({
           channel: ch,
           dimId,
           label: dimensionNames[dimId] || dimId,
           options,
-          selected: chSelected[dimId], // undefined means "All"
+          selected,
           isLocked: lockedSet.has(dimId),
         });
       }
@@ -432,15 +443,17 @@ export function FiltersRow({
 
       {/* Right: Filters settings button, Share, Refresh */}
       <div className="flex items-center gap-2 shrink-0">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 gap-1.5"
-          onClick={onOpenFilters}
-        >
-          <Filter className="h-3.5 w-3.5" />
-          Filters
-        </Button>
+        {!isRestrictedUser && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={onOpenFilters}
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Filters
+          </Button>
+        )}
         {!isReadOnlyMode && !isRestrictedUser && (
           <Button
             variant="outline"

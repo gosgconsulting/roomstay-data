@@ -521,6 +521,11 @@ export default function SlideViewPage() {
       slideReport?.configuration?.filterConfigs?.sem?.filterDimensionIds?.join(','),
       slideReport?.configuration?.filterConfigs?.social?.filterDimensionIds?.join(',')]);
 
+  // Timer ref for debounced auto-save of filter_values + filter_configs to the active named view.
+  // Declared here (before persistFilterConfigs) so both persistFilterConfigs and the auto-save
+  // effect can share the same ref and cancel each other's pending saves as needed.
+  const viewFilterAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const persistFilterConfigs = useCallback(async (next: FilterConfigs) => {
     if (!slideReportId || !user) return;
     // Use slideReportConfigRef (always the latest config) instead of slideReport?.configuration
@@ -542,13 +547,25 @@ export default function SlideViewPage() {
       clearTimeout(uiSettingsPersistTimerRef.current);
       uiSettingsPersistTimerRef.current = null;
     }
+    // Also cancel any pending view auto-save to avoid it overwriting the explicit config save.
+    if (viewFilterAutoSaveTimerRef.current) {
+      clearTimeout(viewFilterAutoSaveTimerRef.current);
+      viewFilterAutoSaveTimerRef.current = null;
+    }
     try {
       await updateSlideReport.mutateAsync({ id: slideReportId, configuration } as any);
+      // If a named view is active, also persist the updated filter_configs to the view.
+      if (selectedViewId && selectedViewId !== 'unsaved') {
+        await updateView.mutateAsync({
+          id: selectedViewId,
+          filter_configs: next,
+        } as any);
+      }
       toast({ title: 'Filter settings saved' });
     } catch {
       toast({ title: 'Failed to save filter settings', variant: 'destructive' });
     }
-  }, [slideReportId, updateSlideReport, user]);
+  }, [slideReportId, updateSlideReport, updateView, selectedViewId, user]);
 
   const dsFilters = useDataStudioFilters({
     effectivePivotData: effectivePivotData as any,
@@ -1220,6 +1237,51 @@ export default function SlideViewPage() {
       if (uiSettingsPersistTimerRef.current) clearTimeout(uiSettingsPersistTimerRef.current);
     };
   }, [groupByDimension, breakdownByDimension, chartMetric, chartGranularity, filterValues, selectedViewId, slideReportId, isSlideReportsLoading, user, isPublicShareStudio]);
+
+  // Auto-save filter_values + filter_configs to the active named view whenever they change.
+  // This ensures each view "remembers" its own filter setup, so switching views restores
+  // the correct filters (including which pill dropdowns are shown).
+  // Only runs for authenticated, non-restricted owners with a named view selected.
+  //
+  // IMPORTANT: We use a stable ref for mutateAsync instead of putting `updateView` in the deps
+  // array. The useMutation result object changes identity on every status transition
+  // (idle→loading→success→idle), so including it in deps causes an infinite re-run loop.
+  const updateViewMutateRef = useRef(updateView.mutateAsync);
+  useEffect(() => {
+    updateViewMutateRef.current = updateView.mutateAsync;
+  });
+
+  const viewFilterAutoSaveSkippedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    // Only auto-save for named views (not Master)
+    if (!selectedViewId || selectedViewId === 'unsaved') return;
+    if (!slideReportId || isSlideReportsLoading) return;
+    if (!user || isPublicShareStudio || allowedViewIds !== null) return;
+    // Skip the very first run after a view is selected (reflects restored values, not user changes)
+    const skipKey = `${slideReportId}-${selectedViewId}`;
+    if (viewFilterAutoSaveSkippedForRef.current !== skipKey) {
+      viewFilterAutoSaveSkippedForRef.current = skipKey;
+      return;
+    }
+    if (viewFilterAutoSaveTimerRef.current) clearTimeout(viewFilterAutoSaveTimerRef.current);
+    viewFilterAutoSaveTimerRef.current = setTimeout(async () => {
+      if (!user || isPublicShareStudio) return;
+      try {
+        await updateViewMutateRef.current({
+          id: selectedViewId,
+          filter_values: { ...filterValues },
+          filter_configs: { ...latestFilterConfigsRef.current },
+        } as any);
+      } catch {
+        // Non-fatal: filters are still applied in-memory; save is best-effort.
+      }
+    }, 2000);
+    return () => {
+      if (viewFilterAutoSaveTimerRef.current) clearTimeout(viewFilterAutoSaveTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterValues, filterConfigs, selectedViewId, slideReportId, isSlideReportsLoading, user, isPublicShareStudio, allowedViewIds]);
+  // NOTE: updateView intentionally omitted from deps — see updateViewMutateRef above.
 
   // Filter option loading is now handled by useDataStudioFilters (derived from rawDataRows in memory).
 
@@ -2559,6 +2621,7 @@ export default function SlideViewPage() {
         comparison_type: comparisonType as any,
         price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues }, // Deep copy to avoid mutations
+        filter_configs: { ...filterConfigs }, // Save current pill config with this view
       } as any);
 
       // The view will be automatically refetched by the query
@@ -2584,19 +2647,22 @@ export default function SlideViewPage() {
   const handleUpdateView = useCallback(async (viewId: string) => {
     if (!slideReportId || !user) return;
     try {
-      await updateView.mutateAsync({
+      const updatedView = await updateView.mutateAsync({
         id: viewId,
         selected_year: selectedYear,
         selected_month: selectedMonth,
         comparison_type: comparisonType as any,
         price_check_chart_time_range: priceCheckChartTimeRange,
         filter_values: { ...filterValues },
+        filter_configs: { ...filterConfigs }, // Save current pill config with this view
       } as any);
       queryClient.invalidateQueries({ queryKey: ['views', 'list', slideReportId] });
+      toast({ title: 'View updated', description: `View "${(updatedView as any)?.name ?? viewId}" has been updated.` });
     } catch (error) {
       console.error('Error updating view:', error);
+      toast({ title: 'Error', description: 'Failed to update view.', variant: 'destructive' });
     }
-  }, [slideReportId, user, selectedYear, selectedMonth, customDateRange, comparisonType, priceCheckChartTimeRange, filterValues, updateView, queryClient]);
+  }, [slideReportId, user, selectedYear, selectedMonth, customDateRange, comparisonType, priceCheckChartTimeRange, filterValues, filterConfigs, updateView, queryClient]);
 
   // Apply a saved view (or reset to Master when viewId is null)
   const handleApplyView = useCallback((viewId: string | null, options?: ApplyViewOptions) => {
@@ -2620,6 +2686,24 @@ export default function SlideViewPage() {
     // Delegate filter value + date restore to the canonical hook
     dsFilters.applyView(view, options);
 
+    // Restore filter configs (which pill dropdowns appear) for this view.
+    // Named view → restore from view.filter_configs (if saved).
+    // Master reset (null) → restore from report-level initialFilterConfigs.
+    if (view?.filter_configs) {
+      dsFilters.setFilterConfigs(view.filter_configs as FilterConfigs);
+    } else if (!viewId) {
+      // Master reset — go back to the report-level filter pill config
+      dsFilters.setFilterConfigs(initialFilterConfigs);
+    }
+
+    // SECURITY: For restricted users (allowedViewIds !== null) AND public share studio viewers,
+    // set the view's filter_values as shareBaseFilters. This activates server-side dimension
+    // filtering via the edge function. Without this, users receive ALL rows — data is only
+    // hidden client-side and is visible in DevTools → Network.
+    if ((allowedViewIds !== null || isPublicShareStudio) && view?.filter_values) {
+      setShareBaseFilters(view.filter_values as Record<string, Record<string, string[]>>);
+    }
+
     // Chart-level settings not owned by dsFilters
     setPriceCheckChartTimeRange(view?.price_check_chart_time_range || 'last_6_months');
     if (view?.tab) setSelectedTab(view.tab);
@@ -2628,7 +2712,7 @@ export default function SlideViewPage() {
     setTimeout(() => {
       isApplyingViewRef.current = false;
     }, 0);
-  }, [slideReportId, views, dsFilters]);
+  }, [slideReportId, views, dsFilters, initialFilterConfigs, allowedViewIds, isPublicShareStudio]);
 
   // ========== Refresh Data Modal handler ==========
   const handleRefreshDataWithModal = useCallback(() => {
@@ -3229,7 +3313,7 @@ export default function SlideViewPage() {
         setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
         setIsSaveOrUpdateViewDialogOpen={setIsSaveOrUpdateViewDialogOpen}
         isReadOnlyMode={isReadOnlyMode}
-        isRestrictedUser={allowedViewIds !== null}
+        isRestrictedUser={allowedViewIds !== null || isPublicShareStudio}
       />
 
       {/* Main column: topbar + content */}
@@ -3286,7 +3370,7 @@ export default function SlideViewPage() {
             showRefreshButton={!slideReport?.configuration?.isChildReport}
             lockedDimensionIds={isPublicShareStudio ? shareLockedDimensionIds : undefined}
             allowDataFilterChanges={viewerMayAdjustDataFilters}
-            isRestrictedUser={allowedViewIds !== null}
+            isRestrictedUser={allowedViewIds !== null || isPublicShareStudio}
           />
         </div>
 

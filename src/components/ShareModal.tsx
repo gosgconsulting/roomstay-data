@@ -132,7 +132,7 @@ export const ShareModal = ({ reportId, reportName, open, onOpenChange, accountId
           <DialogHeader>
             <DialogTitle>Share Links</DialogTitle>
             <DialogDescription>
-              Create email-restricted links to share reports with specific people.
+              Create password-protected links to share reports.
             </DialogDescription>
           </DialogHeader>
 
