@@ -15,12 +15,12 @@
  * @module BreakdownTableSection
  */
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   calculateDerivedMetrics,
@@ -617,6 +617,45 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
     const groupByOptions = availableDimensions;
     const breakdownByOptions = availableDimensions.filter((d) => d.id !== groupBy);
 
+    // ── Sorting ──────────────────────────────────────────────────────────────────
+    type SortKey = 'impressions' | 'clicks' | 'ctr' | 'bookings' | 'leads' | 'conversionRate' | 'cpc' | 'cost' | 'aov' | 'revenue' | 'roas' | 'costOfSale' | 'grossProfit';
+    const [sortKey, setSortKey] = useState<SortKey | null>(null);
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+    const handleSort = (key: SortKey) => {
+      if (sortKey === key) {
+        setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+      } else {
+        setSortKey(key);
+        setSortDir('desc');
+      }
+    };
+
+    const sortedGroupedData = useMemo(() => {
+      if (!sortKey) return groupedData;
+      return [...groupedData].sort((a, b) => {
+        const aVal = (a.metrics as any)[sortKey] ?? 0;
+        const bVal = (b.metrics as any)[sortKey] ?? 0;
+        return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
+      });
+    }, [groupedData, sortKey, sortDir]);
+
+    const SortIcon = ({ k }: { k: SortKey }) => {
+      if (sortKey !== k) return <ArrowUpDown className="ml-1 h-3 w-3 opacity-40 inline-block" />;
+      return sortDir === 'desc'
+        ? <ArrowDown className="ml-1 h-3 w-3 text-primary inline-block" />
+        : <ArrowUp className="ml-1 h-3 w-3 text-primary inline-block" />;
+    };
+
+    const SortableHead = ({ k, label, className }: { k: SortKey; label: string; className?: string }) => (
+      <TableHead
+        className={cn('text-right cursor-pointer select-none hover:text-foreground transition-colors whitespace-nowrap', className)}
+        onClick={() => handleSort(k)}
+      >
+        {label}<SortIcon k={k} />
+      </TableHead>
+    );
+
     const renderMetricCell = (currentDisplay: string, comparisonValue?: number, currentValue?: number, isCostMetric?: boolean) => {
       const hasComp = showComparison && comparisonValue !== undefined && currentValue !== undefined;
       const pctChange = hasComp ? calculatePercentChange(currentValue!, comparisonValue!) : null;
@@ -714,23 +753,23 @@ export const UnifiedBreakdownTable = React.memo<UnifiedBreakdownTableProps>(
               <TableRow>
                 <TableHead className="w-8"></TableHead>
                 <TableHead>{groupByDim?.name || 'Group'}</TableHead>
-                <TableHead className="text-right">Impressions</TableHead>
-                <TableHead className="text-right">Clicks</TableHead>
-                <TableHead className="text-right">CTR</TableHead>
-                <TableHead className="text-right">Bookings</TableHead>
-                {isSocial && <TableHead className="text-right">Leads</TableHead>}
-                <TableHead className="text-right">Conv. Rate</TableHead>
-                <TableHead className="text-right">CPC</TableHead>
-                <TableHead className="text-right">Cost</TableHead>
-                <TableHead className="text-right">AOV</TableHead>
-                <TableHead className="text-right">Revenue</TableHead>
-                <TableHead className="text-right">ROAS</TableHead>
-                <TableHead className="text-right">Cost of Sale</TableHead>
-                {isPerformanceModelView && <TableHead className="text-right">Gross Profit</TableHead>}
+                <SortableHead k="impressions" label="Impressions" />
+                <SortableHead k="clicks" label="Clicks" />
+                <SortableHead k="ctr" label="CTR" />
+                <SortableHead k="bookings" label="Bookings" />
+                {isSocial && <SortableHead k="leads" label="Leads" />}
+                <SortableHead k="conversionRate" label="Conv. Rate" />
+                <SortableHead k="cpc" label="CPC" />
+                <SortableHead k="cost" label="Cost" />
+                <SortableHead k="aov" label="AOV" />
+                <SortableHead k="revenue" label="Revenue" />
+                <SortableHead k="roas" label="ROAS" />
+                <SortableHead k="costOfSale" label="Cost of Sale" />
+                {isPerformanceModelView && <SortableHead k="grossProfit" label="Gross Profit" />}
               </TableRow>
             </TableHeader>
             <TableBody>
-              {groupedData.map((group) => (
+              {sortedGroupedData.map((group) => (
                 <React.Fragment key={group.groupValue}>
                   <TableRow
                     className="hover:bg-muted/50 cursor-pointer"

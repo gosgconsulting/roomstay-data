@@ -1052,42 +1052,42 @@ export default function SlideViewPage() {
   useEffect(() => {
     if (!slideReport || !slideReportId) return;
     const config = slideReport.configuration;
-    if (config) {
-      const filteredFilterConfigs: Record<string, FilterConfig> = {};
-      const filteredBreakdownConfigs: Record<string, BreakdownConfig> = {};
-      const filteredChannelConfigs: Record<string, ChannelConfig> = {};
-      for (const channel of availableChannels) {
-        if (config.filterConfigs?.[channel]) {
-          filteredFilterConfigs[channel] = config.filterConfigs[channel];
-        }
-        if (config.breakdownConfigs?.[channel]) {
-          filteredBreakdownConfigs[channel] = config.breakdownConfigs[channel];
-        }
-        if (config.channelConfigs?.[channel]) {
-          filteredChannelConfigs[channel] = config.channelConfigs[channel];
-        }
-      }
-      setFilterConfigs(filteredFilterConfigs);
-      setBreakdownConfigs(filteredBreakdownConfigs);
-      setChannelConfigs(filteredChannelConfigs);
-      if (config.selectedChannels) {
-        // Restore directly from the saved config — do NOT filter by availableChannels here.
-        // availableChannels may not be resolved yet when this effect first runs (accountReportIds
-        // is still loading), which would incorrectly zero-out all channels.
-        // The selectedChannels memo already gates on accountReportIds, so stale IDs are safe.
-        setSelectedDimensions({
-          metasearch: config.selectedChannels.includes('metasearch'),
-          sem: config.selectedChannels.includes('sem'),
-          social: config.selectedChannels.includes('social'),
-        });
-      }
-      if (config.selectedValueDimensionIds) {
-        setSelectedValueDimensionIds(config.selectedValueDimensionIds);
-      }
-    }
     const isNewReport = lastSyncedSlideReportIdRef.current !== slideReportId;
     if (isNewReport) {
       lastSyncedSlideReportIdRef.current = slideReportId;
+
+      // Restore filterConfigs, breakdownConfigs, channelConfigs from DB only on initial load.
+      // Running this on every slideReport refetch would overwrite in-flight user changes
+      // (e.g. toggling a filter dimension) with stale data from the React Query cache.
+      if (config) {
+        const filteredFilterConfigs: Record<string, FilterConfig> = {};
+        const filteredBreakdownConfigs: Record<string, BreakdownConfig> = {};
+        const filteredChannelConfigs: Record<string, ChannelConfig> = {};
+        for (const channel of availableChannels) {
+          if (config.filterConfigs?.[channel]) {
+            filteredFilterConfigs[channel] = config.filterConfigs[channel];
+          }
+          if (config.breakdownConfigs?.[channel]) {
+            filteredBreakdownConfigs[channel] = config.breakdownConfigs[channel];
+          }
+          if (config.channelConfigs?.[channel]) {
+            filteredChannelConfigs[channel] = config.channelConfigs[channel];
+          }
+        }
+        setFilterConfigs(filteredFilterConfigs);
+        setBreakdownConfigs(filteredBreakdownConfigs);
+        setChannelConfigs(filteredChannelConfigs);
+        if (config.selectedChannels) {
+          setSelectedDimensions({
+            metasearch: config.selectedChannels.includes('metasearch'),
+            sem: config.selectedChannels.includes('sem'),
+            social: config.selectedChannels.includes('social'),
+          });
+        }
+        if (config.selectedValueDimensionIds) {
+          setSelectedValueDimensionIds(config.selectedValueDimensionIds);
+        }
+      }
       // Restore debounce-persisted UI settings only on initial/report-switch load.
       // These must NOT run on every refetch — they are saved via a 2s debounce, so a
       // refetch triggered by any other save (e.g. persistFilterConfigs) would arrive
@@ -1115,15 +1115,24 @@ export default function SlideViewPage() {
       // Restore persisted filter values for owner views only.
       // Public shared studio must keep share-link/view filters and must NOT be reset to
       // slide_report.configuration.activeFilterValues (often empty), otherwise filters are cleared.
+      // IMPORTANT: Only restore filters if a matching view ID was persisted alongside them.
+      // Without this guard, switching to "Master" (null view) and reloading would restore
+      // the last view's filters (e.g. Brady) because activeFilterValues was saved with them.
       const savedFilters = config?.activeFilterValues;
+      const savedViewId = config?.activeViewId ?? null;
       if (savedFilters && !isPublicShareStudio) {
-        setFilterValues({
-          metasearch: savedFilters.metasearch || {},
-          sem: savedFilters.sem || {},
-          social: savedFilters.social || {},
-          'price-check': savedFilters['price-check'] || {},
-          booking: savedFilters.booking || {},
-        });
+        if (savedViewId) {
+          // A specific view was active — restore both the view selection and its filters.
+          setSelectedViewId(savedViewId);
+          setFilterValues({
+            metasearch: savedFilters.metasearch || {},
+            sem: savedFilters.sem || {},
+            social: savedFilters.social || {},
+            'price-check': savedFilters['price-check'] || {},
+            booking: savedFilters.booking || {},
+          });
+        }
+        // If savedViewId is null (master), skip restoring filters — master starts with empty filters.
       }
     }
   }, [slideReport, slideReportId, availableChannels, isPublicShareStudio]);
@@ -1170,6 +1179,7 @@ export default function SlideViewPage() {
           chartMetric,
           chartGranularity,
           activeFilterValues: filterValues,
+          activeViewId: selectedViewId,
           // Always use the latest filterConfigs from the ref — prevents race condition where
           // the refetch hasn't completed yet and prevConfig.filterConfigs is stale.
           filterConfigs: latestFilterConfigsRef.current ?? prevConfig.filterConfigs,
@@ -1182,7 +1192,7 @@ export default function SlideViewPage() {
     return () => {
       if (uiSettingsPersistTimerRef.current) clearTimeout(uiSettingsPersistTimerRef.current);
     };
-  }, [groupByDimension, breakdownByDimension, chartMetric, chartGranularity, filterValues, slideReportId, isSlideReportsLoading, user, isPublicShareStudio]);
+  }, [groupByDimension, breakdownByDimension, chartMetric, chartGranularity, filterValues, selectedViewId, slideReportId, isSlideReportsLoading, user, isPublicShareStudio]);
 
   // Filter option loading is now handled by useDataStudioFilters (derived from rawDataRows in memory).
 
