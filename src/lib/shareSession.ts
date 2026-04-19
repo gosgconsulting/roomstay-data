@@ -3,7 +3,7 @@
  *
  * All keys follow the contract set in SharedReport.tsx:
  *   share_auth_${slug}                 — "true" when the share is authenticated
- *   share_data_${slug}                 — full share_links row JSON
+ *   share_data_${slug}                 — sanitized share_links row JSON (password_hash stripped)
  *   share_account_id_${slug}           — account UUID
  *   share_slide_report_id_${slug}      — slide report UUID
  *   share_locked_dimension_ids_${slug} — JSON array of locked dimension UUIDs
