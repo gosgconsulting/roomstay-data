@@ -206,7 +206,7 @@ export default function SlideViewPage() {
   // For public share studio, read IDs synchronously from sessionStorage in lazy useState so
   // useSlideReportPage always receives the correct accountId/slideReportId on its very first render.
   // This prevents an uncacheable empty React Query result being locked in for staleTime (5 min).
-  const { account: resolvedAccount, isLoading: isResolvingAccount } = useUserAccount();
+  const { account: resolvedAccount, isLoading: isResolvingAccount, allowedViewIds } = useUserAccount();
 
   // For public share studio: read critical IDs from URL query params first (reliable),
   // then fall back to sessionStorage (legacy / backward compat).
@@ -764,6 +764,22 @@ export default function SlideViewPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [views.length, isReadOnlyMode, slideReportId, selectedViewId, isPublicShareStudio, isSharedPreview, searchParams]);
+
+  // Auto-select first allowed view for users with restricted view access
+  const autoSelectedViewRef = useRef(false);
+  useEffect(() => {
+    if (autoSelectedViewRef.current) return;
+    if (!allowedViewIds || allowedViewIds.length === 0) return;
+    if (views.length === 0) return;
+    if (isPublicShareStudio || isSharedPreview) return;
+    // Find the first view in allowedViewIds that actually exists in the loaded views
+    const firstAllowed = views.find(v => allowedViewIds.includes(v.id));
+    if (!firstAllowed) return;
+    autoSelectedViewRef.current = true;
+    setSelectedViewId(firstAllowed.id);
+    handleApplyView(firstAllowed.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views.length, allowedViewIds]);
 
   // monthlyDataRecords, isLoadingMonthlyData from reportPage
 
@@ -2469,13 +2485,17 @@ export default function SlideViewPage() {
     }
   };
 
-  // Get available views (default + saved views)
+  // Get available views (default + saved views), filtered by user_view_access if restricted
   const availableViews = useMemo(() => {
-    return [
+    const allViews = [
       { id: null, name: 'Master' },
       ...views.map(v => ({ id: v.id, name: v.name }))
     ];
-  }, [views]);
+    // allowedViewIds === null means no restriction (admin / owner)
+    if (!allowedViewIds || allowedViewIds.length === 0) return allViews;
+    // Restrict to only allowed views — Master is excluded when specific views are assigned
+    return allViews.filter(v => v.id !== null && allowedViewIds.includes(v.id));
+  }, [views, allowedViewIds]);
 
   // Get available main dimensions for view saving (Account for SEM/Social, Hotel for Metasearch)
   const availableMainDimensions = useMemo(() => {
