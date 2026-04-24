@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-
 import ForecastingDashboard from "./pages/ForecastingDashboard";
 import Auth from "./pages/Auth";
 import SharedReport from "./pages/SharedReport";
+import SharedCustomReportPage from "./pages/SharedCustomReportPage";
 import NotFound from "./pages/NotFound";
 import SlideViewPage from "./pages/SlideViewPage";
 import DataSourcesPage from "./pages/DataSourcesPage";
@@ -16,6 +17,9 @@ import ForecastScenarioPage from "./pages/ForecastScenarioPage";
 import PriceWidgetPage from "./pages/PriceWidgetPage";
 import PriceWidgetDetailPage from "./pages/PriceWidgetDetailPage";
 import Integrations from "./pages/Integrations";
+import TagsPage from "./pages/TagsPage";
+import CustomReportsPage from "./pages/CustomReportsPage";
+import CustomReportViewPage from "./pages/CustomReportViewPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -38,6 +42,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
           <Route path="/shared/:slug/studio" element={<SlideViewPage />} />
+          <Route path="/shared/:slug/report" element={<SharedCustomReportPage />} />
 
           {/* Protected routes — redirect to /auth if not logged in */}
           <Route path="/" element={<ProtectedRoute><SlideViewPage /></ProtectedRoute>} />
@@ -46,6 +51,11 @@ const App = () => (
           <Route path="/tools/data-sources/:accountId" element={<ProtectedRoute><DataSourcesPage /></ProtectedRoute>} />
           <Route path="/tools/dimensions" element={<ProtectedRoute><DimensionsPage /></ProtectedRoute>} />
           <Route path="/tools/dimensions/:accountId" element={<ProtectedRoute><DimensionsPage /></ProtectedRoute>} />
+          <Route path="/tools/tags" element={<ProtectedRoute><TagsPage /></ProtectedRoute>} />
+          <Route path="/tools/tags/:accountId" element={<ProtectedRoute><TagsPage /></ProtectedRoute>} />
+          <Route path="/tools/reports" element={<ProtectedRoute><CustomReportsPage /></ProtectedRoute>} />
+          <Route path="/tools/reports/:accountId" element={<ProtectedRoute><CustomReportsPage /></ProtectedRoute>} />
+          <Route path="/tools/reports/:accountId/:reportId" element={<ProtectedRoute><CustomReportViewPage /></ProtectedRoute>} />
           <Route path="/tools/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
           <Route path="/tools/users/:accountId" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
           <Route path="/tools/forecasting" element={<ProtectedRoute><ForecastingDashboard /></ProtectedRoute>} />

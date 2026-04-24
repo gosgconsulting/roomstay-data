@@ -106,6 +106,9 @@ function resolveFilterDimKey(
   sampleRowKeys: Set<string>,
   configuredDimNames?: Record<string, string>
 ): string {
+  // Tag dimension IDs (tag:<uuid>) are synthetic keys added by evaluateTagsForRows.
+  // They exist directly as row keys — no resolution needed.
+  if (filterDimId.startsWith('tag:')) return filterDimId;
   if (sampleRowKeys.has(filterDimId)) return filterDimId;
 
   // Get the human name for this configured ID from either source.

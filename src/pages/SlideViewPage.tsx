@@ -488,13 +488,33 @@ export default function SlideViewPage() {
     isLoadingMonthlyData,
     isLoadingRawRows,
     isFetchingRawRows,
+    tags,
     createSlideReport,
     updateSlideReport,
     createView,
     updateView,
     deleteView,
   } = reportPage;
-  
+
+  // Filter tags to those applicable to the current view.
+  // A tag applies if its view_id is null (account-wide) or matches the selected view.
+  const viewFilteredTags = useMemo(() => {
+    return (tags || []).filter(
+      (t) => t.view_id === null || t.view_id === selectedViewId
+    );
+  }, [tags, selectedViewId]);
+
+  // Build tag dimension names for filter/breakdown resolution.
+  // Tags use synthetic IDs (tag:<uuid>) that need to be in the dimension name map
+  // so filter pills and breakdown dropdowns can display the tag name.
+  const tagDimensionNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const tag of viewFilteredTags) {
+      map[`tag:${tag.id}`] = tag.name;
+    }
+    return map;
+  }, [viewFilteredTags]);
+
   // Override slideReportId for public share studio
   const slideReportId = isPublicShareStudio && shareSlideReportId ? shareSlideReportId : hookSlideReportId;
   
@@ -584,7 +604,7 @@ export default function SlideViewPage() {
     setSelectedYear,
     selectedMonth,
     setSelectedMonth,
-    configuredDimensionNames,
+    configuredDimensionNames: { ...configuredDimensionNames, ...tagDimensionNames },
     shareBaseFilterValues: shareBaseFilters,
   });
 
@@ -3386,6 +3406,8 @@ export default function SlideViewPage() {
         onSignOut={handleSignOut}
         onDataSources={() => navigate(accountId ? `/tools/data-sources/${accountId}` : '/tools/data-sources')}
         onDimensions={() => navigate(accountId ? `/tools/dimensions/${accountId}` : '/tools/dimensions')}
+        onTags={() => navigate(accountId ? `/tools/tags/${accountId}` : '/tools/tags')}
+        onReports={() => navigate(accountId ? `/tools/reports/${accountId}` : '/tools/reports')}
         onUsers={() => navigate(accountId ? `/tools/users/${accountId}` : '/tools/users')}
         selectedViewId={selectedViewId}
         setSelectedViewId={setSelectedViewId}
@@ -3406,14 +3428,32 @@ export default function SlideViewPage() {
         mode={dimensionSettingsMode}
         initialChannel={dimensionSettingsInitialChannel}
         filterDimensions={{
-          metasearch: (dimensions.metasearch || []).filter((d) => d.type === "text"),
-          sem: (dimensions.sem || []).filter((d) => d.type === "text"),
-          social: (dimensions.social || []).filter((d) => d.type === "text"),
+          metasearch: [
+            ...(dimensions.metasearch || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('metasearch')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
+          sem: [
+            ...(dimensions.sem || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('sem')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
+          social: [
+            ...(dimensions.social || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('social')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
         }}
         breakdownDimensions={{
-          metasearch: (breakdownDimensions.metasearch || []).filter((d) => d.type === "text"),
-          sem: (breakdownDimensions.sem || []).filter((d) => d.type === "text"),
-          social: (breakdownDimensions.social || []).filter((d) => d.type === "text"),
+          metasearch: [
+            ...(breakdownDimensions.metasearch || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('metasearch')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
+          sem: [
+            ...(breakdownDimensions.sem || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('sem')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
+          social: [
+            ...(breakdownDimensions.social || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('social')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
         }}
         value={dimensionSettingsValue}
         onApply={persistDimensionSettings}
@@ -3549,12 +3589,14 @@ export default function SlideViewPage() {
                 breakdownDimensions={Object.fromEntries(
                   (Object.keys(breakdownDimensions) as ('metasearch' | 'sem' | 'social')[]).map((ch) => {
                     const validNames = new Set((CHANNEL_DIMENSION_NAMES[ch] || []).map((n) => n.toLowerCase()));
-                    return [
-                      ch,
-                      validNames.size > 0
-                        ? (breakdownDimensions[ch] || []).filter((d) => validNames.has(d.name.toLowerCase()))
-                        : (breakdownDimensions[ch] || []),
-                    ];
+                    const filtered = validNames.size > 0
+                      ? (breakdownDimensions[ch] || []).filter((d) => validNames.has(d.name.toLowerCase()))
+                      : (breakdownDimensions[ch] || []);
+                    // Append tag dimensions for this channel
+                    const tagDims = tags
+                      .filter(t => t.channels.includes(ch))
+                      .map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const }));
+                    return [ch, [...filtered, ...tagDims]];
                   })
                 ) as Record<string, { id: string; name: string; type: string }[]>}
                 breakdownConfigs={breakdownConfigs}

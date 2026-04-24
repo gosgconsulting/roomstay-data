@@ -11,6 +11,7 @@ import { useSlideReports, useSlideReport, useCreateSlideReport, useUpdateSlideRe
 import { useDataStudioRawRows } from "@/hooks/useDataStudioRawRows";
 import { useSlideReportViews, useCreateSlideReportView, useUpdateSlideReportView, useDeleteSlideReportView } from "@/hooks/useSlideReportViews";
 import { useFilteredSlideData } from "@/hooks/useFilteredSlideData";
+import { useTags } from "@/hooks/useTags";
 import { getAccountReportIds, clearAccountReportIdsCache, type AccountReportIds } from "@/lib/accountReportIds";
 import { buildComparisonDateRangeFromExact, exactDateRangeFromDayPicker, buildComparisonDateRange, formatDateToLocalIso, getCurrentMonthToDateRange, getYearsInDateRange } from "@/lib/monthUtils";
 import type { SlideReport, SlideReportPivotData, SlideReportView, SlideReportConfiguration, SlideReportDateRange } from "@/types/slideReports";
@@ -88,6 +89,7 @@ export interface UseSlideReportPageReturn {
   isLoadingRawRows: boolean;
   isFetchingRawRows: boolean;
   needEditSourceForMasterReport: boolean;
+  tags: import('@/types/tags').Tag[];
   createSlideReport: ReturnType<typeof useCreateSlideReport>;
   updateSlideReport: ReturnType<typeof useUpdateSlideReport>;
   createView: ReturnType<typeof useCreateSlideReportView>;
@@ -119,6 +121,12 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
   const creatingReportRef = useRef(false);
 
   const { data: slideReports, isLoading: isSlideReportsLoading } = useSlideReports(accountId || null);
+  const { data: allTags = [] } = useTags(accountId ?? undefined);
+  // Filter tags to those applicable to the currently selected view
+  const tags = useMemo(
+    () => allTags.filter((t) => t.view_id === null || t.view_id === selectedViewId),
+    [allTags, selectedViewId]
+  );
 
   const { data: accountReportIdsData } = useQuery({
     queryKey: ['accountReportIds', accountId ?? ''],
@@ -386,6 +394,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     groupByDimensionId,
     configuredDimensionNames,
     shareBaseFilterValues,
+    tags,
   });
 
   const { data: views = [], isLoading: isLoadingViews } = useSlideReportViews(slideReportId);
@@ -462,6 +471,7 @@ export function useSlideReportPage(params: UseSlideReportPageParams): UseSlideRe
     isLoadingRawRows,
     isFetchingRawRows,
     needEditSourceForMasterReport,
+    tags,
     createSlideReport: createSlideReportMutation,
     updateSlideReport,
     createView,

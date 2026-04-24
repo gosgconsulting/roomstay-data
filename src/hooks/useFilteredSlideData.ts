@@ -20,6 +20,8 @@ import {
 import { parseNumericValue } from '@/lib/parseNumericValue';
 import type { SlideReportPivotData } from '@/types/slideReports';
 import type { MetricData, MonthlyDataPoint, RawDataRow } from '@/types/slideView';
+import type { Tag } from '@/types/tags';
+import { evaluateTagsForRows } from '@/lib/tagEvaluation';
 
 type BreakdownRowLike = { name?: string; [k: string]: any; impressions: number; clicks: number; cost: number; revenue: number; bookings: number };
 
@@ -191,6 +193,12 @@ export interface UseFilteredSlideDataParams {
    * selections, data is still filtered by the baseline.
    */
   shareBaseFilterValues?: Record<string, Record<string, string[]>> | null;
+  /**
+   * Tags (custom rule-based dimensions) to evaluate against raw data rows.
+   * Each tag augments rows with a computed `tag:<uuid>` dimension value,
+   * enabling tags to work as filters and breakdowns.
+   */
+  tags?: Tag[];
 }
 
 export interface FilteredSlideData {
@@ -234,6 +242,7 @@ export function useFilteredSlideData({
   groupByDimensionId,
   configuredDimensionNames,
   shareBaseFilterValues,
+  tags,
 }: UseFilteredSlideDataParams): FilteredSlideData {
 
   // SECURITY: Enforce share baseline filters as a floor. If any baseline dimension
@@ -312,11 +321,19 @@ export function useFilteredSlideData({
     for (const [channel, channelData] of Object.entries(pivotData.channels)) {
       const channelFilterValues = filterValues[channel] || {};
       const hasChannelFilters = channelsWithFilters.has(channel);
-      const rawDataRows: RawDataRow[] = (channelData as any).rawDataRows || [];
+      const baseRawDataRows: RawDataRow[] = (channelData as any).rawDataRows || [];
       const dimensionMap: Record<string, string> = (channelData as any).dimensionMap || {};
       const combinedDimNames = configuredDimensionNames
         ? { ...dimensionMap, ...configuredDimensionNames }
         : dimensionMap;
+
+      // Augment rows with computed tag dimension values (tag:<uuid> keys).
+      // Tags applicable to this channel are evaluated before filtering so that
+      // tag dimensions can be used in filterValues and breakdowns.
+      const channelTags = (tags || []).filter(t => t.channels.includes(channel));
+      const rawDataRows = channelTags.length > 0
+        ? evaluateTagsForRows(baseRawDataRows, channelTags, combinedDimNames)
+        : baseRawDataRows;
 
       if (hasChannelFilters) {
         // ── FILTERED PATH ──────────────────────────────────────────────────────
@@ -390,6 +407,7 @@ export function useFilteredSlideData({
     monthKeyForBreakdowns,
     groupByDimensionId,
     configuredDimensionNames,
+    tags,
   ]);
 
   // Helper method to get filtered rows for a channel
