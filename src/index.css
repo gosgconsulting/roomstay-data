@@ -149,3 +149,19 @@
     box-shadow: 0 0 10px 3px hsl(var(--primary) / 0.7);
   }
 }
+
+/* Hide scrollbars utility — used by custom report tables */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide > div {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide > div::-webkit-scrollbar {
+  display: none;
+}

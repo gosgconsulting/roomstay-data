@@ -488,13 +488,33 @@ export default function SlideViewPage() {
     isLoadingMonthlyData,
     isLoadingRawRows,
     isFetchingRawRows,
+    tags,
     createSlideReport,
     updateSlideReport,
     createView,
     updateView,
     deleteView,
   } = reportPage;
-  
+
+  // Filter tags to those applicable to the current view.
+  // A tag applies if its view_id is null (account-wide) or matches the selected view.
+  const viewFilteredTags = useMemo(() => {
+    return (tags || []).filter(
+      (t) => t.view_id === null || t.view_id === selectedViewId
+    );
+  }, [tags, selectedViewId]);
+
+  // Build tag dimension names for filter/breakdown resolution.
+  // Tags use synthetic IDs (tag:<uuid>) that need to be in the dimension name map
+  // so filter pills and breakdown dropdowns can display the tag name.
+  const tagDimensionNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const tag of viewFilteredTags) {
+      map[`tag:${tag.id}`] = tag.name;
+    }
+    return map;
+  }, [viewFilteredTags]);
+
   // Override slideReportId for public share studio
   const slideReportId = isPublicShareStudio && shareSlideReportId ? shareSlideReportId : hookSlideReportId;
   
@@ -584,7 +604,7 @@ export default function SlideViewPage() {
     setSelectedYear,
     selectedMonth,
     setSelectedMonth,
-    configuredDimensionNames,
+    configuredDimensionNames: { ...configuredDimensionNames, ...tagDimensionNames },
     shareBaseFilterValues: shareBaseFilters,
   });
 
@@ -660,18 +680,28 @@ export default function SlideViewPage() {
       autoConfiguredRef.current = slideReportId;
 
       try {
-        // Load global dimensions (all types) to build default configs
-        const { data: allDims } = await supabase
+        // Load global dimensions (value types) for KPI columns
+        const { data: globalDims } = await supabase
           .from('dimensions')
           .select('id, name, type')
           .eq('scope', 'global')
           .order('name');
 
-        const dims = allDims || [];
-        const valueDimIds = dims
+        // Load account-scoped text dimensions for filters & breakdowns.
+        // These are the dimensions that actually match data rows (Hotel, Channel, etc.).
+        const { data: accountTextDims } = await supabase
+          .from('dimensions')
+          .select('id, name, type')
+          .eq('scope', 'account')
+          .eq('account_id', accountId)
+          .eq('type', 'text')
+          .order('name');
+
+        const globalDimsList = globalDims || [];
+        const valueDimIds = globalDimsList
           .filter(d => ['number', 'currency', 'percentage'].includes(d.type))
           .map(d => d.id);
-        const textDims = dims.filter(d => d.type === 'string' || d.type === 'text');
+        const textDims = accountTextDims || [];
 
         const validChannels: ('metasearch' | 'sem' | 'social')[] = [];
         const reportIds: Record<string, string> = {};
@@ -728,6 +758,76 @@ export default function SlideViewPage() {
 
     autoConfigureReport();
   }, [accountId, user, slideReportId, accountReportIds.metasearch, accountReportIds.sem, accountReportIds.social, slideReport?.configuration?.selectedChannels]);
+
+  // Re-populate filterConfigs for existing reports where the auto-configure previously used
+  // global dimensions (which had no text entries). Detects empty filterDimensionIds across all
+  // channels and fills them from account-scoped text dimensions, matching CHANNEL_DIMENSION_NAMES.
+  const filterConfigsRepopulatedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const repopulateFilterConfigs = async () => {
+      if (!accountId || !user || !slideReportId) return;
+      if (isPublicShareStudio || allowedViewIds !== null) return;
+
+      // Only run if we have a saved config but filterConfigs are all empty
+      const cfg = slideReport?.configuration;
+      if (!cfg?.selectedChannels?.length) return;
+      const fc = cfg.filterConfigs;
+      if (!fc) return; // no filterConfigs key at all — auto-configure will handle it
+
+      // Check if any channel has non-empty filterDimensionIds
+      const hasAnyFilterDims = Object.values(fc).some(
+        (ch: any) => ch?.filterDimensionIds?.length > 0
+      );
+      if (hasAnyFilterDims) return; // Already populated — nothing to do
+
+      // Prevent running twice for the same report
+      if (filterConfigsRepopulatedRef.current === slideReportId) return;
+      filterConfigsRepopulatedRef.current = slideReportId;
+
+      try {
+        // Load account-scoped text dimensions (same query as the fixed auto-configure)
+        const { data: accountTextDims } = await supabase
+          .from('dimensions')
+          .select('id, name, type')
+          .eq('scope', 'account')
+          .eq('account_id', accountId)
+          .eq('type', 'text')
+          .order('name');
+
+        const textDims = accountTextDims || [];
+        if (textDims.length === 0) return;
+
+        const channels = cfg.selectedChannels as ('metasearch' | 'sem' | 'social')[];
+        const updatedFilterConfigs: Record<string, { filterDimensionIds: string[] }> = {};
+        const updatedBreakdownConfigs: Record<string, { breakdownDimensionIds: string[] }> = { ...(cfg.breakdownConfigs || {}) };
+
+        for (const ch of channels) {
+          const validNames = new Set((CHANNEL_DIMENSION_NAMES[ch] || []).map(n => n.toLowerCase()));
+          const channelTextDimIds = validNames.size > 0
+            ? textDims.filter(d => validNames.has(d.name.toLowerCase())).map(d => d.id)
+            : textDims.map(d => d.id);
+          updatedFilterConfigs[ch] = { filterDimensionIds: channelTextDimIds };
+          // Also fix breakdownConfigs if they're empty (same root cause)
+          if (!updatedBreakdownConfigs[ch]?.breakdownDimensionIds?.length) {
+            updatedBreakdownConfigs[ch] = { breakdownDimensionIds: channelTextDimIds };
+          }
+        }
+
+        const configuration = {
+          ...cfg,
+          filterConfigs: updatedFilterConfigs,
+          breakdownConfigs: updatedBreakdownConfigs,
+        };
+
+        await updateSlideReport.mutateAsync({ id: slideReportId, configuration } as any);
+        console.log('[RepopulateFilterConfigs] Fixed empty filterConfigs with account dimensions');
+      } catch (err) {
+        console.error('[RepopulateFilterConfigs] Failed:', err);
+      }
+    };
+
+    repopulateFilterConfigs();
+  }, [accountId, user, slideReportId, slideReport?.configuration, isPublicShareStudio, allowedViewIds]);
 
   // Check for share authentication when user is not authenticated (moved after slideReportId declaration)
   // Legacy ?shared=true path removed — all shares now use /shared/:slug/studio
@@ -2687,12 +2787,14 @@ export default function SlideViewPage() {
     dsFilters.applyView(view, options);
 
     // Restore filter configs (which pill dropdowns appear) for this view.
-    // Named view → restore from view.filter_configs (if saved).
+    // Named view with saved configs → use them.
+    // Named view without saved configs → fall back to report-level initialFilterConfigs
+    //   (so filter pills still appear, matching master).
     // Master reset (null) → restore from report-level initialFilterConfigs.
     if (view?.filter_configs) {
       dsFilters.setFilterConfigs(view.filter_configs as FilterConfigs);
-    } else if (!viewId) {
-      // Master reset — go back to the report-level filter pill config
+    } else {
+      // Either master reset or a view without saved filter_configs — use report defaults
       dsFilters.setFilterConfigs(initialFilterConfigs);
     }
 
@@ -3304,6 +3406,8 @@ export default function SlideViewPage() {
         onSignOut={handleSignOut}
         onDataSources={() => navigate(accountId ? `/tools/data-sources/${accountId}` : '/tools/data-sources')}
         onDimensions={() => navigate(accountId ? `/tools/dimensions/${accountId}` : '/tools/dimensions')}
+        onTags={() => navigate(accountId ? `/tools/tags/${accountId}` : '/tools/tags')}
+        onReports={() => navigate(accountId ? `/tools/reports/${accountId}` : '/tools/reports')}
         onUsers={() => navigate(accountId ? `/tools/users/${accountId}` : '/tools/users')}
         selectedViewId={selectedViewId}
         setSelectedViewId={setSelectedViewId}
@@ -3324,14 +3428,32 @@ export default function SlideViewPage() {
         mode={dimensionSettingsMode}
         initialChannel={dimensionSettingsInitialChannel}
         filterDimensions={{
-          metasearch: (dimensions.metasearch || []).filter((d) => d.type === "text"),
-          sem: (dimensions.sem || []).filter((d) => d.type === "text"),
-          social: (dimensions.social || []).filter((d) => d.type === "text"),
+          metasearch: [
+            ...(dimensions.metasearch || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('metasearch')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
+          sem: [
+            ...(dimensions.sem || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('sem')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
+          social: [
+            ...(dimensions.social || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('social')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
         }}
         breakdownDimensions={{
-          metasearch: (breakdownDimensions.metasearch || []).filter((d) => d.type === "text"),
-          sem: (breakdownDimensions.sem || []).filter((d) => d.type === "text"),
-          social: (breakdownDimensions.social || []).filter((d) => d.type === "text"),
+          metasearch: [
+            ...(breakdownDimensions.metasearch || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('metasearch')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
+          sem: [
+            ...(breakdownDimensions.sem || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('sem')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
+          social: [
+            ...(breakdownDimensions.social || []).filter((d) => d.type === "text"),
+            ...viewFilteredTags.filter(t => t.channels.includes('social')).map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const })),
+          ],
         }}
         value={dimensionSettingsValue}
         onApply={persistDimensionSettings}
@@ -3467,12 +3589,14 @@ export default function SlideViewPage() {
                 breakdownDimensions={Object.fromEntries(
                   (Object.keys(breakdownDimensions) as ('metasearch' | 'sem' | 'social')[]).map((ch) => {
                     const validNames = new Set((CHANNEL_DIMENSION_NAMES[ch] || []).map((n) => n.toLowerCase()));
-                    return [
-                      ch,
-                      validNames.size > 0
-                        ? (breakdownDimensions[ch] || []).filter((d) => validNames.has(d.name.toLowerCase()))
-                        : (breakdownDimensions[ch] || []),
-                    ];
+                    const filtered = validNames.size > 0
+                      ? (breakdownDimensions[ch] || []).filter((d) => validNames.has(d.name.toLowerCase()))
+                      : (breakdownDimensions[ch] || []);
+                    // Append tag dimensions for this channel
+                    const tagDims = tags
+                      .filter(t => t.channels.includes(ch))
+                      .map(t => ({ id: `tag:${t.id}`, name: t.name, type: 'text' as const }));
+                    return [ch, [...filtered, ...tagDims]];
                   })
                 ) as Record<string, { id: string; name: string; type: string }[]>}
                 breakdownConfigs={breakdownConfigs}
