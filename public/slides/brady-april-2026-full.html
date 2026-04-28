@@ -7,7 +7,9 @@
 <title>Brady Hotels × Dijitally — Performance Report April 2026 (Full)</title>
 <link href="https://fonts.googleapis.com" rel="preconnect"/>
 <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&amp;family=Manrope:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&amp;family=Manrope:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
 <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; overflow-x: hidden; }
@@ -653,6 +655,101 @@
         transition-duration: 0.15s !important;
       }
     }
+  
+    /* === PDF GENERATION MODE === */
+    /* Applied via body.pdf-mode while html2canvas captures each slide.
+       Locks every slide to a fixed 1280x720 (16:9) so the PDF aspect is correct. */
+    body.pdf-mode {
+      overflow: visible !important;
+      height: auto !important;
+      scroll-snap-type: none !important;
+    }
+    body.pdf-mode .slide {
+      width: 1280px !important;
+      height: 720px !important;
+      min-height: 720px !important;
+      max-height: 720px !important;
+      scroll-snap-align: none !important;
+    }
+    body.pdf-mode #nav-dots,
+    body.pdf-mode #progress-bar { display: none !important; }
+    body.pdf-mode .slide .anim {
+      opacity: 1 !important;
+      transform: none !important;
+      transition: none !important;
+    }
+    /* Loading overlay shown during PDF generation */
+    .pdf-overlay {
+      position: fixed; inset: 0;
+      background: rgba(17,25,46,0.97);
+      z-index: 99999;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #FFFFFF;
+      font-family: 'Manrope', system-ui, sans-serif;
+    }
+    .pdf-overlay .pdf-title {
+      font-family: 'Syne', system-ui, sans-serif;
+      font-size: 2.2rem; font-weight: 700;
+      letter-spacing: -0.01em; margin-bottom: 1.4rem;
+    }
+    .pdf-overlay .pdf-progress {
+      font-size: 0.95rem; color: rgba(255,255,255,0.65);
+      margin-bottom: 1.4rem;
+    }
+    .pdf-overlay .pdf-bar {
+      width: 280px; height: 3px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 3px; overflow: hidden;
+    }
+    .pdf-overlay .pdf-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #E84B3C 0%, #C2358F 25%, #5E3FBE 50%, #2B6FE0 75%, #5DC8C5 100%);
+      transition: width 0.3s ease;
+    }
+
+    /* === PRINT / PDF EXPORT === */
+    @page {
+      size: 13.333in 7.5in;  /* 16:9 widescreen */
+      margin: 0;
+    }
+    @media print {
+      html { scroll-snap-type: none !important; scroll-behavior: auto !important; }
+      html, body {
+        height: auto !important;
+        overflow: visible !important;
+        background: var(--white);
+      }
+      #nav-dots, #progress-bar { display: none !important; }
+      .slide {
+        width: 13.333in !important;
+        height: 7.5in !important;
+        min-height: 7.5in !important;
+        max-height: 7.5in !important;
+        overflow: hidden !important;
+        page-break-after: always !important;
+        page-break-inside: avoid !important;
+        break-after: page !important;
+        break-inside: avoid !important;
+        scroll-snap-align: none !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .slide:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+      }
+      /* Force all animations to final state */
+      .slide .anim {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+      }
+      .slide .slide-tail,
+      .slide-num,
+      .slide::after { z-index: 50; }
+    }
+
   </style>
 </head>
 <body>
@@ -2791,6 +2888,95 @@
   }, { passive: true });
 
   slides[0].classList.add('visible');
+
+  // === AUTO-PDF MODE ===
+  // When opened with #pdf in the URL, generate a true 16:9 PDF (PowerPoint
+  // widescreen 960pt x 540pt) using html2canvas + jsPDF, then trigger a direct
+  // browser download with a filename derived from <title>. Closes the tab when done.
+  if (window.location.hash === '#pdf' || window.location.hash === '#print') {
+    var generatePDF = async function () {
+      // 1. Reveal all slides + apply pdf-mode CSS lock to 1280x720
+      document.querySelectorAll('.slide').forEach(function (s) { s.classList.add('visible'); });
+      document.body.classList.add('pdf-mode');
+
+      // 2. Show loading overlay
+      var overlay = document.createElement('div');
+      overlay.className = 'pdf-overlay';
+      overlay.innerHTML =
+        '<div class="pdf-title">Generating PDF…</div>' +
+        '<div class="pdf-progress" id="__pdfProgress">Preparing slides…</div>' +
+        '<div class="pdf-bar"><div class="pdf-bar-fill" id="__pdfBar" style="width:0%"></div></div>';
+      document.body.appendChild(overlay);
+
+      // 3. Wait for fonts + layout
+      try { await document.fonts.ready; } catch (e) {}
+      await new Promise(function (r) { setTimeout(r, 600); });
+
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var total = slides.length;
+
+      // 4. Build a clean filename from the document title
+      var titleText = (document.title || 'slides')
+        .replace(/×/g, 'x')                  // × → x
+        .replace(/[—–]/g, '-')          // — – → -
+        .replace(/[·•]/g, '-')          // · • → -
+        .replace(/[\\/:*?"<>|]/g, '')           // strip filesystem-illegal chars
+        .replace(/\s+/g, ' ')
+        .trim();
+      var filename = (titleText || 'slides') + '.pdf';
+
+      // 5. Init jsPDF — PowerPoint 16:9 widescreen: 960pt x 540pt
+      var jsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+      var pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'pt',
+        format: [960, 540],
+        compress: true
+      });
+
+      // 6. Capture each slide and add as a PDF page
+      for (var i = 0; i < total; i++) {
+        var slide = slides[i];
+        var prog = document.getElementById('__pdfProgress');
+        var bar = document.getElementById('__pdfBar');
+        if (prog) prog.textContent = 'Rendering slide ' + (i + 1) + ' of ' + total + '…';
+        if (bar) bar.style.width = (((i) / total) * 100) + '%';
+
+        var canvas = await html2canvas(slide, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#FFFFFF',
+          width: 1280,
+          height: 720,
+          windowWidth: 1280,
+          windowHeight: 720,
+          logging: false
+        });
+        var imgData = canvas.toDataURL('image/jpeg', 0.92);
+        if (i > 0) pdf.addPage([960, 540], 'landscape');
+        pdf.addImage(imgData, 'JPEG', 0, 0, 960, 540, undefined, 'FAST');
+      }
+
+      // 7. Final progress + download
+      var bar2 = document.getElementById('__pdfBar');
+      var prog2 = document.getElementById('__pdfProgress');
+      if (bar2) bar2.style.width = '100%';
+      if (prog2) prog2.textContent = 'Saving PDF…';
+
+      pdf.save(filename);
+
+      // 8. Close window after download (user sees the file in their downloads)
+      setTimeout(function () {
+        try { window.close(); } catch (e) {}
+      }, 1200);
+    };
+
+    if (document.readyState === 'complete') {
+      generatePDF();
+    } else {
+      window.addEventListener('load', generatePDF);
+    }
+  }
 })();
 </script>
 </body>

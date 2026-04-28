@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brady Hotels — Creative Refresh Analysis · April 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow-x: hidden; }
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+    :root {
+      --navy: #11192E; --black: #000000; --white: #FFFFFF;
+      --text: #11192E; --text-muted: #5A6377; --text-light: #8C93A4;
+      --line: #E5E7EB; --line-soft: #F0F2F5; --bg-soft: #F7F8FA;
+      --grad-1: #E84B3C; --grad-2: #C2358F; --grad-3: #5E3FBE; --grad-4: #2B6FE0; --grad-5: #5DC8C5;
+      --grad-bar-v: linear-gradient(180deg, #E84B3C 0%, #C2358F 25%, #5E3FBE 50%, #2B6FE0 75%, #5DC8C5 100%);
+      --grad-bar-h: linear-gradient(90deg,  #E84B3C 0%, #C2358F 25%, #5E3FBE 50%, #2B6FE0 75%, #5DC8C5 100%);
+      --ch-social: #C2358F; --pos: #1B7A3E; --pos-l: #2DA655; --neg: #DC2626;
+      --font-display: 'Syne', system-ui, sans-serif;
+      --font-body: 'Manrope', system-ui, sans-serif;
+      --fs-display: clamp(2rem, 5vw, 3.8rem);
+      --fs-h1: clamp(1.4rem, 3.2vw, 2.4rem);
+      --fs-h2: clamp(1.1rem, 2.4vw, 1.8rem);
+      --fs-h3: clamp(0.9rem, 1.7vw, 1.2rem);
+      --fs-body: clamp(0.72rem, 1.2vw, 0.92rem);
+      --fs-small: clamp(0.62rem, 0.95vw, 0.76rem);
+      --fs-label: clamp(0.56rem, 0.8vw, 0.68rem);
+      --pad: clamp(1.4rem, 3.5vw, 3.5rem);
+      --gap: clamp(0.6rem, 1.4vw, 1.4rem);
+      --gap-sm: clamp(0.3rem, 0.7vw, 0.7rem);
+    }
+    .slide {
+      width: 100vw; height: 100vh; height: 100dvh;
+      overflow: hidden; scroll-snap-align: start;
+      display: flex; flex-direction: column;
+      position: relative; background: var(--white); color: var(--text);
+      font-family: var(--font-body); font-weight: 400;
+    }
+    .slide::before {
+      content: ''; position: absolute; top: 0; left: 0; bottom: 0;
+      width: 12px; background: var(--grad-bar-v);
+      z-index: 5; pointer-events: none;
+    }
+    .slide#s1 {
+      background: var(--navy); color: var(--white);
+    }
+    .slide#s1::before {
+      width: 100%; height: 6px; bottom: auto; background: var(--grad-bar-h);
+    }
+    #nav-dots {
+      position: fixed; right: clamp(0.5rem, 1.4vw, 1.4rem); top: 50%;
+      transform: translateY(-50%); display: flex; flex-direction: column;
+      gap: 0.4rem; z-index: 200;
+    }
+    .nav-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: rgba(17,25,46,0.20); cursor: pointer;
+      transition: all 0.3s ease; border: none; padding: 0;
+    }
+    .nav-dot.active { background: var(--navy); transform: scale(1.6); }
+    #progress-bar {
+      position: fixed; top: 0; left: 0; height: 3px;
+      background: var(--grad-bar-h); z-index: 200; transition: width 0.4s ease;
+    }
+    .slide-num {
+      position: absolute; bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      left: 50%; transform: translateX(-50%);
+      font-family: var(--font-body); font-size: var(--fs-label);
+      color: var(--text-light); font-variant-numeric: tabular-nums;
+      letter-spacing: 0.06em; z-index: 6;
+    }
+    .slide#s1 .slide-num { color: rgba(255,255,255,0.40); }
+    .slide::after {
+      content: 'DIJITALLY';
+      position: absolute; bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      left: clamp(1.6rem, 3.4vw, 3.4rem);
+      font-family: var(--font-display); font-size: var(--fs-label);
+      font-weight: 700; letter-spacing: 0.18em;
+      color: var(--text); z-index: 6; pointer-events: none;
+    }
+    .slide#s1::after { color: var(--white); }
+    .slide-tail {
+      position: absolute; bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      right: clamp(1.4rem, 3vw, 3rem);
+      font-family: var(--font-body); font-size: var(--fs-label);
+      color: var(--text-muted); letter-spacing: 0.04em;
+      z-index: 6; pointer-events: none;
+    }
+    .slide#s1 .slide-tail { color: rgba(255,255,255,0.55); }
+    .section-tag {
+      position: absolute; top: clamp(0.7rem, 1.4vw, 1.4rem);
+      right: clamp(1.2rem, 2.4vw, 2.8rem);
+      font-size: var(--fs-label); letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--ch-social);
+      font-weight: 600;
+    }
+    .slide-eyebrow {
+      font-size: var(--fs-label); letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--ch-social);
+      font-weight: 600; margin-bottom: 0.45rem;
+    }
+    .slide-title {
+      font-family: var(--font-display); font-size: var(--fs-h1);
+      font-weight: 700; line-height: 1.15;
+      color: var(--text); letter-spacing: -0.01em;
+    }
+    .slide#s1 .slide-title { color: var(--white); }
+    .slide-header { margin-bottom: var(--gap); flex-shrink: 0; }
+    .slide-inner {
+      flex: 1; display: flex; flex-direction: column;
+      padding: var(--pad);
+      padding-left: calc(var(--pad) + 0.6rem);
+      padding-bottom: clamp(2.2rem, 4vw, 4rem);
+      overflow: hidden;
+    }
+    .slide-content {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: center; overflow: hidden; min-height: 0;
+    }
+    .anim {
+      opacity: 0; transform: translateY(14px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .slide.visible .anim { opacity: 1; transform: translateY(0); }
+    .d1 { transition-delay: 0.08s !important; }
+    .d2 { transition-delay: 0.16s !important; }
+    .d3 { transition-delay: 0.24s !important; }
+    .d4 { transition-delay: 0.32s !important; }
+    .d5 { transition-delay: 0.40s !important; }
+
+    #s1 {
+      background: linear-gradient(140deg, #0d1428 0%, #11192E 50%, #0a1224 100%);
+      justify-content: center; align-items: center; text-align: center;
+    }
+    .cover-eyebrow {
+      font-size: var(--fs-label); letter-spacing: 0.32em;
+      text-transform: uppercase; color: var(--grad-5);
+      font-weight: 600; margin-bottom: clamp(0.5rem, 1.5vw, 1.5rem);
+    }
+    .cover-title {
+      font-family: var(--font-display); font-size: var(--fs-display);
+      font-weight: 700; line-height: 1.04; letter-spacing: -0.015em;
+      color: var(--white); margin-bottom: 0.3em;
+    }
+    .cover-sub {
+      font-size: clamp(1rem, 2.4vw, 1.7rem); font-weight: 400;
+      color: rgba(255,255,255,0.78);
+      margin-bottom: clamp(1rem, 2.5vw, 2.5rem);
+      display: flex; align-items: center; justify-content: center; gap: 0.6em;
+    }
+    .cover-sub::before { content: '//'; color: var(--grad-5); font-weight: 700; font-family: var(--font-display); }
+    .cover-divider {
+      width: 80px; height: 2px; background: var(--grad-bar-h);
+      margin: 0 auto clamp(1rem, 2vw, 2rem); border-radius: 1px;
+    }
+    .cover-meta { display: flex; justify-content: center; gap: clamp(1rem, 3vw, 3rem); flex-wrap: wrap; }
+    .cover-meta-label {
+      font-size: var(--fs-label); letter-spacing: 0.18em;
+      text-transform: uppercase; color: rgba(255,255,255,0.50);
+      margin-bottom: 0.3rem; font-weight: 600;
+    }
+    .cover-meta-value { font-size: var(--fs-small); color: rgba(255,255,255,0.88); font-weight: 500; }
+    .bracket {
+      position: absolute; width: 44px; height: 44px;
+      border-color: rgba(255,255,255,0.35); border-style: solid;
+    }
+    .bracket.tl { top: 1.6rem; left: 1.6rem; border-width: 1px 0 0 1px; }
+    .bracket.br { bottom: 1.6rem; right: 1.6rem; border-width: 0 1px 1px 0; }
+
+    .dt {
+      width: 100%; border-collapse: collapse;
+      font-size: var(--fs-small); font-family: var(--font-body);
+    }
+    .dt thead tr { border-bottom: 1px solid var(--line); }
+    .dt th {
+      padding: 0.55rem 0.7rem; text-align: right;
+      font-size: var(--fs-label); letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--text-light);
+      font-weight: 500; white-space: nowrap;
+    }
+    .dt th:first-child { text-align: left; }
+    .dt td {
+      padding: 0.5rem 0.7rem; text-align: right;
+      border-bottom: 1px solid var(--line-soft);
+      color: var(--text); white-space: nowrap;
+      font-variant-numeric: tabular-nums; font-weight: 500;
+    }
+    .dt td:first-child {
+      text-align: left; font-weight: 500;
+      max-width: 220px; white-space: normal;
+    }
+    .dt tfoot td {
+      border-bottom: none; border-top: 1px solid var(--line);
+      font-weight: 700; padding-top: 0.65rem;
+    }
+    .dt.compact td, .dt.compact th { padding: 0.38rem 0.6rem; }
+    .dt .pos { color: var(--pos); font-weight: 600; }
+    .dt .neg { color: var(--neg); font-weight: 600; }
+
+    .action-card {
+      background: var(--bg-soft); border-left: 3px solid var(--ch-social);
+      border-radius: 0 6px 6px 0; padding: 0.6rem var(--gap);
+      font-size: var(--fs-small); color: var(--text); line-height: 1.55;
+    }
+    .action-card.win { border-left-color: var(--pos); }
+    .action-card.loss { border-left-color: var(--neg); }
+    .action-card strong { color: var(--text); font-weight: 700; }
+
+    /* HERO STAT */
+    .hero-stat {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: var(--gap); margin-bottom: var(--gap);
+    }
+    .stat-card {
+      background: var(--bg-soft); border-radius: 12px;
+      padding: var(--gap); text-align: center;
+      border-top: 4px solid var(--ch-social);
+    }
+    .stat-card.win { border-top-color: var(--pos); }
+    .stat-card.alert { border-top-color: var(--grad-1); }
+    .stat-label {
+      font-size: var(--fs-label); letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--text-light);
+      font-weight: 600; margin-bottom: 0.4rem;
+    }
+    .stat-big {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 5vw, 3.6rem);
+      font-weight: 800; line-height: 0.95;
+      color: var(--text); letter-spacing: -0.02em;
+      margin-bottom: 0.3rem;
+    }
+    .stat-big.gradient {
+      background: var(--grad-bar-h);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; color: transparent;
+    }
+    .stat-big.win { color: var(--pos); }
+    .stat-sub {
+      font-size: var(--fs-small); color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    /* BEFORE/AFTER ROW */
+    .ba-row {
+      display: grid; grid-template-columns: 1fr 60px 1fr;
+      gap: var(--gap); align-items: center;
+      padding: 0.7rem 0; border-bottom: 1px solid var(--line-soft);
+    }
+    .ba-row:last-child { border-bottom: none; }
+    .ba-side {
+      background: var(--bg-soft); border-radius: 8px;
+      padding: 0.6rem var(--gap-sm);
+    }
+    .ba-side.before { border-left: 3px solid var(--text-light); }
+    .ba-side.after { border-left: 3px solid var(--pos); }
+    .ba-arrow {
+      text-align: center; font-family: var(--font-display);
+      font-size: var(--fs-h2); font-weight: 800;
+      color: var(--pos);
+    }
+
+    @media (max-height: 720px) { :root { --pad: clamp(0.9rem, 2.4vw, 2rem); --gap: clamp(0.4rem, 1vw, 0.9rem); } }
+    @media (max-height: 600px) { #nav-dots { display: none; } }
+    @media (max-width: 760px) {
+      .hero-stat { grid-template-columns: 1fr; }
+    }
+  
+    /* === PDF GENERATION MODE === */
+    /* Applied via body.pdf-mode while html2canvas captures each slide.
+       Locks every slide to a fixed 1280x720 (16:9) so the PDF aspect is correct. */
+    body.pdf-mode {
+      overflow: visible !important;
+      height: auto !important;
+      scroll-snap-type: none !important;
+    }
+    body.pdf-mode .slide {
+      width: 1280px !important;
+      height: 720px !important;
+      min-height: 720px !important;
+      max-height: 720px !important;
+      scroll-snap-align: none !important;
+    }
+    body.pdf-mode #nav-dots,
+    body.pdf-mode #progress-bar { display: none !important; }
+    body.pdf-mode .slide .anim {
+      opacity: 1 !important;
+      transform: none !important;
+      transition: none !important;
+    }
+    /* Loading overlay shown during PDF generation */
+    .pdf-overlay {
+      position: fixed; inset: 0;
+      background: rgba(17,25,46,0.97);
+      z-index: 99999;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #FFFFFF;
+      font-family: 'Manrope', system-ui, sans-serif;
+    }
+    .pdf-overlay .pdf-title {
+      font-family: 'Syne', system-ui, sans-serif;
+      font-size: 2.2rem; font-weight: 700;
+      letter-spacing: -0.01em; margin-bottom: 1.4rem;
+    }
+    .pdf-overlay .pdf-progress {
+      font-size: 0.95rem; color: rgba(255,255,255,0.65);
+      margin-bottom: 1.4rem;
+    }
+    .pdf-overlay .pdf-bar {
+      width: 280px; height: 3px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 3px; overflow: hidden;
+    }
+    .pdf-overlay .pdf-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #E84B3C 0%, #C2358F 25%, #5E3FBE 50%, #2B6FE0 75%, #5DC8C5 100%);
+      transition: width 0.3s ease;
+    }
+
+    /* === PRINT / PDF EXPORT === */
+    @page {
+      size: 13.333in 7.5in;  /* 16:9 widescreen */
+      margin: 0;
+    }
+    @media print {
+      html { scroll-snap-type: none !important; scroll-behavior: auto !important; }
+      html, body {
+        height: auto !important;
+        overflow: visible !important;
+        background: var(--white);
+      }
+      #nav-dots, #progress-bar { display: none !important; }
+      .slide {
+        width: 13.333in !important;
+        height: 7.5in !important;
+        min-height: 7.5in !important;
+        max-height: 7.5in !important;
+        overflow: hidden !important;
+        page-break-after: always !important;
+        page-break-inside: avoid !important;
+        break-after: page !important;
+        break-inside: avoid !important;
+        scroll-snap-align: none !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      .slide:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+      }
+      /* Force all animations to final state */
+      .slide .anim {
+        opacity: 1 !important;
+        transform: none !important;
+        transition: none !important;
+      }
+      .slide .slide-tail,
+      .slide-num,
+      .slide::after { z-index: 50; }
+    }
+
+  </style>
+</head>
+<body>
+
+<div id="nav-dots"></div>
+<div id="progress-bar" style="width:20%"></div>
+
+<!-- ════ 1. COVER ════ -->
+<section class="slide" id="s1">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div style="z-index:2;padding:var(--pad);text-align:center">
+    <div class="cover-eyebrow anim d1">Dijitally × Brady Hotels · Creative Study</div>
+    <h1 class="cover-title anim d2">Creative Refresh<br>Before / After</h1>
+    <div class="cover-sub anim d3">April 2026 · Saver Rate Theme Launch</div>
+    <div class="cover-divider anim d4"></div>
+    <div class="cover-meta anim d5">
+      <div><div class="cover-meta-label">Channel</div><div class="cover-meta-value">Meta · Facebook + Instagram</div></div>
+      <div><div class="cover-meta-label">Period</div><div class="cover-meta-value">Sep '25 → Apr '26</div></div>
+      <div><div class="cover-meta-label">Focus</div><div class="cover-meta-value">CTR uplift by hotel</div></div>
+    </div>
+  </div>
+  <div class="slide-num">01 / 05</div>
+</section>
+
+<!-- ════ 2. HEADLINE FINDING ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Headline Finding</div>
+      <h2 class="slide-title anim d2">"Saver Rate" Replaced Old Sales Theme · CTR More Than Doubled</h2>
+    </div>
+    <div class="slide-content">
+      <div class="hero-stat anim d2">
+        <div class="stat-card">
+          <div class="stat-label">Old Theme CTR</div>
+          <div class="stat-big">1.19%</div>
+          <div class="stat-sub">"Book Direct &amp; Save" + "Book Early"<br>(Sep–Dec '25 · 32 ads)</div>
+        </div>
+        <div class="stat-card win">
+          <div class="stat-label">New Theme CTR</div>
+          <div class="stat-big win">2.60%</div>
+          <div class="stat-sub">"Saver Rate" launched 1 Apr 2026<br>(12 ads · 4 hotels × 3 audiences)</div>
+        </div>
+        <div class="stat-card alert">
+          <div class="stat-label">CTR Uplift</div>
+          <div class="stat-big gradient">+118%</div>
+          <div class="stat-sub">2,492 clicks vs 1,125 (+121%)<br>at +14% spend</div>
+        </div>
+      </div>
+      <table class="dt compact anim d3">
+        <thead><tr><th>Period</th><th>Spend</th><th>Impressions</th><th>Clicks</th><th>CTR</th><th>Themes Active</th></tr></thead>
+        <tbody>
+          <tr><td>Sep '25 – Dec '25 (legacy theme)</td><td>$1,415</td><td>94,186</td><td>1,125</td><td class="neg">1.19%</td><td style="white-space:normal">Book Direct &amp; Save · Book Early · More Than A Room</td></tr>
+          <tr><td>Apr '26 (new Saver Rate theme)</td><td>$1,608</td><td>95,915</td><td class="pos">2,492</td><td class="pos">2.60%</td><td style="white-space:normal">Saver Rate (4 hotels × Conversion / Lookalike / Retarget)</td></tr>
+        </tbody>
+        <tfoot><tr><td>Δ</td><td>+$193 (+14%)</td><td>+1,729 (+2%)</td><td class="pos">+1,367 (+121%)</td><td class="pos">+1.41 ppt</td><td style="white-space:normal" class="pos">2.2× CTR efficiency</td></tr></tfoot>
+      </table>
+      <div class="action-card win anim d4" style="margin-top:var(--gap)">
+        <strong>What changed:</strong> All 12 active hotel Sales ads (across 4 properties × 3 audience types) were swapped on <strong>1 April 2026</strong>. New ads use the suffix <code style="font-family:Manrope,monospace;background:var(--line-soft);padding:0.05rem 0.3rem;border-radius:3px">"Saver Rate | Apr '26"</code>; legacy ads tagged <code style="font-family:Manrope,monospace;background:var(--line-soft);padding:0.05rem 0.3rem;border-radius:3px">"Book Direct &amp; Save - Sep/Nov/Dec '25"</code> and <code style="font-family:Manrope,monospace;background:var(--line-soft);padding:0.05rem 0.3rem;border-radius:3px">"Book Early - Dec '25"</code>.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Headline</div>
+  <div class="slide-num">02 / 05</div>
+</section>
+
+<!-- ════ 3. PER HOTEL BEFORE / AFTER ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Per Hotel · CTR Before / After</div>
+      <h2 class="slide-title anim d2">All 4 Brady Hotels Saw CTR Uplift</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr>
+          <th>Hotel — Funnel</th>
+          <th>Old Ads (Sep–Dec '25)</th>
+          <th>Old CTR</th>
+          <th>New Ads (Apr '26)</th>
+          <th>New CTR</th>
+          <th>Δ</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td>Brady Hotels Central — Sales</td>
+            <td style="white-space:normal;color:var(--text-muted)">8 ads (Book Direct &amp; Save · Book Early)</td>
+            <td class="neg">0.89%</td>
+            <td style="white-space:normal;color:var(--text-muted)">3 ads (Conv · LAL · Retarget · Saver Rate)</td>
+            <td class="pos">2.46%</td>
+            <td class="pos">+176%</td>
+          </tr>
+          <tr>
+            <td>Brady Apt Hardware Lane — Sales</td>
+            <td style="white-space:normal;color:var(--text-muted)">8 ads (Book Direct &amp; Save · Book Early)</td>
+            <td class="neg">1.19%</td>
+            <td style="white-space:normal;color:var(--text-muted)">3 ads (Conv · LAL · Retarget · Saver Rate)</td>
+            <td class="pos">3.01%</td>
+            <td class="pos">+153%</td>
+          </tr>
+          <tr>
+            <td>Brady Hotels Jones Lane — Sales</td>
+            <td style="white-space:normal;color:var(--text-muted)">7 ads (Book Direct &amp; Save · Book Early)</td>
+            <td class="neg">1.20%</td>
+            <td style="white-space:normal;color:var(--text-muted)">3 ads (Conv · LAL · Retarget · Saver Rate)</td>
+            <td class="pos">2.34%</td>
+            <td class="pos">+95%</td>
+          </tr>
+          <tr>
+            <td>Brady Apt Flinders Street — Sales</td>
+            <td style="white-space:normal;color:var(--text-muted)">9 ads (Book Direct &amp; Save · Book Early · More Than A Room)</td>
+            <td>1.37%</td>
+            <td style="white-space:normal;color:var(--text-muted)">3 ads (Conv · LAL · Retarget · Saver Rate)</td>
+            <td class="pos">2.53%</td>
+            <td class="pos">+85%</td>
+          </tr>
+        </tbody>
+        <tfoot><tr><td>Group · Hotel Sales Combined</td><td>32 ads</td><td class="neg">1.19%</td><td>12 ads</td><td class="pos">2.60%</td><td class="pos">+118%</td></tr></tfoot>
+      </table>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap)">
+        <div class="action-card win anim d3"><strong>Biggest winner — Brady Hotels Central:</strong> CTR jumped from 0.89% to 2.46% (+176%). <strong>Retarget Hardware Lane Saver Rate</strong> alone hit 3.65% CTR with $227 spend — single best-performing ad in April.</div>
+        <div class="action-card anim d4"><strong>Audience-level pattern:</strong> Retarget audiences responded most strongly to the new theme — average CTR 3.11% across the 4 hotels (vs 1.5% for the old retarget creatives). Conversion + LAL also lifted but less dramatically.</div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Per Hotel</div>
+  <div class="slide-num">03 / 05</div>
+</section>
+
+<!-- ════ 4. UGC VIDEO + PROMO PERFORMANCE ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Other Creative Tests · March 2026</div>
+      <h2 class="slide-title anim d2">UGC Video Won Big · Static Story Promos Failed</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr><th>Asset Group</th><th>Launch</th><th>Format</th><th>Spend</th><th>Imp.</th><th>Clicks</th><th>CTR</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>UGC Video — Saver Rate (3 ads)</td>
+            <td>Mar 2026</td>
+            <td style="color:var(--text-muted)">9:16 vertical UGC</td>
+            <td>$327</td><td>16,090</td><td>551</td>
+            <td class="pos">3.42%</td>
+            <td class="pos">★ Scale</td>
+          </tr>
+          <tr>
+            <td>UGC Video — Brand (3 ads)</td>
+            <td>Mar 2026</td>
+            <td style="color:var(--text-muted)">9:16 vertical UGC</td>
+            <td>$398</td><td>21,667</td><td>744</td>
+            <td class="pos">3.43%</td>
+            <td class="pos">★ Scale</td>
+          </tr>
+          <tr>
+            <td>UGC Video — Events (3 ads)</td>
+            <td>Mar 2026</td>
+            <td style="color:var(--text-muted)">9:16 vertical UGC</td>
+            <td>$86</td><td>4,429</td><td>121</td>
+            <td class="pos">2.73%</td>
+            <td class="pos">★ Scale</td>
+          </tr>
+          <tr>
+            <td>Easter Carousel — Brand (3 ads)</td>
+            <td>Mar 2026</td>
+            <td style="color:var(--text-muted)">Multi-image carousel</td>
+            <td>$73</td><td>4,295</td><td>64</td>
+            <td>1.49%</td>
+            <td>→ Hold</td>
+          </tr>
+          <tr>
+            <td>Easter Square 4:5/Story — Hardware (3 ads)</td>
+            <td>Mar 2026</td>
+            <td style="color:var(--text-muted)">4:5 image + Story</td>
+            <td>$108</td><td>6,126</td><td>130</td>
+            <td>2.10%</td>
+            <td>→ Hold</td>
+          </tr>
+          <tr>
+            <td>Autumn Sale Static Story — Brand (4 ads)</td>
+            <td>Mar 2026</td>
+            <td style="color:var(--text-muted)">Static 9:16 Story</td>
+            <td>$103</td><td>7,332</td><td>40</td>
+            <td class="neg">0.55%</td>
+            <td class="neg">▼ Pause</td>
+          </tr>
+          <tr>
+            <td>Autumn Sale Static Story — Central (3 ads)</td>
+            <td>Mar 2026</td>
+            <td style="color:var(--text-muted)">Static 9:16 Story</td>
+            <td>$137</td><td>10,716</td><td>46</td>
+            <td class="neg">0.43%</td>
+            <td class="neg">▼ Pause</td>
+          </tr>
+          <tr>
+            <td>Autumn Sale Static Story — Jones (3 ads)</td>
+            <td>Mar 2026</td>
+            <td style="color:var(--text-muted)">Static 9:16 Story</td>
+            <td>$139</td><td>10,254</td><td>40</td>
+            <td class="neg">0.40%</td>
+            <td class="neg">▼ Pause</td>
+          </tr>
+          <tr>
+            <td>Autumn Sale Static Story — Hardware (3 ads)</td>
+            <td>Mar 2026</td>
+            <td style="color:var(--text-muted)">Static 9:16 Story</td>
+            <td>$138</td><td>11,064</td><td>55</td>
+            <td class="neg">0.50%</td>
+            <td class="neg">▼ Pause</td>
+          </tr>
+          <tr>
+            <td>Autumn Sale Static Story — Flinders (3 ads)</td>
+            <td>Mar 2026</td>
+            <td style="color:var(--text-muted)">Static 9:16 Story</td>
+            <td>$139</td><td>10,693</td><td>36</td>
+            <td class="neg">0.34%</td>
+            <td class="neg">▼ Pause</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap-sm)">
+        <div class="action-card win anim d3"><strong>UGC Video is the format winner:</strong> Vertical 9:16 user-generated-style content averaged <strong>3.36% CTR</strong> — 2× static, 6× the failing Autumn Sale theme. Production-cheap, performance-rich.</div>
+        <div class="action-card loss anim d4"><strong>Autumn Sale Static Story is dead:</strong> 16 ads across 4 hotels averaged <strong>0.43% CTR</strong>. Concept fatigue + static format on Stories = no engagement. Recommend pause + reallocate $552 to UGC scaling.</div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Format Test</div>
+  <div class="slide-num">04 / 05</div>
+</section>
+
+<!-- ════ 5. RECOMMENDATIONS ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">What Works · What's Next</div>
+      <h2 class="slide-title anim d2">Creative Roadmap — May 2026 Onward</h2>
+    </div>
+    <div class="slide-content">
+      <div style="display:flex;flex-direction:column;gap:var(--gap-sm);flex:1;justify-content:center">
+        <div class="action-card win anim d2"><strong>① Keep "Saver Rate" theme running across all 4 Hotel Sales:</strong> Apr CTR 2.60% (vs 1.19% legacy). Already replaced all 32 old "Book Direct &amp; Save" / "Book Early" creatives — keep them. Refresh asset pool every 4–6 weeks to prevent fatigue.</div>
+        <div class="action-card win anim d3"><strong>② Scale UGC Video format aggressively:</strong> 3.36% blended CTR · works for Saver Rate, Brand, and Events angles. Brief 5–8 new UGC creators for May (vertical 9:16, 10–15s). Replace static creative across Brady Group Sales Daily campaign.</div>
+        <div class="action-card loss anim d4"><strong>③ Pause all 16 Autumn Sale Static Story ads:</strong> 0.43% CTR average across 4 hotels — concept fatigue + static format underperforming. $552/month wasted. Reallocate to UGC Video scaling.</div>
+        <div class="action-card anim d5"><strong>④ Test next: Saver Rate as UGC Video</strong> — combine the two winners. The "Saver Rate" message is converting; vertical UGC format is engaging. Expected uplift: 4%+ CTR on retarget audiences.</div>
+        <div class="action-card anim d5" style="border-left-color:var(--grad-3)"><strong>⑤ Establish creative refresh cadence:</strong> Every theme launches with a clear date suffix (e.g. <code style="font-family:Manrope,monospace;background:var(--line-soft);padding:0.05rem 0.3rem;border-radius:3px">"Theme | MMM 'YY"</code>) — keep the discipline. Makes before/after analyses repeatable and isolates creative impact from media-mix changes.</div>
+      </div>
+      <div class="anim d5" style="margin-top:var(--gap);padding-top:var(--gap);border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end">
+        <div>
+          <div style="font-size:var(--fs-label);letter-spacing:0.22em;text-transform:uppercase;color:var(--text-light)">Next refresh</div>
+          <div style="font-size:var(--fs-body);color:var(--text);font-weight:600">May–Jun 2026 · "Saver Rate" UGC Video variants</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:var(--fs-label);letter-spacing:0.22em;text-transform:uppercase;color:var(--text-light)">Projected impact</div>
+          <div style="font-size:var(--fs-body);color:var(--pos);font-weight:600">CTR 3.5%+ · CPC −20%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Roadmap</div>
+  <div class="slide-num">05 / 05</div>
+</section>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl = document.getElementById('nav-dots');
+  const progressEl = document.getElementById('progress-bar');
+  const total = slides.length;
+  let current = 0;
+  slides.forEach((_, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    btn.setAttribute('aria-label', 'Slide ' + (i + 1));
+    btn.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(btn);
+  });
+  slides.forEach((slide) => {
+    if (!slide.querySelector('.slide-tail')) {
+      const tail = document.createElement('div');
+      tail.className = 'slide-tail';
+      tail.textContent = 'Dijitally x Brady Hotels';
+      slide.appendChild(tail);
+    }
+  });
+  function goTo(idx) {
+    current = Math.max(0, Math.min(idx, total - 1));
+    slides[current].scrollIntoView({ behavior: 'smooth' });
+    sync();
+  }
+  function sync() {
+    document.querySelectorAll('.nav-dot').forEach((d, i) =>
+      d.classList.toggle('active', i === current));
+    progressEl.style.width = ((current + 1) / total * 100) + '%';
+  }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio >= 0.4) {
+        const i = slides.indexOf(e.target);
+        current = i; sync();
+        e.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.4 });
+  slides.forEach(s => io.observe(s));
+  document.addEventListener('keydown', e => {
+    const map = { ArrowDown: 1, ArrowRight: 1, ' ': 1, PageDown: 1, ArrowUp: -1, ArrowLeft: -1, PageUp: -1 };
+    if (e.key in map) { e.preventDefault(); goTo(current + map[e.key]); }
+  });
+  slides[0].classList.add('visible');
+
+  // === AUTO-PDF MODE ===
+  // When opened with #pdf in the URL, generate a true 16:9 PDF (PowerPoint
+  // widescreen 960pt x 540pt) using html2canvas + jsPDF, then trigger a direct
+  // browser download with a filename derived from <title>. Closes the tab when done.
+  if (window.location.hash === '#pdf' || window.location.hash === '#print') {
+    var generatePDF = async function () {
+      // 1. Reveal all slides + apply pdf-mode CSS lock to 1280x720
+      document.querySelectorAll('.slide').forEach(function (s) { s.classList.add('visible'); });
+      document.body.classList.add('pdf-mode');
+
+      // 2. Show loading overlay
+      var overlay = document.createElement('div');
+      overlay.className = 'pdf-overlay';
+      overlay.innerHTML =
+        '<div class="pdf-title">Generating PDF…</div>' +
+        '<div class="pdf-progress" id="__pdfProgress">Preparing slides…</div>' +
+        '<div class="pdf-bar"><div class="pdf-bar-fill" id="__pdfBar" style="width:0%"></div></div>';
+      document.body.appendChild(overlay);
+
+      // 3. Wait for fonts + layout
+      try { await document.fonts.ready; } catch (e) {}
+      await new Promise(function (r) { setTimeout(r, 600); });
+
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var total = slides.length;
+
+      // 4. Build a clean filename from the document title
+      var titleText = (document.title || 'slides')
+        .replace(/×/g, 'x')                  // × → x
+        .replace(/[—–]/g, '-')          // — – → -
+        .replace(/[·•]/g, '-')          // · • → -
+        .replace(/[\\/:*?"<>|]/g, '')           // strip filesystem-illegal chars
+        .replace(/\s+/g, ' ')
+        .trim();
+      var filename = (titleText || 'slides') + '.pdf';
+
+      // 5. Init jsPDF — PowerPoint 16:9 widescreen: 960pt x 540pt
+      var jsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+      var pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'pt',
+        format: [960, 540],
+        compress: true
+      });
+
+      // 6. Capture each slide and add as a PDF page
+      for (var i = 0; i < total; i++) {
+        var slide = slides[i];
+        var prog = document.getElementById('__pdfProgress');
+        var bar = document.getElementById('__pdfBar');
+        if (prog) prog.textContent = 'Rendering slide ' + (i + 1) + ' of ' + total + '…';
+        if (bar) bar.style.width = (((i) / total) * 100) + '%';
+
+        var canvas = await html2canvas(slide, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#FFFFFF',
+          width: 1280,
+          height: 720,
+          windowWidth: 1280,
+          windowHeight: 720,
+          logging: false
+        });
+        var imgData = canvas.toDataURL('image/jpeg', 0.92);
+        if (i > 0) pdf.addPage([960, 540], 'landscape');
+        pdf.addImage(imgData, 'JPEG', 0, 0, 960, 540, undefined, 'FAST');
+      }
+
+      // 7. Final progress + download
+      var bar2 = document.getElementById('__pdfBar');
+      var prog2 = document.getElementById('__pdfProgress');
+      if (bar2) bar2.style.width = '100%';
+      if (prog2) prog2.textContent = 'Saving PDF…';
+
+      pdf.save(filename);
+
+      // 8. Close window after download (user sees the file in their downloads)
+      setTimeout(function () {
+        try { window.close(); } catch (e) {}
+      }, 1200);
+    };
+
+    if (document.readyState === 'complete') {
+      generatePDF();
+    } else {
+      window.addEventListener('load', generatePDF);
+    }
+  }
+})();
+</script>
+</body>
+</html>

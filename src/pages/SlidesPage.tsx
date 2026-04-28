@@ -8,6 +8,23 @@ import { useUserAccount } from "@/hooks/useUserAccount";
 // Static slide deck registry — extend this array to add more decks
 const SLIDE_DECKS = [
   {
+    id: "brady-creative-refresh-april-2026",
+    title: "Brady — Creative Refresh Before/After",
+    subtitle: "April 2026 · Saver Rate Theme Launch · CTR Analysis",
+    description: "5-slide focused study on the April 2026 creative refresh. All 32 legacy Sales ads (Sep–Dec '25) replaced by 12 new \"Saver Rate | Apr '26\" ads — CTR more than doubled (1.19% → 2.60%, +118%). Per-hotel before/after table, UGC video format winner analysis (3.36% CTR), and clear pause/scale recommendations.",
+    period: "Sep 2025 → Apr 2026",
+    client: "Brady Hotels — Meta Ads",
+    channel: "Facebook + Instagram",
+    slides: 5,
+    kpis: [
+      { label: "Old CTR", value: "1.19%" },
+      { label: "New CTR", value: "2.60%" },
+      { label: "Uplift", value: "+118%" },
+    ],
+    src: "/slides/brady-creative-refresh-april-2026.html",
+    accentColor: "#C2358F",
+  },
+  {
     id: "brady-elizabeth-launch",
     title: "Brady Elizabeth — Launch Strategy",
     subtitle: "Melbourne 250-room 4-star · 12-Month Digital Plan",
