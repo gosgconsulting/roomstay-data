@@ -1,0 +1,2797 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Brady Hotels × Dijitally — Performance Report April 2026 (Full)</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&amp;family=Manrope:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow-x: hidden; }
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+
+    :root {
+      /* === BRAND === */
+      --navy:        #11192E;   /* Dark mode bg + section dividers */
+      --navy-2:      #1A2342;
+      --black:       #000000;   /* Primary text on light */
+      --white:       #FFFFFF;   /* Light bg + text on dark */
+      --text:        #11192E;
+      --text-muted:  #5A6377;
+      --text-light:  #8C93A4;
+      --line:        #E5E7EB;
+      --line-soft:   #F0F2F5;
+      --bg-soft:     #F7F8FA;
+
+      /* === IRIDESCENT GRADIENT (signature) === */
+      --grad-1: #E84B3C;        /* red */
+      --grad-2: #C2358F;        /* magenta */
+      --grad-3: #5E3FBE;        /* purple */
+      --grad-4: #2B6FE0;        /* blue */
+      --grad-5: #5DC8C5;        /* teal */
+      --grad-bar-v: linear-gradient(180deg, #E84B3C 0%, #C2358F 25%, #5E3FBE 50%, #2B6FE0 75%, #5DC8C5 100%);
+      --grad-bar-h: linear-gradient(90deg,  #E84B3C 0%, #C2358F 25%, #5E3FBE 50%, #2B6FE0 75%, #5DC8C5 100%);
+
+      /* === CHANNEL CHART COLORS === */
+      --ch-sem:      #2B6FE0;   /* SEM = blue */
+      --ch-meta:     #5DC8C5;   /* Metasearch = teal */
+      --ch-social:   #C2358F;   /* Social = magenta */
+      --ch-action:   #1B7A3E;   /* Action plan = green */
+      --ch-sem-l:    #5A93EE;
+      --ch-meta-l:   #82D4D2;
+      --ch-social-l: #D766AC;
+
+      /* === STATUS === */
+      --pos:    #1B7A3E;
+      --pos-l:  #2DA655;
+      --neg:    #DC2626;
+      --neg-l:  #EF4444;
+      --neutral: #6B7280;
+
+      /* === FONTS === */
+      --font-display: 'Syne', system-ui, sans-serif;
+      --font-body:    'Manrope', system-ui, sans-serif;
+
+      /* === SIZING === */
+      --fs-display: clamp(2rem, 5vw, 3.8rem);
+      --fs-h1:      clamp(1.4rem, 3.2vw, 2.4rem);
+      --fs-h2:      clamp(1.1rem, 2.4vw, 1.8rem);
+      --fs-h3:      clamp(0.9rem, 1.7vw, 1.2rem);
+      --fs-body:    clamp(0.72rem, 1.2vw, 0.92rem);
+      --fs-small:   clamp(0.62rem, 0.95vw, 0.76rem);
+      --fs-label:   clamp(0.56rem, 0.8vw, 0.68rem);
+
+      --pad: clamp(1.4rem, 3.5vw, 3.5rem);
+      --gap: clamp(0.6rem, 1.4vw, 1.4rem);
+      --gap-sm: clamp(0.3rem, 0.7vw, 0.7rem);
+
+      /* === BACKWARDS-COMPAT TOKENS (mapped to new channel palette) === */
+      /* Original: gold = SEM, teal = Metasearch, blue = Social */
+      --bg: var(--white);
+      --bg-card: var(--white);
+      --gold:      var(--ch-sem);
+      --gold-l:    var(--ch-sem);
+      --gold-d:    rgba(43,111,224,0.10);
+      --gold-line: var(--line);
+      --teal:      var(--ch-meta);
+      --teal-l:    var(--ch-meta);
+      --teal-d:    rgba(93,200,197,0.10);
+      --teal-line: var(--line);
+      --blue:      var(--ch-social);
+      --blue-l:    var(--ch-social);
+      --blue-d:    rgba(194,53,143,0.10);
+      --blue-line: var(--line);
+      --green: var(--pos);
+      --red:   var(--neg);
+      --mint:  var(--pos);
+      --w90: var(--text);
+      --w80: var(--text);
+      --w50: var(--text-muted);
+      --w42: var(--text-muted);
+      --w25: var(--text-light);
+    }
+
+    /* === SLIDE BASE === */
+    .slide {
+      width: 100vw; height: 100vh; height: 100dvh;
+      overflow: hidden;
+      scroll-snap-align: start;
+      display: flex; flex-direction: column;
+      position: relative;
+      background: var(--white);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-weight: 400;
+    }
+    /* Iridescent vertical bar on left edge of light slides */
+    .slide::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 12px;
+      background: var(--grad-bar-v);
+      z-index: 5;
+      pointer-events: none;
+    }
+    /* Dark variant — cover, section dividers */
+    .slide.section-divider,
+    .slide#s1 {
+      background: var(--navy);
+      color: var(--white);
+    }
+    /* Top horizontal bar on dark slides instead of left */
+    .slide.section-divider::before,
+    .slide#s1::before {
+      width: 100%;
+      height: 6px;
+      bottom: auto;
+      background: var(--grad-bar-h);
+    }
+
+    /* === NAVIGATION === */
+    #nav-dots {
+      position: fixed; right: clamp(0.5rem, 1.4vw, 1.4rem); top: 50%;
+      transform: translateY(-50%);
+      display: flex; flex-direction: column;
+      gap: 0.4rem; z-index: 200;
+      max-height: 70vh;
+      padding: 0.5rem 0.3rem;
+    }
+    .nav-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: rgba(17,25,46,0.20);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none; padding: 0;
+      flex-shrink: 0;
+    }
+    .nav-dot.active { background: var(--navy); transform: scale(1.6); }
+    .nav-dot:hover { background: rgba(17,25,46,0.6); }
+
+    #progress-bar {
+      position: fixed; top: 0; left: 0; height: 3px;
+      background: var(--grad-bar-h);
+      z-index: 200;
+      transition: width 0.4s ease;
+    }
+
+    /* === FOOTER (Dijitally · page · Dijitally x Brady Hotels) === */
+    .footer {
+      position: absolute;
+      bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      left: 0; right: 0;
+      padding: 0 clamp(1.4rem, 3vw, 3rem) 0 clamp(1.8rem, 3.5vw, 3.5rem);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      z-index: 6;
+      pointer-events: none;
+    }
+    .footer .brand {
+      font-family: var(--font-display);
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      font-size: var(--fs-small);
+      color: var(--text);
+    }
+    .slide.section-divider .footer .brand,
+    .slide#s1 .footer .brand,
+    .slide.section-divider .footer,
+    .slide#s1 .footer { color: var(--white); }
+    .slide.section-divider .footer { color: rgba(255,255,255,0.62); }
+    .slide.section-divider .footer .brand { color: var(--white); }
+    .footer .page { font-variant-numeric: tabular-nums; }
+    .footer .right { text-align: right; }
+
+    .slide-num {
+      position: absolute;
+      bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      color: var(--text-light);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.06em;
+      z-index: 6;
+    }
+    .slide.section-divider .slide-num,
+    .slide#s1 .slide-num {
+      color: rgba(255,255,255,0.40);
+    }
+    /* Footer brand + right text — added via pseudo-elements on .slide */
+    .slide::after {
+      content: 'DIJITALLY';
+      position: absolute;
+      bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      left: clamp(1.6rem, 3.4vw, 3.4rem);
+      font-family: var(--font-display);
+      font-size: var(--fs-label);
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: var(--text);
+      z-index: 6;
+      pointer-events: none;
+    }
+    .slide.section-divider::after,
+    .slide#s1::after { color: var(--white); }
+    /* Right-side footer label */
+    .slide-tail {
+      position: absolute;
+      bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      right: clamp(1.4rem, 3vw, 3rem);
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+      z-index: 6;
+      pointer-events: none;
+    }
+    .slide.section-divider .slide-tail,
+    .slide#s1 .slide-tail { color: rgba(255,255,255,0.55); }
+
+    .section-tag {
+      position: absolute;
+      top: clamp(0.7rem, 1.4vw, 1.4rem);
+      right: clamp(1.2rem, 2.4vw, 2.8rem);
+      font-size: var(--fs-label);
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-family: var(--font-body);
+    }
+    .section-tag.sem    { color: var(--ch-sem); }
+    .section-tag.meta   { color: var(--ch-meta); }
+    .section-tag.social { color: var(--ch-social); }
+    .section-tag.action { color: var(--ch-action); }
+
+    /* === HEADERS === */
+    .slide-eyebrow {
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--ch-meta);
+      font-weight: 600;
+      margin-bottom: 0.45rem;
+    }
+    .slide-eyebrow.meta   { color: var(--ch-meta); }
+    .slide-eyebrow.social { color: var(--ch-social); }
+    .slide-eyebrow.action { color: var(--ch-action); }
+
+    .slide-title {
+      font-family: var(--font-display);
+      font-size: var(--fs-h1);
+      font-weight: 700;
+      line-height: 1.15;
+      color: var(--text);
+      letter-spacing: -0.01em;
+    }
+    .slide.section-divider .slide-title,
+    .slide#s1 .slide-title { color: var(--white); }
+    .slide-header {
+      margin-bottom: var(--gap);
+      flex-shrink: 0;
+    }
+    .slide-inner {
+      flex: 1; display: flex; flex-direction: column;
+      padding: var(--pad);
+      padding-left: calc(var(--pad) + 0.6rem);
+      padding-bottom: clamp(2.2rem, 4vw, 4rem);
+      overflow: hidden;
+    }
+    .slide-content {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: center;
+      overflow: hidden; min-height: 0;
+    }
+
+    .anim {
+      opacity: 0; transform: translateY(14px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .slide.visible .anim { opacity: 1; transform: translateY(0); }
+    .d1 { transition-delay: 0.08s !important; }
+    .d2 { transition-delay: 0.16s !important; }
+    .d3 { transition-delay: 0.24s !important; }
+    .d4 { transition-delay: 0.32s !important; }
+    .d5 { transition-delay: 0.40s !important; }
+    .d6 { transition-delay: 0.48s !important; }
+
+    /* Decorative glows (subdued for light mode) */
+    .glow {
+      position: absolute; border-radius: 50%;
+      pointer-events: none; filter: blur(70px);
+      opacity: 0.5;
+    }
+    .slide.section-divider .glow,
+    .slide#s1 .glow { opacity: 1; }
+
+    /* Brackets — only on dark slides */
+    .bracket { display: none; }
+    .slide.section-divider .bracket,
+    .slide#s1 .bracket {
+      display: block;
+      position: absolute;
+      width: 44px; height: 44px;
+      border-color: rgba(255,255,255,0.35);
+      border-style: solid;
+    }
+    .slide.section-divider .bracket.tl,
+    .slide#s1 .bracket.tl { top: 1.6rem; left: 1.6rem; border-width: 1px 0 0 1px; }
+    .slide.section-divider .bracket.br,
+    .slide#s1 .bracket.br { bottom: 1.6rem; right: 1.6rem; border-width: 0 1px 1px 0; }
+
+    /* COVER */
+    #s1 {
+      background: linear-gradient(140deg, #0d1428 0%, #11192E 50%, #0a1224 100%);
+      justify-content: center; align-items: center; text-align: center;
+    }
+    .cover-eyebrow {
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--grad-5);
+      font-weight: 600;
+      margin-bottom: clamp(0.5rem, 1.5vw, 1.5rem);
+    }
+    .cover-title {
+      font-family: var(--font-display);
+      font-size: var(--fs-display);
+      font-weight: 700;
+      line-height: 1.04;
+      letter-spacing: -0.015em;
+      color: var(--white);
+      margin-bottom: 0.3em;
+    }
+    .cover-sub {
+      font-family: var(--font-body);
+      font-size: clamp(1rem, 2.4vw, 1.7rem);
+      font-weight: 400;
+      color: rgba(255,255,255,0.78);
+      margin-bottom: clamp(1rem, 2.5vw, 2.5rem);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6em;
+    }
+    .cover-sub::before {
+      content: '//';
+      color: var(--grad-5);
+      font-weight: 700;
+      font-family: var(--font-display);
+    }
+    .cover-divider {
+      width: 80px; height: 2px;
+      background: var(--grad-bar-h);
+      margin: 0 auto clamp(1rem, 2vw, 2rem);
+      border-radius: 1px;
+    }
+    .cover-meta { display: flex; justify-content: center; gap: clamp(1rem, 3vw, 3rem); }
+    .cover-meta-label {
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.50);
+      margin-bottom: 0.3rem;
+      font-weight: 600;
+    }
+    .cover-meta-value {
+      font-family: var(--font-body);
+      font-size: var(--fs-small);
+      color: rgba(255,255,255,0.88);
+      font-weight: 500;
+    }
+
+    /* TOC */
+    .toc-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--gap);
+      flex: 1; align-content: center;
+    }
+    .toc-card {
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: var(--gap);
+      position: relative;
+      overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .toc-card::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: var(--ch-sem);
+    }
+    .toc-card.meta::before   { background: var(--ch-meta); }
+    .toc-card.social::before { background: var(--ch-social); }
+    .toc-card.action::before { background: var(--ch-action); }
+    .toc-num {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 3vw, 2.4rem);
+      font-weight: 700;
+      color: rgba(43,111,224,0.18);
+      line-height: 1;
+      margin-bottom: 0.4rem;
+    }
+    .toc-card.meta .toc-num   { color: rgba(93,200,197,0.32); }
+    .toc-card.social .toc-num { color: rgba(194,53,143,0.22); }
+    .toc-card.action .toc-num { color: rgba(27,122,62,0.22); }
+    .toc-title {
+      font-family: var(--font-display);
+      font-size: var(--fs-h3);
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+    .toc-list {
+      list-style: none;
+      font-size: var(--fs-small);
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+    .toc-list li::before { content: '— '; color: var(--text-light); }
+
+    /* === DATA TABLE — light, minimal === */
+    .dt {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--fs-small);
+      font-family: var(--font-body);
+    }
+    .dt thead tr { border-bottom: 1px solid var(--line); }
+    .dt th {
+      padding: 0.55rem 0.7rem;
+      text-align: right;
+      font-size: var(--fs-label);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-light);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .dt th:first-child { text-align: left; }
+    .dt td {
+      padding: 0.5rem 0.7rem;
+      text-align: right;
+      border-bottom: 1px solid var(--line-soft);
+      color: var(--text);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
+    .dt td:first-child {
+      text-align: left;
+      color: var(--text);
+      font-weight: 500;
+      max-width: 220px;
+      white-space: normal;
+    }
+    .dt tfoot td {
+      border-bottom: none;
+      border-top: 1px solid var(--line);
+      font-weight: 700;
+      padding-top: 0.65rem;
+      color: var(--text) !important;
+    }
+    .dt.compact td, .dt.compact th { padding: 0.38rem 0.6rem; }
+    .dt tbody tr:hover { background: var(--line-soft); }
+    .dt .pos { color: var(--pos); font-weight: 600; }
+    .dt .neg { color: var(--neg); font-weight: 600; }
+
+    /* === FUNNEL/STATUS TAGS === */
+    .ftag {
+      display: inline-block;
+      font-size: var(--fs-label);
+      padding: 0.12rem 0.45rem;
+      border-radius: 3px;
+      margin-left: 0.4rem;
+      font-weight: 600;
+      vertical-align: middle;
+    }
+    .ftag-top  { background: rgba(43,111,224,0.10);  color: var(--ch-sem); }
+    .ftag-mid  { background: rgba(93,200,197,0.14);  color: #2D8E8B; }
+    .ftag-bot  { background: rgba(194,53,143,0.10);  color: var(--ch-social); }
+    .ftag-win  { background: rgba(27,122,62,0.12);   color: var(--pos); }
+    .ftag-loss { background: rgba(220,38,38,0.10);   color: var(--neg); }
+    .ftag-hold { background: var(--line-soft);       color: var(--text-muted); }
+
+    /* === TWO-COLUMN CHART LAYOUT === */
+    .col-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: calc(var(--gap) * 1.2);
+      flex: 1;
+      align-items: stretch;
+      min-height: 0;
+    }
+    .col-2 > .chart-card {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: var(--gap);
+      display: flex; flex-direction: column;
+      min-height: 0;
+    }
+    .chart-card h4 {
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-light);
+      margin-bottom: var(--gap-sm);
+      font-weight: 600;
+    }
+    .chart-card .chart-wrap { flex: 1; min-height: 0; display: flex; align-items: center; }
+    .chart-card svg { width: 100%; height: auto; max-height: min(38vh, 270px); }
+
+    /* === ACTION CARDS === */
+    .action-card {
+      background: var(--bg-soft);
+      border-left: 3px solid var(--ch-sem);
+      border-radius: 0 6px 6px 0;
+      padding: 0.6rem var(--gap);
+      font-size: var(--fs-small);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .action-card.meta   { border-left-color: var(--ch-meta); }
+    .action-card.social { border-left-color: var(--ch-social); }
+    .action-card.action { border-left-color: var(--ch-action); }
+    .action-card strong { color: var(--text); font-weight: 700; }
+
+    /* === SECTION DIVIDER === */
+    .section-divider {
+      background: linear-gradient(135deg, #0d1428 0%, #11192E 55%, #0a1224 100%);
+      justify-content: center; align-items: center; text-align: center;
+    }
+    .sd-num {
+      font-family: var(--font-display);
+      font-size: clamp(4rem, 12vw, 10rem);
+      font-weight: 800;
+      color: rgba(255,255,255,0.06);
+      line-height: 0.9;
+      margin-bottom: 0.2em;
+      letter-spacing: -0.02em;
+    }
+    .sd-eyebrow {
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--grad-5);
+      font-weight: 600;
+      margin-bottom: 0.7rem;
+    }
+    .sd-eyebrow.meta   { color: var(--grad-5); }
+    .sd-eyebrow.social { color: var(--grad-2); }
+    .sd-eyebrow.action { color: var(--pos-l); }
+    .sd-title {
+      font-family: var(--font-display);
+      font-size: var(--fs-display);
+      font-weight: 700;
+      line-height: 1.04;
+      margin-bottom: 0.8rem;
+      color: var(--white);
+      letter-spacing: -0.015em;
+    }
+    .sd-sub {
+      font-family: var(--font-body);
+      font-size: var(--fs-body);
+      color: rgba(255,255,255,0.62);
+      max-width: 580px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* === KPI CHANNEL GRID (slide 6) === */
+    .kpi-channel-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--gap);
+      flex: 1;
+    }
+    .kpi-channel-card {
+      background: var(--white);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: var(--gap);
+      display: flex; flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-channel-card::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: var(--ch-sem);
+    }
+    .kpi-channel-card.meta::before   { background: var(--ch-meta); }
+    .kpi-channel-card.social::before { background: var(--ch-social); }
+    .kpi-channel-card .kc-name {
+      font-family: var(--font-display);
+      font-size: var(--fs-h3);
+      font-weight: 700;
+      margin-bottom: var(--gap-sm);
+      color: var(--ch-sem);
+      letter-spacing: -0.005em;
+    }
+    .kpi-channel-card.meta .kc-name   { color: var(--ch-meta); }
+    .kpi-channel-card.social .kc-name { color: var(--ch-social); }
+    .kc-table { width: 100%; font-size: var(--fs-small); font-family: var(--font-body); }
+    .kc-table tr { border-bottom: 1px solid var(--line-soft); }
+    .kc-table tr:last-child { border-bottom: none; }
+    .kc-table td { padding: 0.4rem 0; color: var(--text); font-variant-numeric: tabular-nums; }
+    .kc-table td:first-child { color: var(--text-light); font-size: var(--fs-label); letter-spacing: 0.04em; text-transform: uppercase; font-weight: 500; }
+    .kc-table td:last-child { text-align: right; font-weight: 700; color: var(--text); }
+
+    @media (max-height: 720px) {
+      :root {
+        --pad: clamp(0.9rem, 2.4vw, 2rem);
+        --gap: clamp(0.4rem, 1vw, 0.9rem);
+      }
+    }
+    @media (max-height: 600px) { #nav-dots { display: none; } }
+    @media (max-width: 760px) {
+      .toc-grid, .kpi-channel-grid { grid-template-columns: 1fr; }
+      .col-2 { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.15s !important;
+      }
+    }
+  </style>
+</head>
+<body>
+<div id="nav-dots"></div>
+<div id="progress-bar" style="width:2.7%"></div>
+<!-- ════ 1. COVER ════ -->
+<section class="slide" id="s1">
+<div class="bracket tl"></div>
+<div class="bracket br"></div>
+<div class="glow" style="top:-90px;left:-70px;width:340px;height:340px;background:radial-gradient(circle,rgba(212,168,67,0.12),transparent 70%)"></div>
+<div class="glow" style="bottom:-90px;right:-70px;width:340px;height:340px;background:radial-gradient(circle,rgba(95,179,168,0.08),transparent 70%)"></div>
+<div style="z-index:2;padding:var(--pad);text-align:center">
+<div class="cover-eyebrow anim d1">Dijitally × Brady Hotels</div>
+<h1 class="cover-title anim d2">Performance<br/>Report</h1>
+<div class="cover-sub anim d3">April 2026</div>
+<div class="cover-divider anim d4"></div>
+<div class="cover-meta anim d5">
+<div><div class="cover-meta-label">Period</div><div class="cover-meta-value">April 1–30, 2026</div></div>
+<div><div class="cover-meta-label">Channels</div><div class="cover-meta-value">SEM · Metasearch · Social</div></div>
+<div><div class="cover-meta-label">Properties</div><div class="cover-meta-value">4 Properties</div></div>
+</div>
+</div>
+<div class="slide-num">01 / 39</div>
+</section>
+<!-- ════ 2. TABLE OF CONTENTS ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">Report Structure</div>
+<h2 class="slide-title anim d2">Table of Contents</h2>
+</div>
+<div class="slide-content">
+<div class="toc-grid">
+<div class="toc-card anim d2">
+<div class="toc-num">01</div>
+<div class="toc-title">Overview</div>
+<ul class="toc-list">
+<li>Hotel portfolio &amp; capacity</li>
+<li>Results per hotel + share</li>
+<li>Results per channel</li>
+<li>Combined YTD vs FY 2025</li>
+</ul>
+</div>
+<div class="toc-card anim d3">
+<div class="toc-num" style="color:var(--gold-d)">02</div>
+<div class="toc-title">SEM</div>
+<ul class="toc-list">
+<li>Per hotel · per funnel</li>
+<li>Per device · per market</li>
+<li>Action plan table</li>
+<li>YTD trends · forecast</li>
+</ul>
+</div>
+<div class="toc-card meta anim d4">
+<div class="toc-num">03</div>
+<div class="toc-title">Metasearch</div>
+<ul class="toc-list">
+<li>Per hotel · per channel</li>
+<li>Per market · link type</li>
+<li>CPC bid action plan</li>
+<li>YTD trends · forecast</li>
+</ul>
+</div>
+<div class="toc-card social anim d5">
+<div class="toc-num">04</div>
+<div class="toc-title">Social</div>
+<ul class="toc-list">
+<li>Per hotel · per funnel</li>
+<li>Audience · device · placement</li>
+<li>Action plan table</li>
+<li>YTD trends · forecast</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div class="slide-num">02 / 39</div>
+</section>
+<!-- ════ 3. SECTION DIVIDER OVERVIEW ════ -->
+<section class="slide section-divider">
+<div class="bracket tl"></div>
+<div class="bracket br"></div>
+<div>
+<div class="sd-eyebrow anim d1">Section One</div>
+<div class="sd-num anim d2">01</div>
+<div class="sd-title anim d3">Overview</div>
+<div class="sd-sub anim d4">Portfolio results, capacity context and combined channel performance for April 2026 across the 4 properties in Melbourne.</div>
+</div>
+<div class="slide-num">03 / 39</div>
+</section>
+<!-- ════ 4. HOTEL PORTFOLIO + CAPACITY ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">Overview · Portfolio · YTD Jan–Apr 2026</div>
+<h2 class="slide-title anim d2">Hotel Portfolio &amp; Capacity</h2>
+</div>
+<div class="slide-content">
+<table class="dt anim d2">
+<thead><tr>
+<th>Hotel</th><th>Type</th><th>Rooms</th><th>ADR</th><th>Est. YTD Revenue<br/><span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-light);font-size:0.85em">at full capacity</span></th><th>YTD Marketing Rev</th><th>% Share</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Brady Hotels Central Melbourne</td>
+<td>Hotel</td><td>200</td><td>$210</td>
+<td>$5,040,000</td>
+<td>$238,400</td>
+<td class="pos">4.7%</td>
+</tr>
+<tr>
+<td>Brady Apt Hotel Hardware Lane</td>
+<td>Apt Hotel</td><td>120</td><td>$310</td>
+<td>$4,464,000</td>
+<td>$218,400</td>
+<td class="pos">4.9%</td>
+</tr>
+<tr>
+<td>Brady Apt Hotel Flinders Street</td>
+<td>Apt Hotel</td><td>100</td><td>$270</td>
+<td>$3,240,000</td>
+<td>$157,500</td>
+<td class="pos">4.9%</td>
+</tr>
+<tr>
+<td>Brady Hotels Jones Lane</td>
+<td>Hotel</td><td>180</td><td>$220</td>
+<td>$4,752,000</td>
+<td>$169,200</td>
+<td>3.6%</td>
+</tr>
+</tbody>
+<tfoot><tr>
+<td>Total</td>
+<td>4 properties</td>
+<td>600</td>
+<td>$246 avg</td>
+<td>$17,496,000</td>
+<td>$783,500</td>
+<td>4.5%</td>
+</tr></tfoot>
+</table>
+<div class="action-card anim d4" style="margin-top:var(--gap)">
+<strong>Marketing penetration:</strong> 4.5% blended share — paid marketing drives ~$783K of an estimated $17.5M YTD revenue ceiling (120 days × rooms × ADR @ 100% occupancy). <strong>Hardware Lane &amp; Flinders</strong> lead at 4.9% share. <strong>Jones Lane</strong> trails at 3.6% — opportunity to scale paid investment given the lower marketing penetration.
+      </div>
+</div>
+</div>
+<div class="section-tag">Overview</div>
+<div class="slide-num">04 / 39</div>
+</section>
+<!-- ════ 5. RESULTS PER HOTEL — APRIL 2026 ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">Overview · April 2026</div>
+<h2 class="slide-title anim d2">Results per Hotel</h2>
+</div>
+<div class="slide-content">
+<table class="dt anim d2">
+<thead><tr>
+<th>Hotel</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>Bookings</th><th>Clicks</th><th>Imp.</th>
+</tr></thead>
+<tbody>
+<tr><td>Brady Hotels Central Melbourne</td><td>$2,746</td><td>$58,033</td><td>21.1×</td><td>67</td><td>2,604</td><td>140K</td></tr>
+<tr><td>Brady Apt Hotel Hardware Lane</td><td>$2,917</td><td>$56,888</td><td>19.5×</td><td>53</td><td>2,049</td><td>121K</td></tr>
+<tr><td>Brady Apt Hotel Flinders Street</td><td>$2,475</td><td>$39,243</td><td>15.9×</td><td>43</td><td>2,154</td><td>137K</td></tr>
+<tr><td>Brady Hotels Jones Lane</td><td>$2,317</td><td>$38,406</td><td>16.6×</td><td>50</td><td>2,025</td><td>114K</td></tr>
+<tr><td>Brady Group (cross-portfolio)</td><td>$2,907</td><td>$25,989</td><td class="neg">8.9×</td><td>57</td><td>5,505</td><td>284K</td></tr>
+</tbody>
+<tfoot><tr>
+<td style="color:var(--gold-l)">Total</td>
+<td style="color:var(--gold-l)">$13,362</td>
+<td style="color:var(--gold-l)">$218,559</td>
+<td style="color:var(--gold-l)">16.4×</td>
+<td style="color:var(--gold-l)">270</td>
+<td style="color:var(--gold-l)">14,337</td>
+<td style="color:var(--gold-l)">796K</td>
+</tr></tfoot>
+</table>
+<div class="action-card anim d4" style="margin-top:var(--gap)">
+<strong>Top revenue contributors:</strong> Brady Central (26.6%) + Hardware Lane (26.1%) drive over half of total revenue. <strong>Brady Group cross-portfolio</strong> ROAS at 8.9× drags blended down — needs reallocation to hotel-specific PMAX. Spend totals combine SEM + Metasearch + Social; revenue is direct-attributed (SEM + Meta).
+      </div>
+</div>
+</div>
+<div class="section-tag">Overview</div>
+<div class="slide-num">05 / 39</div>
+</section>
+<!-- ════ 6. RESULTS PER CHANNEL — KPI TABLE ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">Overview · April 2026</div>
+<h2 class="slide-title anim d2">Results per Channel</h2>
+</div>
+<div class="slide-content">
+<div class="kpi-channel-grid">
+<div class="kpi-channel-card anim d2">
+<div class="kc-name">SEM (Google Ads)</div>
+<table class="kc-table">
+<tr><td>Spend</td><td>$7,151</td></tr>
+<tr><td>Revenue</td><td style="color:var(--gold-l)">$166,996</td></tr>
+<tr><td>ROAS</td><td style="color:var(--mint)">23.4×</td></tr>
+<tr><td>Conversions</td><td>363</td></tr>
+<tr><td>Clicks</td><td>11,002</td></tr>
+<tr><td>Impressions</td><td>574.8K</td></tr>
+<tr><td>CTR</td><td>1.91%</td></tr>
+<tr><td>CPC</td><td>$0.65</td></tr>
+</table>
+</div>
+<div class="kpi-channel-card meta anim d3">
+<div class="kc-name">Metasearch</div>
+<table class="kc-table">
+<tr><td>Spend</td><td>$1,641</td></tr>
+<tr><td>Revenue</td><td style="color:var(--teal-l)">$53,623</td></tr>
+<tr><td>ROAS</td><td style="color:var(--mint)">32.7×</td></tr>
+<tr><td>Bookings</td><td>111</td></tr>
+<tr><td>Clicks</td><td>1,832</td></tr>
+<tr><td>Impressions</td><td>50.7K</td></tr>
+<tr><td>CR</td><td>6.06%</td></tr>
+<tr><td>AOV</td><td>$483</td></tr>
+</table>
+</div>
+<div class="kpi-channel-card social anim d4">
+<div class="kc-name">Social (Meta)</div>
+<table class="kc-table">
+<tr><td>Spend</td><td>$5,089</td></tr>
+<tr><td>Revenue (att.)</td><td style="color:var(--blue-l)">$24,286</td></tr>
+<tr><td>ROAS (att.)</td><td>4.8×</td></tr>
+<tr><td>Campaigns</td><td>18</td></tr>
+<tr><td>Clicks</td><td>5,924</td></tr>
+<tr><td>Impressions</td><td>372K</td></tr>
+<tr><td>CTR</td><td>1.59%</td></tr>
+<tr><td>CPC</td><td>$0.86</td></tr>
+</table>
+</div>
+</div>
+<div class="action-card anim d5" style="margin-top:var(--gap)">
+<strong>Group totals — April 2026:</strong> $13,881 spend / $244,905 revenue / 17.6× blended ROAS. <strong>Metasearch most efficient</strong> at 32.7× ROAS . <strong>Social</strong> highest-share spend at 37% — assists significantly in cross-channel attribution.
+      </div>
+</div>
+</div>
+<div class="section-tag">Overview</div>
+<div class="slide-num">06 / 39</div>
+</section>
+<!-- ════ 7. ALL CHANNELS YTD — SINGLE COMBINED CHART ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">Overview · 2026 YTD vs Full Year 2025</div>
+<h2 class="slide-title anim d2">All Channels — Combined Cost &amp; Revenue</h2>
+</div>
+<div class="slide-content">
+<div class="anim d2" style="background:var(--bg-card);border:1px solid var(--gold-line);border-radius:8px;padding:var(--gap);flex:1;display:flex;flex-direction:column;min-height:0">
+<h4 style="font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;color:var(--w42);margin-bottom:var(--gap-sm);font-weight:500">SEM + Metasearch + Social — Combined Monthly</h4>
+<div style="flex:1;min-height:0;display:flex;align-items:center">
+<svg preserveaspectratio="xMidYMid meet" style="width:100%;height:auto;max-height:min(50vh,320px)" viewbox="0 0 920 320" xmlns="http://www.w3.org/2000/svg">
+<!-- vertical grid -->
+<g stroke="rgba(17,25,46,0.07)" stroke-width="1">
+<line x1="60" x2="60" y1="30" y2="260"></line>
+<line x1="130" x2="130" y1="30" y2="260"></line>
+<line x1="200" x2="200" y1="30" y2="260"></line>
+<line x1="270" x2="270" y1="30" y2="260"></line>
+<line x1="340" x2="340" y1="30" y2="260"></line>
+<line x1="410" x2="410" y1="30" y2="260"></line>
+<line x1="480" x2="480" y1="30" y2="260"></line>
+<line x1="550" x2="550" y1="30" y2="260"></line>
+<line x1="620" x2="620" y1="30" y2="260"></line>
+<line x1="690" x2="690" y1="30" y2="260"></line>
+<line x1="760" x2="760" y1="30" y2="260"></line>
+<line x1="830" x2="830" y1="30" y2="260"></line>
+</g>
+<!-- horizontal grid -->
+<g stroke="rgba(17,25,46,0.05)" stroke-dasharray="4,4" stroke-width="1">
+<line x1="60" x2="830" y1="80" y2="80"></line>
+<line x1="60" x2="830" y1="130" y2="130"></line>
+<line x1="60" x2="830" y1="180" y2="180"></line>
+<line x1="60" x2="830" y1="230" y2="230"></line>
+</g>
+<!-- axis -->
+<line stroke="rgba(17,25,46,0.18)" stroke-width="1" x1="60" x2="830" y1="260" y2="260"></line>
+<line stroke="rgba(17,25,46,0.18)" stroke-width="1" x1="60" x2="60" y1="30" y2="260"></line>
+<line stroke="rgba(17,25,46,0.18)" stroke-width="1" x1="830" x2="830" y1="30" y2="260"></line>
+<!-- X-axis labels (Jan-Dec) -->
+<g fill="rgba(17,25,46,0.55)" font-family="Inter,sans-serif" font-size="11" text-anchor="middle">
+<text x="60" y="278">Jan</text>
+<text x="130" y="278">Feb</text>
+<text x="200" y="278">Mar</text>
+<text x="270" y="278">Apr</text>
+<text x="340" y="278">May</text>
+<text x="410" y="278">Jun</text>
+<text x="480" y="278">Jul</text>
+<text x="550" y="278">Aug</text>
+<text x="620" y="278">Sep</text>
+<text x="690" y="278">Oct</text>
+<text x="760" y="278">Nov</text>
+<text x="830" y="278">Dec</text>
+</g>
+<!-- Left Y axis: Cost — labels (max 25K) -->
+<g fill="#2B6FE0" font-family="Inter,sans-serif" font-size="10" text-anchor="end">
+<text x="55" y="263">$0</text>
+<text x="55" y="234">$5K</text>
+<text x="55" y="184">$10K</text>
+<text x="55" y="134">$15K</text>
+<text x="55" y="84">$20K</text>
+<text x="55" y="34">$25K</text>
+<text fill="rgba(43,111,224,0.7)" font-size="9" x="55" y="20">COST</text>
+</g>
+<!-- Right Y axis: Revenue — labels (max 700K) -->
+<g fill="#2D8E8B" font-family="Inter,sans-serif" font-size="10" text-anchor="start">
+<text x="835" y="263">$0</text>
+<text x="835" y="234">$140K</text>
+<text x="835" y="184">$280K</text>
+<text x="835" y="134">$420K</text>
+<text x="835" y="84">$560K</text>
+<text x="835" y="34">$700K</text>
+<text fill="#5DC8C5" font-size="9" x="835" y="20">REVENUE</text>
+</g>
+<!-- 2025 COST (full year, dashed gold). Values: 7876,8486,8196,7991,7966,10242,18618,19506,20799,15701,14914,15276
+                 Scale: y = 260 - (val/25000) * 230 -->
+<polyline fill="none" points="60,188 130,182 200,185 270,187 340,187 410,166 480,89 550,81 620,69 690,116 760,123 830,120" stroke="rgba(43,111,224,0.36)" stroke-dasharray="6,4" stroke-width="1.6"></polyline>
+<!-- 2025 REVENUE (full year, dashed teal). Values 617K, 471K, 439K, 478K, 438K, 424K, 484K, 162K, 379K, 289K, 363K, 222K
+                 Scale: y = 260 - (val/700000) * 230 -->
+<polyline fill="none" points="60,57 130,105 200,116 270,103 340,116 410,121 480,101 550,207 620,135 690,165 760,141 830,187" stroke="rgba(93,200,197,0.36)" stroke-dasharray="6,4" stroke-width="1.6"></polyline>
+<!-- 2026 COST (Jan-Apr only, solid gold). Values 17034, 12806, 15754, 13897 -->
+<polyline fill="none" points="60,103 130,142 200,115 270,132" stroke="#2B6FE0" stroke-width="3"></polyline>
+<circle cx="60" cy="103" fill="#2B6FE0" r="4" stroke="#FFFFFF" stroke-width="2"></circle>
+<circle cx="130" cy="142" fill="#2B6FE0" r="4" stroke="#FFFFFF" stroke-width="2"></circle>
+<circle cx="200" cy="115" fill="#2B6FE0" r="4" stroke="#FFFFFF" stroke-width="2"></circle>
+<circle cx="270" cy="132" fill="#2B6FE0" r="4" stroke="#FFFFFF" stroke-width="2"></circle>
+<!-- 2026 REVENUE (Jan-Apr only, solid teal). Values 376K, 320K, 385K, 245K -->
+<polyline fill="none" points="60,137 130,155 200,134 270,180" stroke="#5DC8C5" stroke-width="3"></polyline>
+<circle cx="60" cy="137" fill="#5DC8C5" r="4" stroke="#FFFFFF" stroke-width="2"></circle>
+<circle cx="130" cy="155" fill="#5DC8C5" r="4" stroke="#FFFFFF" stroke-width="2"></circle>
+<circle cx="200" cy="134" fill="#5DC8C5" r="4" stroke="#FFFFFF" stroke-width="2"></circle>
+<circle cx="270" cy="180" fill="#5DC8C5" r="4" stroke="#FFFFFF" stroke-width="2"></circle>
+<!-- Legend -->
+<g font-family="Inter,sans-serif" font-size="11">
+<line stroke="#2B6FE0" stroke-width="3" x1="350" x2="378" y1="8" y2="8"></line>
+<text fill="rgba(17,25,46,0.75)" x="384" y="12">2026 Cost (YTD)</text>
+<line stroke="rgba(43,111,224,0.36)" stroke-dasharray="5,3" stroke-width="1.6" x1="490" x2="518" y1="8" y2="8"></line>
+<text fill="rgba(17,25,46,0.6)" x="524" y="12">2025 Cost (FY)</text>
+<line stroke="#5DC8C5" stroke-width="3" x1="620" x2="648" y1="8" y2="8"></line>
+<text fill="rgba(17,25,46,0.75)" x="654" y="12">2026 Revenue (YTD)</text>
+<line stroke="rgba(93,200,197,0.36)" stroke-dasharray="5,3" stroke-width="1.6" x1="775" x2="803" y1="8" y2="8"></line>
+<text fill="rgba(17,25,46,0.6)" x="809" y="12">2025 Rev (FY)</text>
+</g>
+</svg>
+</div>
+<div style="margin-top:var(--gap-sm);display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);font-size:var(--fs-small);color:var(--w50);padding-top:var(--gap-sm);border-top:1px solid rgba(255,255,255,0.06)">
+<div>
+<strong style="color:var(--gold-l)">2025 Full Year:</strong>
+            $155K cost · $4.77M revenue · <span style="color:var(--mint)">30.8× ROAS</span>
+</div>
+<div>
+<strong style="color:var(--gold-l)">2026 YTD (Jan–Apr):</strong>
+            $59.5K cost · $1.33M revenue · <span style="color:var(--mint)">22.3× ROAS</span> · annualised: $4.0M rev
+          </div>
+</div>
+</div>
+</div>
+</div>
+<div class="section-tag">Overview</div>
+<div class="slide-num">07 / 39</div>
+</section>
+<!-- ════ 8. SECTION DIVIDER SEM ════ -->
+<section class="slide section-divider">
+<div class="bracket tl"></div>
+<div class="bracket br"></div>
+<div>
+<div class="sd-eyebrow anim d1">Section Two · Google Ads</div>
+<div class="sd-num anim d2">02</div>
+<div class="sd-title anim d3">SEM</div>
+<div class="sd-sub anim d4">$7,151 spend · $166,996 revenue · 23.4× ROAS · 13 active campaigns across 4 hotels + Group cross-portfolio.</div>
+</div>
+<div class="slide-num">08 / 39</div>
+</section>
+<!-- ════ 9. SEM PER HOTEL ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">SEM · April 2026</div>
+<h2 class="slide-title anim d2">SEM Per Hotel</h2>
+</div>
+<div class="slide-content">
+<table class="dt anim d2">
+<thead><tr>
+<th>Hotel / Group</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>Conv.</th><th>Clicks</th><th>CPC</th>
+</tr></thead>
+<tbody>
+<tr><td>Brady Hotels Central Melbourne</td><td>$1,489</td><td>$42,917</td><td class="pos">28.8×</td><td>83.2</td><td>1,960</td><td>$0.76</td></tr>
+<tr><td>Brady Apt Hardware Lane</td><td>$1,422</td><td>$39,803</td><td class="pos">28.0×</td><td>65.5</td><td>1,532</td><td>$0.93</td></tr>
+<tr><td>Brady Hotels Jones Lane</td><td>$1,164</td><td>$29,947</td><td>25.7×</td><td>80.6</td><td>1,212</td><td>$0.96</td></tr>
+<tr><td>Brady Apt Flinders Street</td><td>$1,030</td><td>$26,280</td><td>25.5×</td><td>47.8</td><td>1,803</td><td>$0.57</td></tr>
+<tr><td>Brady Group (cross-portfolio)</td><td>$2,046</td><td>$28,049</td><td class="neg">13.7×</td><td>85.5</td><td>4,495</td><td>$0.46</td></tr>
+</tbody>
+<tfoot><tr>
+<td>Total</td>
+<td>$7,151</td>
+<td>$166,996</td>
+<td>23.4×</td>
+<td>362.6</td>
+<td>11,002</td>
+<td>$0.65</td>
+</tr></tfoot>
+</table>
+<div class="action-card anim d4" style="margin-top:var(--gap)">
+<strong>Top revenue + ROAS combo to scale:</strong> Brady Central — PMAX (29.8× / $20K rev) and Hardware Lane — PMAX (40.9× / $14K rev) — both have headroom. <strong>Pause:</strong> Brady Group PMAX/Display retargeting at 3.8× ROAS — reinvest into hotel PMAX campaigns. See action plan on slide 13.
+      </div>
+</div>
+</div>
+<div class="section-tag sem">SEM</div>
+<div class="slide-num">09 / 39</div>
+</section>
+<!-- ════ 10. SEM PER FUNNEL ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">SEM · April 2026</div>
+<h2 class="slide-title anim d2">SEM Per Funnel Stage</h2>
+</div>
+<div class="slide-content">
+<table class="dt anim d2">
+<thead><tr><th>Funnel Stage</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>Conv.</th><th>Clicks</th></tr></thead>
+<tbody>
+<tr>
+<td>Top<span class="ftag ftag-top">Brady Group PMAX broad</span></td>
+<td>$250</td><td>$12,423</td><td class="pos">49.7×</td><td>20.5</td><td>2,291</td>
+</tr>
+<tr>
+<td>Mid<span class="ftag ftag-mid">PMAX Hotel-specific</span></td>
+<td>$1,500</td><td>$54,316</td><td class="pos">36.2×</td><td>97.6</td><td>4,679</td>
+</tr>
+<tr>
+<td>Bottom<span class="ftag ftag-bot">Brand Search + RT</span></td>
+<td>$5,401</td><td>$112,680</td><td>20.9×</td><td>263.9</td><td>4,356</td>
+</tr>
+</tbody>
+<tfoot><tr><td style="color:var(--gold-l)">Total</td><td style="color:var(--gold-l)">$7,151</td><td style="color:var(--gold-l)">$166,996</td><td style="color:var(--gold-l)">23.4×</td><td style="color:var(--gold-l)">382</td><td style="color:var(--gold-l)">11,326</td></tr></tfoot>
+</table>
+<div class="action-card anim d4" style="margin-top:var(--gap)">
+<strong>Funnel mix:</strong> 75% spend on bottom-of-funnel (Brand) reflects strong organic demand capture. <strong>Mid-funnel PMAX</strong> is most efficient incremental driver at 36×. Top-funnel under-invested at 3.5% — opportunity for awareness.
+      </div>
+</div>
+</div>
+<div class="section-tag sem">SEM</div>
+<div class="slide-num">10 / 39</div>
+</section>
+<!-- ════ 11. SEM PER DEVICE ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">SEM · April 2026</div>
+<h2 class="slide-title anim d2">SEM Per Device</h2>
+</div>
+<div class="slide-content">
+<table class="dt anim d2">
+<thead><tr><th>Device</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>Conv.</th><th>Clicks</th><th>CTR</th><th>CPC</th></tr></thead>
+<tbody>
+<tr><td>Desktop</td><td>$3,408</td><td>$92,479</td><td class="pos">27.1×</td><td>179.4</td><td>2,654</td><td>1.24%</td><td>$1.28</td></tr>
+<tr><td>Mobile</td><td>$3,517</td><td>$87,322</td><td>24.8×</td><td>169.8</td><td>7,982</td><td>2.35%</td><td>$0.44</td></tr>
+<tr><td>Tablet</td><td>$226</td><td>$7,599</td><td class="pos">33.7×</td><td>14.3</td><td>367</td><td>1.79%</td><td>$0.61</td></tr>
+</tbody>
+<tfoot><tr><td style="color:var(--gold-l)">Total</td><td style="color:var(--gold-l)">$7,151</td><td style="color:var(--gold-l)">$187,400</td><td style="color:var(--gold-l)">26.2×</td><td style="color:var(--gold-l)">363.5</td><td style="color:var(--gold-l)">11,003</td><td style="color:var(--gold-l)">1.91%</td><td style="color:var(--gold-l)">$0.65</td></tr></tfoot>
+</table>
+<div class="action-card anim d4" style="margin-top:var(--gap)">
+<strong>Revenue-uplift opportunity:</strong> Tablet at 33.7× ROAS is severely under-invested (4% spend). +30% bid → est. +$2.3K rev. Desktop at 27.1× ROAS holds 49% spend share — +20% bid → est. +$18.4K rev. Mobile under-converts vs desktop (-32% CR) — investigate booking-flow UX before scaling.
+      </div>
+</div>
+</div>
+<div class="section-tag sem">SEM</div>
+<div class="slide-num">11 / 39</div>
+</section>
+<!-- ════ 12. SEM PER MARKET ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">SEM · April 2026</div>
+<h2 class="slide-title anim d2">SEM Per Market (Top 10)</h2>
+</div>
+<div class="slide-content">
+<table class="dt compact anim d2">
+<thead><tr><th>Country</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>Conv.</th><th>Clicks</th><th>Imp.</th></tr></thead>
+<tbody>
+<tr><td>🇦🇺 Australia</td><td>$6,555</td><td>$177,908</td><td>27.1×</td><td>356.8</td><td>10,308</td><td>571.6K</td></tr>
+<tr><td>🇸🇬 Singapore</td><td>$63</td><td>$5,200</td><td class="pos">82.5×</td><td>3.0</td><td>71</td><td>0.4K</td></tr>
+<tr><td>🇬🇧 United Kingdom</td><td>$21</td><td>$1,369</td><td class="pos">64.9×</td><td>1.0</td><td>23</td><td>0.1K</td></tr>
+<tr><td>🇯🇵 Japan</td><td>$6</td><td>$1,812</td><td class="pos">308×</td><td>1.0</td><td>7</td><td>0.1K</td></tr>
+<tr><td>🇳🇿 New Zealand</td><td>$343</td><td>$600</td><td class="neg">1.7×</td><td>1.0</td><td>403</td><td>1.2K</td></tr>
+<tr><td>🇹🇼 Taiwan</td><td>$22</td><td>$511</td><td>22.9×</td><td>0.7</td><td>26</td><td>0.2K</td></tr>
+<tr><td>🇮🇩 Indonesia</td><td>$39</td><td>$0</td><td class="neg">0×</td><td>0</td><td>44</td><td>0.3K</td></tr>
+<tr><td>🇲🇾 Malaysia</td><td>$25</td><td>$0</td><td class="neg">0×</td><td>0</td><td>30</td><td>0.2K</td></tr>
+<tr><td>🇭🇰 Hong Kong</td><td>$24</td><td>$0</td><td class="neg">0×</td><td>0</td><td>30</td><td>0.2K</td></tr>
+<tr><td>🇺🇸 + 🇰🇷 + 🇹🇭 + 🇨🇳 + 🇻🇳 + 🇩🇪</td><td>$53</td><td>$0</td><td class="neg">0×</td><td>0</td><td>61</td><td>0.4K</td></tr>
+</tbody>
+</table>
+<div class="action-card anim d4" style="margin-top:var(--gap-sm)">
+<strong>Highest ROAS scaling priority:</strong> 🇸🇬 Singapore (82.5×), 🇬🇧 UK (64.9×), 🇯🇵 Japan (308×) → at $90 combined spend. Add geo-bid +50% AU campaigns + dedicated SG campaign $300 → projected +$18K rev.
+        <strong style="color:var(--neg)"> Pause:</strong> ID/MY/HK/US/KR/TH/CN/VN/DE ($141 spend / $0 rev — pure waste). See slide 16 for asset-by-market specs.
+      </div>
+</div>
+</div>
+<div class="section-tag sem">SEM</div>
+<div class="slide-num">12 / 39</div>
+</section>
+<!-- ════ 13. SEM ACTION PLAN — WINNERS / LOSERS BY CAMPAIGN ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">SEM · Action Plan · Revenue Uplift Priority</div>
+<h2 class="slide-title anim d2">Winners &amp; Losers — by Hotel + Funnel</h2>
+</div>
+<div class="slide-content">
+<table class="dt compact anim d2">
+<thead><tr><th>Hotel — Funnel</th><th>Status</th><th>Apr Spend</th><th>Apr Revenue</th><th>ROAS</th><th>Action</th><th>Revenue Uplift</th></tr></thead>
+<tbody>
+<tr>
+<td>Brady Group — PMAX (broad)</td><td><span class="ftag ftag-win">Scale</span></td>
+<td>$250</td><td>$12,423</td>
+<td class="pos">49.7×</td>
+<td style="white-space:normal">+100% budget — capacity unused</td>
+<td class="pos">+$250 → +$12.4K rev</td>
+</tr>
+<tr>
+<td>Brady Apt Hardware Lane — PMAX</td><td><span class="ftag ftag-win">Scale</span></td>
+<td>$341</td><td>$13,919</td>
+<td class="pos">40.9×</td>
+<td style="white-space:normal">+60% budget</td>
+<td class="pos">+$205 → +$8.4K rev</td>
+</tr>
+<tr>
+<td>Brady Hotels Central — PMAX</td><td><span class="ftag ftag-win">Scale</span></td>
+<td>$671</td><td>$19,979</td>
+<td class="pos">29.8×</td>
+<td style="white-space:normal">+40% budget</td>
+<td class="pos">+$268 → +$8.0K rev</td>
+</tr>
+<tr>
+<td>Brady Hotels Jones Lane — Brand Search</td><td><span class="ftag ftag-win">Hold/Defend</span></td>
+<td>$967</td><td>$28,309</td>
+<td class="pos">29.3×</td>
+<td style="white-space:normal">Maintain budget · refresh RSAs</td>
+<td class="pos">Stable $28K/mo</td>
+</tr>
+<tr>
+<td>Brady Group — Brand Search</td><td><span class="ftag ftag-win">Hold/Defend</span></td>
+<td>$909</td><td>$25,989</td>
+<td class="pos">28.6×</td>
+<td style="white-space:normal">Maintain · monitor IS &amp; competitors</td>
+<td class="pos">Stable $26K/mo</td>
+</tr>
+<tr>
+<td>Brady Hotels Central — Brand Search</td><td><span class="ftag ftag-win">Hold/Defend</span></td>
+<td>$817</td><td>$22,938</td>
+<td class="pos">28.1×</td>
+<td style="white-space:normal">Maintain</td>
+<td class="pos">Stable $23K/mo</td>
+</tr>
+<tr>
+<td>Brady Apt Flinders — Brand Search</td><td><span class="ftag ftag-win">Hold</span></td>
+<td>$739</td><td>$19,924</td>
+<td>27.0×</td>
+<td style="white-space:normal">Maintain</td>
+<td>Stable $20K/mo</td>
+</tr>
+<tr>
+<td>Brady Apt Hardware — Brand Search</td><td><span class="ftag ftag-win">Hold</span></td>
+<td>$1,082</td><td>$25,884</td>
+<td>23.9×</td>
+<td style="white-space:normal">Maintain — high IS already</td>
+<td>Stable $26K/mo</td>
+</tr>
+<tr>
+<td>Brady Apt Flinders — PMAX</td><td><span class="ftag ftag-hold">Optimise</span></td>
+<td>$291</td><td>$6,357</td>
+<td>21.9×</td>
+<td style="white-space:normal">Refresh assets · add brand exclusion list</td>
+<td>+$2K rev (post-refresh)</td>
+</tr>
+<tr>
+<td>Brady Group — Brand RW (retargeting search)</td><td><span class="ftag ftag-hold">Optimise</span></td>
+<td>$596</td><td>$9,492</td>
+<td>15.9×</td>
+<td style="white-space:normal">Refresh creative · tighten audience window</td>
+<td>+$3K rev (post-refresh)</td>
+</tr>
+<tr>
+<td>Brady Hotels Jones Lane — PMAX</td><td><span class="ftag ftag-loss">Restructure</span></td>
+<td>$197</td><td>$1,638</td>
+<td class="neg">8.3×</td>
+<td style="white-space:normal">Pause · rebuild with refreshed assets in May</td>
+<td class="neg">−$197 (rebuild cost)</td>
+</tr>
+<tr>
+<td>Brady Group — Display Retargeting</td><td><span class="ftag ftag-loss">Pause</span></td>
+<td>$142</td><td>$326</td>
+<td class="neg">2.3×</td>
+<td style="white-space:normal">Pause — redirect to PMAX</td>
+<td class="pos">+$142 reallocated</td>
+</tr>
+<tr>
+<td>Brady Group — Display Retargeting (All Visitors)</td><td><span class="ftag ftag-loss">Pause</span></td>
+<td>$149</td><td>$0</td>
+<td class="neg">0×</td>
+<td style="white-space:normal">Pause immediately — zero conversions</td>
+<td class="pos">+$149 reallocated</td>
+</tr>
+</tbody>
+<tfoot><tr>
+<td colspan="2" style="color:var(--ch-action)">Net Reallocation (May)</td>
+<td style="color:var(--ch-action)">$291 paused</td>
+<td style="color:var(--ch-action)">$1,015 reinvest</td>
+<td colspan="2" style="color:var(--ch-action)">Net spend +$724 to high-ROAS PMAX</td>
+<td style="color:var(--ch-action)">+$30K incremental revenue</td>
+</tr></tfoot>
+</table>
+</div>
+</div>
+<div class="section-tag sem">SEM</div>
+<div class="slide-num">13 / 39</div>
+</section>
+<!-- ════ 14. SEM YTD JAN-DEC ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">SEM · 2026 YTD vs 2025 Full Year</div>
+<h2 class="slide-title anim d2">SEM Cost &amp; Revenue Trend</h2>
+</div>
+<div class="slide-content">
+<div class="col-2">
+<div class="chart-card anim d2">
+<h4>SEM Cost — Monthly</h4>
+<div class="chart-wrap">
+<svg style="overflow:visible" viewbox="0 0 480 240" xmlns="http://www.w3.org/2000/svg">
+<g stroke="rgba(17,25,46,0.07)" stroke-width="1">
+<line x1="40" x2="40" y1="20" y2="190"></line>
+<line x1="76" x2="76" y1="20" y2="190"></line>
+<line x1="112" x2="112" y1="20" y2="190"></line>
+<line x1="148" x2="148" y1="20" y2="190"></line>
+<line x1="184" x2="184" y1="20" y2="190"></line>
+<line x1="220" x2="220" y1="20" y2="190"></line>
+<line x1="256" x2="256" y1="20" y2="190"></line>
+<line x1="292" x2="292" y1="20" y2="190"></line>
+<line x1="328" x2="328" y1="20" y2="190"></line>
+<line x1="364" x2="364" y1="20" y2="190"></line>
+<line x1="400" x2="400" y1="20" y2="190"></line>
+<line x1="436" x2="436" y1="20" y2="190"></line>
+</g>
+<g stroke="rgba(17,25,46,0.05)" stroke-dasharray="4,4" stroke-width="1">
+<line x1="40" x2="436" y1="60" y2="60"></line>
+<line x1="40" x2="436" y1="100" y2="100"></line>
+<line x1="40" x2="436" y1="140" y2="140"></line>
+</g>
+<line stroke="rgba(17,25,46,0.15)" x1="40" x2="436" y1="190" y2="190"></line>
+<g fill="rgba(17,25,46,0.55)" font-family="Inter,sans-serif" font-size="10" text-anchor="middle">
+<text x="40" y="206">J</text><text x="76" y="206">F</text><text x="112" y="206">M</text><text x="148" y="206">A</text>
+<text x="184" y="206">M</text><text x="220" y="206">J</text><text x="256" y="206">J</text><text x="292" y="206">A</text>
+<text x="328" y="206">S</text><text x="364" y="206">O</text><text x="400" y="206">N</text><text x="436" y="206">D</text>
+</g>
+<!-- 2025 SEM cost: 7876,8486,8196,7991,7966,7500,7500,7236,8877,8397,8067,8209. Max 10K, y=190-(v/10000)*170 -->
+<polyline fill="none" points="40,56 76,46 112,51 148,54 184,55 220,63 256,63 292,67 328,39 364,47 400,53 436,51" stroke="rgba(43,111,224,0.36)" stroke-dasharray="6,4" stroke-width="1.6"></polyline>
+<!-- 2026 SEM cost (Jan-Apr): 9260,8053,8646,7151 -->
+<polyline fill="none" points="40,33 76,53 112,43 148,69" stroke="#2B6FE0" stroke-width="2.8"></polyline>
+<circle cx="40" cy="33" fill="#2B6FE0" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="76" cy="53" fill="#2B6FE0" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="112" cy="43" fill="#2B6FE0" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="148" cy="69" fill="#2B6FE0" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<g font-family="Inter,sans-serif" font-size="10">
+<line stroke="#2B6FE0" stroke-width="2.5" x1="240" x2="262" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.7)" x="266" y="230">2026 YTD</text>
+<line stroke="rgba(43,111,224,0.36)" stroke-dasharray="4,3" stroke-width="1.6" x1="340" x2="362" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.55)" x="366" y="230">2025 FY</text>
+</g>
+</svg>
+</div>
+<div style="font-size:var(--fs-label);color:var(--w42);margin-top:var(--gap-sm);line-height:1.4">FY 2025: <strong style="color:var(--gold-l)">$96,301</strong> · YTD 2026: <strong style="color:var(--gold-l)">$33,110</strong></div>
+</div>
+<div class="chart-card anim d3">
+<h4>SEM Revenue — Monthly</h4>
+<div class="chart-wrap">
+<svg style="overflow:visible" viewbox="0 0 480 240" xmlns="http://www.w3.org/2000/svg">
+<g stroke="rgba(17,25,46,0.07)" stroke-width="1">
+<line x1="40" x2="40" y1="20" y2="190"></line>
+<line x1="76" x2="76" y1="20" y2="190"></line>
+<line x1="112" x2="112" y1="20" y2="190"></line>
+<line x1="148" x2="148" y1="20" y2="190"></line>
+<line x1="184" x2="184" y1="20" y2="190"></line>
+<line x1="220" x2="220" y1="20" y2="190"></line>
+<line x1="256" x2="256" y1="20" y2="190"></line>
+<line x1="292" x2="292" y1="20" y2="190"></line>
+<line x1="328" x2="328" y1="20" y2="190"></line>
+<line x1="364" x2="364" y1="20" y2="190"></line>
+<line x1="400" x2="400" y1="20" y2="190"></line>
+<line x1="436" x2="436" y1="20" y2="190"></line>
+</g>
+<g stroke="rgba(17,25,46,0.05)" stroke-dasharray="4,4" stroke-width="1">
+<line x1="40" x2="436" y1="60" y2="60"></line>
+<line x1="40" x2="436" y1="100" y2="100"></line>
+<line x1="40" x2="436" y1="140" y2="140"></line>
+</g>
+<line stroke="rgba(17,25,46,0.15)" x1="40" x2="436" y1="190" y2="190"></line>
+<g fill="rgba(17,25,46,0.55)" font-family="Inter,sans-serif" font-size="10" text-anchor="middle">
+<text x="40" y="206">J</text><text x="76" y="206">F</text><text x="112" y="206">M</text><text x="148" y="206">A</text>
+<text x="184" y="206">M</text><text x="220" y="206">J</text><text x="256" y="206">J</text><text x="292" y="206">A</text>
+<text x="328" y="206">S</text><text x="364" y="206">O</text><text x="400" y="206">N</text><text x="436" y="206">D</text>
+</g>
+<!-- 2025 SEM revenue (K): 617,471,439,478,438,410,400,84,292,203,278,165. Max 700K, y=190-(v/700)*170 -->
+<polyline fill="none" points="40,40 76,76 112,83 148,74 184,84 220,90 256,93 292,170 328,119 364,141 400,123 436,150" stroke="rgba(43,111,224,0.36)" stroke-dasharray="6,4" stroke-width="1.6"></polyline>
+<!-- 2026 SEM revenue (K): 376, 320, 385, 167. Max 700 -->
+<polyline fill="none" points="40,99 76,112 112,97 148,150" stroke="#2B6FE0" stroke-width="2.8"></polyline>
+<circle cx="40" cy="99" fill="#2B6FE0" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="76" cy="112" fill="#2B6FE0" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="112" cy="97" fill="#2B6FE0" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="148" cy="150" fill="#2B6FE0" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<g font-family="Inter,sans-serif" font-size="10">
+<line stroke="#2B6FE0" stroke-width="2.5" x1="240" x2="262" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.7)" x="266" y="230">2026 YTD</text>
+<line stroke="rgba(43,111,224,0.36)" stroke-dasharray="4,3" stroke-width="1.6" x1="340" x2="362" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.55)" x="366" y="230">2025 FY</text>
+</g>
+</svg>
+</div>
+<div style="font-size:var(--fs-label);color:var(--w42);margin-top:var(--gap-sm);line-height:1.4">FY 2025: <strong style="color:var(--gold-l)">$4.27M</strong> · YTD 2026: <strong style="color:var(--gold-l)">$1.25M</strong> (annualised $3.74M)</div>
+</div>
+</div>
+</div>
+</div>
+<div class="section-tag sem">SEM</div>
+<div class="slide-num">14 / 39</div>
+</section>
+<!-- ════ 15. SEM ASSET & MARKET STRATEGY ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">SEM · Creative &amp; Market Brief</div>
+<h2 class="slide-title anim d2">Asset &amp; Market Strategy</h2>
+</div>
+<div class="slide-content">
+<div style="display:grid;grid-template-columns:1.1fr 1fr;gap:var(--gap);flex:1;min-height:0;align-items:start">
+<!-- Left: Asset specs -->
+<div class="anim d2" style="display:flex;flex-direction:column;gap:var(--gap-sm);min-width:0">
+<div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--ch-sem);margin-bottom:0.2rem">PMAX Asset Production · per Hotel</div>
+<table class="dt compact" style="font-size:var(--fs-small)">
+<thead><tr><th>Asset Type</th><th>Format</th><th>Specs</th><th>Volume</th></tr></thead>
+<tbody>
+<tr><td>Headlines (short)</td><td>Text</td><td>≤30 chars</td><td>5–15</td></tr>
+<tr><td>Headlines (long)</td><td>Text</td><td>≤90 chars</td><td>5</td></tr>
+<tr><td>Descriptions</td><td>Text</td><td>≤90 chars</td><td>4–5</td></tr>
+<tr><td>Image — Square</td><td>1:1</td><td>1200×1200 / &lt;5MB</td><td>≥4</td></tr>
+<tr><td>Image — Landscape</td><td>1.91:1</td><td>1200×628 / &lt;5MB</td><td>≥4</td></tr>
+<tr><td>Image — Portrait</td><td>4:5</td><td>960×1200 / &lt;5MB</td><td>≥2</td></tr>
+<tr><td>Logo — Square</td><td>1:1</td><td>1200×1200 transparent</td><td>1</td></tr>
+<tr><td>Logo — Landscape</td><td>4:1</td><td>1200×300 transparent</td><td>1</td></tr>
+<tr><td>Video — Vertical</td><td>9:16</td><td>1080×1920 · 10–30s</td><td>1+</td></tr>
+<tr><td>Video — Horizontal</td><td>16:9</td><td>1920×1080 · 10–30s</td><td>1+</td></tr>
+</tbody>
+</table>
+<div style="font-size:var(--fs-label);color:var(--text-muted);line-height:1.55;padding-top:0.3rem">
+<strong style="color:var(--text)">Creative direction:</strong> Property exterior + lifestyle interior shots · CBD location proof points (tram stop / landmark visible) · price-from anchor · "Book Direct — Best Rate" CTA. Refresh every 4–6 weeks.
+          </div>
+</div>
+<!-- Right: Market focus -->
+<div class="anim d3" style="display:flex;flex-direction:column;gap:var(--gap-sm);min-width:0">
+<div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--ch-sem);margin-bottom:0.2rem">Market Focus &amp; Geo Strategy</div>
+<table class="dt compact" style="font-size:var(--fs-small)">
+<thead><tr><th>Market</th><th>Apr ROAS</th><th>Action</th><th>Asset Need</th></tr></thead>
+<tbody>
+<tr>
+<td>🇸🇬 Singapore</td><td class="pos">82.5×</td>
+<td style="white-space:normal;color:var(--text-muted)">Dedicated SG campaign $300/mo</td>
+<td style="white-space:normal;color:var(--text-muted)">English creatives w/ AUD pricing context, "Fly to Melbourne" theme</td>
+</tr>
+<tr>
+<td>🇯🇵 Japan</td><td class="pos">308×</td>
+<td style="white-space:normal;color:var(--text-muted)">Test JP-language PMAX $200</td>
+<td style="white-space:normal;color:var(--text-muted)">Japanese headlines + descriptions, traveller-friendly imagery</td>
+</tr>
+<tr>
+<td>🇬🇧 United Kingdom</td><td class="pos">64.9×</td>
+<td style="white-space:normal;color:var(--text-muted)">Geo +50% bid mod on AU campaigns</td>
+<td style="white-space:normal;color:var(--text-muted)">Reuse AU assets (English)</td>
+</tr>
+<tr>
+<td>🇹🇼 Taiwan</td><td>22.9×</td>
+<td style="white-space:normal;color:var(--text-muted)">Hold + monitor</td>
+<td style="white-space:normal;color:var(--text-muted)">Reuse AU assets · monitor performance</td>
+</tr>
+<tr>
+<td>🇦🇺 Australia (core)</td><td class="pos">27.1×</td>
+<td style="white-space:normal;color:var(--text-muted)">Refresh creatives quarterly</td>
+<td style="white-space:normal;color:var(--text-muted)">Local seasonality · events tie-ins</td>
+</tr>
+<tr>
+<td>🇳🇿 New Zealand</td><td class="neg">1.7×</td>
+<td style="white-space:normal;color:var(--text-muted)">Restrict to brand only</td>
+<td style="white-space:normal;color:var(--text-muted)">Sojourn brand search only (separate campaign)</td>
+</tr>
+<tr>
+<td>9 zero-conv markets</td><td class="neg">0×</td>
+<td style="white-space:normal;color:var(--text-muted)">Geo-exclude (ID/MY/HK/US/KR/TH/CN/VN/DE)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="action-card" style="margin-top:0.3rem">
+<strong>Production timeline (May):</strong> Wk 1 — brief copywriter + photographer · Wk 2 — capture assets per hotel · Wk 3 — upload to PMAX, launch SG dedicated · Wk 4 — performance review, kill bottom 30% by asset score.
+          </div>
+</div>
+</div>
+</div>
+</div>
+<div class="section-tag sem">SEM</div>
+<div class="slide-num">15 / 39</div>
+</section>
+<!-- ════ 16. SEM FORECAST May-Dec WITH EVENTS ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow anim d1">SEM · May–Dec 2026 Forecast</div>
+<h2 class="slide-title anim d2">SEM Forecast &amp; Event-Driven Plan</h2>
+</div>
+<div class="slide-content">
+<table class="dt compact anim d2">
+<thead><tr><th>Month</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>Key Events</th><th>Strategy</th></tr></thead>
+<tbody>
+<tr>
+<td>May 2026</td><td>$8,400</td><td>$208K</td><td class="pos">24.8×</td>
+<td style="white-space:normal;color:var(--w50)">Mother's Day · Vivid Sydney (Wildlife)</td>
+<td style="white-space:normal;color:var(--w50)">Scale PMAX +25%, launch SG campaign</td>
+</tr>
+<tr>
+<td>Jun 2026</td><td>$9,200</td><td>$230K</td><td>25.0×</td>
+<td style="white-space:normal;color:var(--w50)">EOFY · School holidays start late-Jun</td>
+<td style="white-space:normal;color:var(--w50)">Push corporate &amp; family rate plans</td>
+</tr>
+<tr>
+<td>Jul 2026</td><td>$10,500</td><td>$252K</td><td>24.0×</td>
+<td style="white-space:normal;color:var(--w50)">Whitsundays peak (Daydream) · School hols</td>
+<td style="white-space:normal;color:var(--w50)">Hotel-PMAX +30%; Daydream solo budget</td>
+</tr>
+<tr>
+<td>Aug 2026</td><td>$9,800</td><td>$235K</td><td>24.0×</td>
+<td style="white-space:normal;color:var(--w50)">Wellington on a Plate / Beervana (Sojourn)</td>
+<td style="white-space:normal;color:var(--w50)">NZ market push for Sojourn properties</td>
+</tr>
+<tr>
+<td>Sep 2026</td><td>$11,200</td><td class="pos">$285K</td><td class="pos">25.4×</td>
+<td style="white-space:normal;color:var(--w50)">AFL Grand Final · Spring Racing builds · WoW NZ</td>
+<td style="white-space:normal;color:var(--w50)">Melbourne CBD properties +35%; AFL pre-roll</td>
+</tr>
+<tr>
+<td>Oct 2026</td><td>$10,800</td><td>$262K</td><td>24.3×</td>
+<td style="white-space:normal;color:var(--w50)">Melbourne Marathon · Spring Racing Carnival</td>
+<td style="white-space:normal;color:var(--w50)">Hardware Lane + Flinders peak push</td>
+</tr>
+<tr>
+<td>Nov 2026</td><td class="pos">$12,500</td><td class="pos">$310K</td><td>24.8×</td>
+<td style="white-space:normal;color:var(--w50)">Melbourne Cup (Nov 3) · Spring Racing peak</td>
+<td style="white-space:normal;color:var(--w50)">Brady Central +50%, premium rate plans</td>
+</tr>
+<tr>
+<td>Dec 2026</td><td>$10,200</td><td>$224K</td><td>22.0×</td>
+<td style="white-space:normal;color:var(--w50)">Christmas · Boxing Day Test · Sydney NYE</td>
+<td style="white-space:normal;color:var(--w50)">Wildlife Sydney NYE focus, Daydream Xmas</td>
+</tr>
+</tbody>
+<tfoot><tr>
+<td style="color:var(--gold-l)">May–Dec Total</td>
+<td style="color:var(--gold-l)">$82,600</td>
+<td style="color:var(--gold-l)">$2.01M</td>
+<td style="color:var(--gold-l)">24.3×</td>
+<td colspan="2" style="color:var(--mint)">FY 2026 projected: $115,710 spend / $3.26M rev (-23% rev YoY recovery)</td>
+</tr></tfoot>
+</table>
+<div class="action-card anim d4" style="margin-top:var(--gap-sm)">
+<strong>Peak month:</strong> November (Melbourne Cup) — Brady Central + Hardware Lane CBD properties get +50% budget. <strong>Risk:</strong> Aug 2025 had data tracking gap (low rev) — will monitor pixel firing closely.
+      </div>
+</div>
+</div>
+<div class="section-tag sem">SEM</div>
+<div class="slide-num">16 / 39</div>
+</section>
+<!-- ════ 17. SECTION DIVIDER METASEARCH ════ -->
+<section class="slide section-divider">
+<div class="bracket tl meta"></div>
+<div class="bracket br meta"></div>
+<div>
+<div class="sd-eyebrow meta anim d1">Section Three · Google · Trivago · Tripadvisor</div>
+<div class="sd-num meta anim d2">03</div>
+<div class="sd-title anim d3">Metasearch</div>
+<div class="sd-sub anim d4">$1,641 spend · $53,623 revenue · 32.7× ROAS · 111 bookings across the 4 properties.</div>
+</div>
+<div class="slide-num">17 / 39</div>
+</section>
+<!-- ════ 17. METASEARCH PER HOTEL — 4 BRADY ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow meta anim d1">Metasearch · April 2026</div>
+<h2 class="slide-title anim d2">Per Hotel</h2>
+</div>
+<div class="slide-content">
+<table class="dt meta anim d2">
+<thead><tr><th>Hotel</th><th>Cost</th><th>Revenue</th><th>ROAS</th><th>Bookings</th><th>Clicks</th><th>CR</th><th>AOV</th></tr></thead>
+<tbody>
+<tr><td>Brady Apt Hotel Hardware Lane</td><td>$495</td><td>$17,085</td><td>29</td><td>497</td><td>5.83%</td><td>$589</td></tr>
+<tr><td>Brady Hotels Central Melbourne</td><td>$581</td><td>$15,116</td><td>34</td><td>571</td><td>5.95%</td><td>$445</td></tr>
+<tr><td>Brady Apt Hotel Flinders Street</td><td>$324</td><td>$12,963</td><td>23</td><td>351</td><td class="pos">6.55%</td><td>$564</td></tr>
+<tr><td>Brady Hotels Jones Lane</td><td>$242</td><td>$8,459</td><td>25</td><td>413</td><td class="pos">6.05%</td><td>$338</td></tr>
+</tbody>
+<tfoot><tr>
+<td style="color:var(--teal-l)">Total</td>
+<td style="color:var(--teal-l)">$1,641</td>
+<td style="color:var(--teal-l)">$53,623</td>
+
+<td style="color:var(--teal-l)">32.7×</td>
+<td style="color:var(--teal-l)">111</td>
+<td style="color:var(--teal-l)">1,832</td>
+<td style="color:var(--teal-l)">6.06%</td>
+<td style="color:var(--teal-l)">$483</td>
+</tr></tfoot>
+</table>
+<div class="action-card meta anim d4" style="margin-top:var(--gap)">
+<strong>Hardware Lane is top revenue contributor (32%)</strong> at strong 34.5× ROAS. <strong>Flinders Street most efficient</strong> at 40× with highest CR (6.55%). <strong>Jones Lane</strong> trails on AOV ($338) — review rate plans.
+      </div>
+</div>
+</div>
+<div class="section-tag meta">Metasearch</div>
+<div class="slide-num">18 / 39</div>
+</section>
+<!-- ════ 18. METASEARCH PER CHANNEL & LINK TYPE — BRADY ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow meta anim d1">Metasearch · April 2026</div>
+<h2 class="slide-title anim d2">Per Channel &amp; Link Type</h2>
+</div>
+<div class="slide-content">
+<table class="dt meta anim d2">
+<thead><tr><th>Channel</th><th>Link Type</th><th>Cost</th><th>Revenue</th><th>ROAS</th><th>Imp.</th><th>Clicks</th><th>Bookings</th></tr></thead>
+<tbody>
+<tr><td>Google</td><td>Paid (CPC)</td><td>$1,628</td><td>$30,219</td><td>18.6×</td><td>27.1K</td><td>821</td><td>60</td></tr>
+<tr><td>Google</td><td>Organic (Free)</td><td>$0</td><td>$16,427</td><td class="pos">∞</td><td>—</td><td>701</td><td>37</td></tr>
+<tr><td>Trivago</td><td>Paid (Free)</td><td>$0</td><td>$6,511</td><td class="pos">∞</td><td>17.8K</td><td>300</td><td>13</td></tr>
+<tr><td>Tripadvisor</td><td>Paid</td><td>$12</td><td>$466</td><td>38.8×</td><td>5.8K</td><td>10</td><td>1</td></tr>
+</tbody>
+<tfoot><tr>
+<td style="color:var(--teal-l)">Total</td><td style="color:var(--teal-l)">All</td>
+<td style="color:var(--teal-l)">$1,641</td>
+<td style="color:var(--teal-l)">$53,623</td>
+
+<td style="color:var(--teal-l)">32.7×</td>
+<td style="color:var(--teal-l)">50.7K</td>
+<td style="color:var(--teal-l)">1,832</td>
+<td style="color:var(--teal-l)">111</td>
+</tr></tfoot>
+</table>
+<div class="action-card meta anim d4" style="margin-top:var(--gap)">
+<strong>Google Hotel Ads paid:</strong> 56% of revenue at 18.6× ROAS — primary growth lever. <strong>Free placements:</strong> Google Organic + Trivago contribute $22.9K (43%) at zero cost — strong organic equity. <strong>Tripadvisor</strong>: under-invested at $12 spend.
+      </div>
+</div>
+</div>
+<div class="section-tag meta">Metasearch</div>
+<div class="slide-num">19 / 39</div>
+</section>
+<!-- ════ 19. METASEARCH PER MARKET — BRADY ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow meta anim d1">Metasearch · April 2026</div>
+<h2 class="slide-title anim d2">Per Market (Top 12)</h2>
+</div>
+<div class="slide-content">
+<table class="dt meta compact anim d2">
+<thead><tr><th>Market</th><th>Cost</th><th>Revenue</th><th>ROAS</th><th>Clicks</th><th>Bookings</th></tr></thead>
+<tbody>
+<tr><td>Google / 🇦🇺 Australia</td><td>$1,052</td><td>$32,705</td><td>31.1×</td><td>955</td><td>80</td></tr>
+<tr><td>Google / 🇸🇬 Singapore</td><td>$79</td><td>$7,602</td><td class="pos">96.2×</td><td>52</td><td>8</td></tr>
+<tr><td>Trivago / 🇦🇺 Australia</td><td>$0</td><td>$5,484</td><td class="pos">∞</td><td>259</td><td>12</td></tr>
+<tr><td>Google / 🇹🇼 Taiwan</td><td>$85</td><td>$2,572</td><td>30.3×</td><td>81</td><td>2</td></tr>
+<tr><td>Google / 🇻🇳 Vietnam</td><td>$6</td><td>$1,225</td><td class="pos">204×</td><td>8</td><td>1</td></tr>
+<tr><td>Trivago / 🇹🇼 Taiwan</td><td>$0</td><td>$1,027</td><td class="pos">∞</td><td>6</td><td>1</td></tr>
+<tr><td>Google / 🇰🇷 South Korea</td><td>$107</td><td>$1,012</td><td class="neg">9.5×</td><td>59</td><td>2</td></tr>
+<tr><td>Google / 🇭🇰 Hong Kong</td><td>$26</td><td>$929</td><td>35.7×</td><td>20</td><td>1</td></tr>
+<tr><td>Tripadvisor / 🇦🇺 Australia</td><td>$12</td><td>$466</td><td>38.8×</td><td>9</td><td>1</td></tr>
+<tr><td>Google / 🇺🇸 United States</td><td>$71</td><td>$440</td><td class="neg">6.2×</td><td>29</td><td>2</td></tr>
+<tr><td>Google / 🇱🇰 Sri Lanka</td><td>$6</td><td>$161</td><td>26.8×</td><td>3</td><td>1</td></tr>
+<tr><td>Other markets</td><td>$197</td><td>$0</td><td class="neg">0×</td><td>351</td><td>0</td></tr>
+</tbody>
+</table>
+<div class="action-card meta anim d4" style="margin-top:var(--gap-sm)">
+<strong>AU dominates</strong> 61% of Brady metasearch revenue. <strong>Singapore at 96× ROAS</strong> with only $79 spend = highest scaling opportunity. <strong>South Korea + US</strong> trail efficiency — rebid lower.
+      </div>
+</div>
+</div>
+<div class="section-tag meta">Metasearch</div>
+<div class="slide-num">20 / 39</div>
+</section>
+<!-- ════ 20. METASEARCH ACTION PLAN — COMBINED CR/CTR + AOV + CPC ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow meta anim d1">Metasearch · Action Plan</div>
+<h2 class="slide-title anim d2">CPC, CR/CTR &amp; AOV Action Table</h2>
+</div>
+<div class="slide-content">
+<table class="dt meta compact anim d2">
+<thead><tr><th>Hotel</th><th>Apr CPC</th><th>ROAS</th><th>CR</th><th>AOV</th><th>Bid Direction</th><th>New CPC</th><th>Pricing Action</th></tr></thead>
+<tbody>
+<tr>
+<td>Brady Apt Flinders Street</td>
+<td>$0.92</td><td class="pos">40.0×</td><td class="pos">6.55%</td><td>$564</td>
+<td style="color:var(--mint);font-weight:600">▲ +20%</td><td>$1.10</td>
+<td style="white-space:normal;color:var(--w50)">Match Hardware positioning · test +5% weekend</td>
+</tr>
+<tr>
+<td>Brady Apt Hardware Lane</td>
+<td>$1.00</td><td>34.5×</td><td>5.83%</td><td>$589</td>
+<td class="flat">→ hold</td><td>$1.00</td>
+<td style="white-space:normal;color:var(--w50)">Test +5–8% weekend rates · monitor parity</td>
+</tr>
+<tr>
+<td>Brady Hotels Jones Lane</td>
+<td>$0.59</td><td>35.0×</td><td class="pos">6.05%</td><td class="neg">$338</td>
+<td style="color:var(--mint);font-weight:600">▲ +25%</td><td>$0.74</td>
+<td style="white-space:normal;color:var(--w50)">AOV trailing peers — review rate plan mix &amp; min-stay</td>
+</tr>
+<tr>
+<td>Brady Hotels Central Melbourne</td>
+<td>$1.02</td><td>26.0×</td><td>5.95%</td><td>$445</td>
+<td class="flat">→ hold</td><td>$1.02</td>
+<td style="white-space:normal;color:var(--w50)">Volume property — hold rate, monitor peer parity</td>
+</tr>
+</tbody>
+<tfoot><tr>
+<td style="color:var(--teal-l)">Total</td>
+<td style="color:var(--teal-l)">$0.89 avg</td>
+<td style="color:var(--teal-l)">32.7×</td>
+<td style="color:var(--teal-l)">6.06%</td>
+<td style="color:var(--teal-l)">$483</td>
+<td colspan="2" style="color:var(--mint)">Net: +$215 CPC budget</td>
+<td style="color:var(--mint)">+$8,400 projected rev</td>
+</tr></tfoot>
+</table>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap-sm)">
+<div class="action-card meta anim d3"><strong>Channel actions:</strong> Test Tripadvisor +$300 budget (currently $12). Push Singapore market on top hotels (96× ROAS).</div>
+<div class="action-card meta anim d4"><strong>Pricing audit:</strong> Jones Lane rate plan review priority — unlocking AOV from $338 → $450 doubles revenue impact.</div>
+</div>
+</div>
+</div>
+<div class="section-tag meta">Metasearch</div>
+<div class="slide-num">21 / 39</div>
+</section>
+<!-- ════ 21. METASEARCH YTD BRADY — JAN-DEC ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow meta anim d1">Metasearch · 2026 YTD vs 2025 FY</div>
+<h2 class="slide-title anim d2">Brady Metasearch Cost &amp; Revenue Trend</h2>
+</div>
+<div class="slide-content">
+<div class="col-2 meta">
+<div class="chart-card anim d2">
+<h4>Brady Cost — Monthly</h4>
+<div class="chart-wrap">
+<svg style="overflow:visible" viewbox="0 0 480 240" xmlns="http://www.w3.org/2000/svg">
+<g stroke="rgba(17,25,46,0.07)" stroke-width="1">
+<line x1="40" x2="40" y1="20" y2="190"></line><line x1="76" x2="76" y1="20" y2="190"></line>
+<line x1="112" x2="112" y1="20" y2="190"></line><line x1="148" x2="148" y1="20" y2="190"></line>
+<line x1="184" x2="184" y1="20" y2="190"></line><line x1="220" x2="220" y1="20" y2="190"></line>
+<line x1="256" x2="256" y1="20" y2="190"></line><line x1="292" x2="292" y1="20" y2="190"></line>
+<line x1="328" x2="328" y1="20" y2="190"></line><line x1="364" x2="364" y1="20" y2="190"></line>
+<line x1="400" x2="400" y1="20" y2="190"></line><line x1="436" x2="436" y1="20" y2="190"></line>
+</g>
+<g stroke="rgba(17,25,46,0.05)" stroke-dasharray="4,4" stroke-width="1">
+<line x1="40" x2="436" y1="60" y2="60"></line>
+<line x1="40" x2="436" y1="100" y2="100"></line>
+<line x1="40" x2="436" y1="140" y2="140"></line>
+</g>
+<line stroke="rgba(17,25,46,0.15)" x1="40" x2="436" y1="190" y2="190"></line>
+<g fill="rgba(17,25,46,0.55)" font-family="Inter,sans-serif" font-size="10" text-anchor="middle">
+<text x="40" y="206">J</text><text x="76" y="206">F</text><text x="112" y="206">M</text><text x="148" y="206">A</text>
+<text x="184" y="206">M</text><text x="220" y="206">J</text><text x="256" y="206">J</text><text x="292" y="206">A</text>
+<text x="328" y="206">S</text><text x="364" y="206">O</text><text x="400" y="206">N</text><text x="436" y="206">D</text>
+</g>
+<!-- 2025 Brady metasearch cost (Jan-Dec): 0,0,0,0,0,0,7057,8794,7422,2705,2516,2730. Max 10K, y=190-(v/10000)*170 -->
+<polyline fill="none" points="40,190 76,190 112,190 148,190 184,190 220,190 256,70 292,40 328,64 364,144 400,147 436,144" stroke="rgba(93,200,197,0.36)" stroke-dasharray="6,4" stroke-width="1.6"></polyline>
+<!-- 2026 Brady metasearch cost: 2652,1663,1487,1641 -->
+<polyline fill="none" points="40,145 76,162 112,165 148,162" stroke="#5DC8C5" stroke-width="2.8"></polyline>
+<circle cx="40" cy="145" fill="#5DC8C5" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="76" cy="162" fill="#5DC8C5" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="112" cy="165" fill="#5DC8C5" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="148" cy="162" fill="#5DC8C5" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<g font-family="Inter,sans-serif" font-size="10">
+<line stroke="#5DC8C5" stroke-width="2.5" x1="240" x2="262" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.7)" x="266" y="230">2026 YTD</text>
+<line stroke="rgba(93,200,197,0.36)" stroke-dasharray="4,3" stroke-width="1.6" x1="340" x2="362" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.55)" x="366" y="230">2025 FY</text>
+</g>
+</svg>
+</div>
+<div style="font-size:var(--fs-label);color:var(--w42);margin-top:var(--gap-sm);line-height:1.4">FY 2025: <strong style="color:var(--teal-l)">$31,224</strong> · YTD 2026: <strong style="color:var(--teal-l)">$7,443</strong></div>
+</div>
+<div class="chart-card anim d3">
+<h4>Brady Revenue — Monthly</h4>
+<div class="chart-wrap">
+<svg style="overflow:visible" viewbox="0 0 480 240" xmlns="http://www.w3.org/2000/svg">
+<g stroke="rgba(17,25,46,0.07)" stroke-width="1">
+<line x1="40" x2="40" y1="20" y2="190"></line><line x1="76" x2="76" y1="20" y2="190"></line>
+<line x1="112" x2="112" y1="20" y2="190"></line><line x1="148" x2="148" y1="20" y2="190"></line>
+<line x1="184" x2="184" y1="20" y2="190"></line><line x1="220" x2="220" y1="20" y2="190"></line>
+<line x1="256" x2="256" y1="20" y2="190"></line><line x1="292" x2="292" y1="20" y2="190"></line>
+<line x1="328" x2="328" y1="20" y2="190"></line><line x1="364" x2="364" y1="20" y2="190"></line>
+<line x1="400" x2="400" y1="20" y2="190"></line><line x1="436" x2="436" y1="20" y2="190"></line>
+</g>
+<g stroke="rgba(17,25,46,0.05)" stroke-dasharray="4,4" stroke-width="1">
+<line x1="40" x2="436" y1="60" y2="60"></line>
+<line x1="40" x2="436" y1="100" y2="100"></line>
+<line x1="40" x2="436" y1="140" y2="140"></line>
+</g>
+<line stroke="rgba(17,25,46,0.15)" x1="40" x2="436" y1="190" y2="190"></line>
+<g fill="rgba(17,25,46,0.55)" font-family="Inter,sans-serif" font-size="10" text-anchor="middle">
+<text x="40" y="206">J</text><text x="76" y="206">F</text><text x="112" y="206">M</text><text x="148" y="206">A</text>
+<text x="184" y="206">M</text><text x="220" y="206">J</text><text x="256" y="206">J</text><text x="292" y="206">A</text>
+<text x="328" y="206">S</text><text x="364" y="206">O</text><text x="400" y="206">N</text><text x="436" y="206">D</text>
+</g>
+<!-- 2025 Brady metasearch revenue (K): 0,0,0,0,0,0,64,61,65,63,63,35. Max 80K, y=190-(v/80)*170 -->
+<polyline fill="none" points="40,190 76,190 112,190 148,190 184,190 220,190 256,54 292,60 328,52 364,56 400,56 436,116" stroke="rgba(93,200,197,0.36)" stroke-dasharray="6,4" stroke-width="1.6"></polyline>
+<!-- 2026 Brady metasearch revenue (K): 51,55,67,54. Max 80 -->
+<polyline fill="none" points="40,82 76,73 112,48 148,75" stroke="#5DC8C5" stroke-width="2.8"></polyline>
+<circle cx="40" cy="82" fill="#5DC8C5" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="76" cy="73" fill="#5DC8C5" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="112" cy="48" fill="#5DC8C5" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="148" cy="75" fill="#5DC8C5" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<g font-family="Inter,sans-serif" font-size="10">
+<line stroke="#5DC8C5" stroke-width="2.5" x1="240" x2="262" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.7)" x="266" y="230">2026 YTD</text>
+<line stroke="rgba(93,200,197,0.36)" stroke-dasharray="4,3" stroke-width="1.6" x1="340" x2="362" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.55)" x="366" y="230">2025 FY</text>
+</g>
+</svg>
+</div>
+<div style="font-size:var(--fs-label);color:var(--w42);margin-top:var(--gap-sm);line-height:1.4">FY 2025: <strong style="color:var(--teal-l)">$351K</strong> (Jul–Dec) · YTD 2026: <strong style="color:var(--teal-l)">$227K</strong></div>
+</div>
+</div>
+<div class="action-card meta anim d4" style="margin-top:var(--gap-sm)">
+<strong>Note:</strong> Metasearch tracking started July 2025. Cost trend declining (efficient) while revenue holds — strong organic equity building. Mar 2026 record at $67K rev / $1.5K cost.
+      </div>
+</div>
+</div>
+<div class="section-tag meta">Metasearch</div>
+<div class="slide-num">22 / 39</div>
+</section>
+<!-- ════ 22. METASEARCH FORECAST May-Dec WITH EVENTS ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow meta anim d1">Metasearch · May–Dec 2026 Forecast</div>
+<h2 class="slide-title anim d2">Forecast &amp; Event-Driven Plan</h2>
+</div>
+<div class="slide-content">
+<table class="dt meta compact anim d2">
+<thead><tr><th>Month</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>Key Events</th><th>Strategy</th></tr></thead>
+<tbody>
+<tr>
+<td>May 2026</td><td>$1,950</td><td>$58K</td><td class="pos">29.7×</td>
+<td style="white-space:normal;color:var(--w50)">Mother's Day · End of school holidays</td>
+<td style="white-space:normal;color:var(--w50)">Apply CPC bid plan (slide 20). Push Flinders +20%</td>
+</tr>
+<tr>
+<td>Jun 2026</td><td>$2,200</td><td>$62K</td><td>28.2×</td>
+<td style="white-space:normal;color:var(--w50)">EOFY corporate · School holidays end-Jun</td>
+<td style="white-space:normal;color:var(--w50)">Corporate-rate visibility on Hardware/Central</td>
+</tr>
+<tr>
+<td>Jul 2026</td><td>$2,800</td><td>$72K</td><td>25.7×</td>
+<td style="white-space:normal;color:var(--w50)">School holidays peak · Brisbane Ekka</td>
+<td style="white-space:normal;color:var(--w50)">Family-rate push on Apt Hotels</td>
+</tr>
+<tr>
+<td>Aug 2026</td><td>$3,100</td><td>$78K</td><td>25.2×</td>
+<td style="white-space:normal;color:var(--w50)">Melbourne Writers Fest · Hard winter (off-peak)</td>
+<td style="white-space:normal;color:var(--w50)">Aggressive bidding to hold market share</td>
+</tr>
+<tr>
+<td>Sep 2026</td><td class="pos">$3,800</td><td class="pos">$95K</td><td>25.0×</td>
+<td style="white-space:normal;color:var(--w50)">AFL Grand Final (26 Sept) · Spring Racing builds</td>
+<td style="white-space:normal;color:var(--w50)">CBD properties +50% bid · premium rate plans</td>
+</tr>
+<tr>
+<td>Oct 2026</td><td>$3,600</td><td>$92K</td><td>25.6×</td>
+<td style="white-space:normal;color:var(--w50)">Melbourne Marathon · Spring Racing Carnival</td>
+<td style="white-space:normal;color:var(--w50)">Hardware Lane + Flinders peak bid</td>
+</tr>
+<tr>
+<td>Nov 2026</td><td class="pos">$4,200</td><td class="pos">$108K</td><td class="pos">25.7×</td>
+<td style="white-space:normal;color:var(--w50)">Melbourne Cup (3 Nov) · Spring Racing peak</td>
+<td style="white-space:normal;color:var(--w50)">Brady Central +75%, parity-plus pricing</td>
+</tr>
+<tr>
+<td>Dec 2026</td><td>$2,900</td><td>$58K</td><td>20.0×</td>
+<td style="white-space:normal;color:var(--w50)">Christmas · Boxing Day Test</td>
+<td style="white-space:normal;color:var(--w50)">Hold winter levels — return to growth Jan</td>
+</tr>
+</tbody>
+<tfoot><tr>
+<td style="color:var(--teal-l)">May–Dec Total</td>
+<td style="color:var(--teal-l)">$24,550</td>
+<td style="color:var(--teal-l)">$623K</td>
+<td style="color:var(--teal-l)">25.4×</td>
+<td colspan="2" style="color:var(--mint)">FY 2026 projected: $32K spend / $850K rev </td>
+</tr></tfoot>
+</table>
+<div class="action-card meta anim d4" style="margin-top:var(--gap-sm)">
+<strong>Peak month:</strong> November (Melbourne Cup) — Brady Central CBD +75% bid. <strong>Risk:</strong> Aug winter trough — maintain bids to hold pace, expect lower ROAS but continued bookings.
+      </div>
+</div>
+</div>
+<div class="section-tag meta">Metasearch</div>
+<div class="slide-num">23 / 39</div>
+</section>
+<!-- ════ 23. SECTION DIVIDER SOCIAL ════ -->
+<section class="slide section-divider">
+<div class="bracket tl social"></div>
+<div class="bracket br social"></div>
+<div>
+<div class="sd-eyebrow social anim d1">Section Four · Meta Ads · Facebook · Instagram</div>
+<div class="sd-num social anim d2">04</div>
+<div class="sd-title anim d3">Social</div>
+<div class="sd-sub anim d4">$5,089 spend · 372K impressions · 5,924 clicks · 18 active campaigns including 7 special-promo campaigns.</div>
+</div>
+<div class="slide-num">24 / 39</div>
+</section>
+<!-- ════ 24. SOCIAL PER HOTEL ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · April 2026</div>
+<h2 class="slide-title anim d2">Social Per Hotel</h2>
+</div>
+<div class="slide-content">
+<table class="dt social anim d2">
+<thead><tr><th>Hotel / Group</th><th>Spend</th><th>Imp.</th><th>Clicks</th><th>CTR</th><th>CPC</th><th>Campaigns</th></tr></thead>
+<tbody>
+<tr><td>Brady Apt Flinders Street</td><td>$1,121</td><td>75,000</td><td>1,241</td><td>1.65%</td><td>$0.90</td><td>3</td></tr>
+<tr><td>Brady Apt Hardware Lane</td><td>$1,018</td><td>70,537</td><td>1,304</td><td class="pos">1.85%</td><td class="pos">$0.78</td><td>4</td></tr>
+<tr><td>Brady Hotels Jones Lane</td><td>$911</td><td>64,128</td><td>998</td><td>1.56%</td><td>$0.91</td><td>3</td></tr>
+<tr><td>Brady Hotels Central Melbourne</td><td>$676</td><td>49,291</td><td>657</td><td class="neg">1.33%</td><td class="neg">$1.03</td><td>3</td></tr>
+<tr><td>Brady Group (cross-portfolio)</td><td>$1,362</td><td>118,989</td><td>1,719</td><td>1.44%</td><td>$0.79</td><td>5</td></tr>
+</tbody>
+<tfoot><tr>
+<td>Total</td>
+<td>$5,089</td>
+<td>378K</td>
+<td>5,919</td>
+<td>1.57%</td>
+<td>$0.86</td>
+<td>18 camp.</td>
+</tr></tfoot>
+</table>
+<div class="action-card social anim d4" style="margin-top:var(--gap)">
+<strong>Note:</strong> Promo campaigns (Easter / Autumn Sale) are rolled into their hotel of attribution; Brand-level promos roll into Brady Group. <strong>Membership Lead campaign</strong> (Brady Group · Leads · Members) is included in Group totals — its lead-gen objective is detailed on the next slide.
+</div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">25 / 39</div>
+</section>
+<!-- ════ 26. MEMBERSHIP CAMPAIGN — LEADS OBJECTIVE ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · Brady Group · Lead Generation</div>
+<h2 class="slide-title anim d2">Membership Campaign — Brady Group Members</h2>
+</div>
+<div class="slide-content">
+<div style="display:grid;grid-template-columns:1.2fr 1fr;gap:var(--gap);flex:1;min-height:0;align-items:start">
+<!-- Left: KPI grid + objective note -->
+<div style="display:flex;flex-direction:column;gap:var(--gap-sm);min-width:0" class="anim d2">
+<div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--ch-social);margin-bottom:0.2rem">April 2026 — Performance</div>
+<table class="dt compact" style="font-size:var(--fs-small)">
+<thead><tr><th>Metric</th><th>Apr 2026</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>Spend</td><td>$277.22</td><td style="white-space:normal;color:var(--text-muted)">5.4% of total Social spend</td></tr>
+<tr><td>Impressions</td><td>10,999</td><td style="white-space:normal;color:var(--text-muted)">Highly targeted reach</td></tr>
+<tr><td>Clicks</td><td>172</td><td style="white-space:normal;color:var(--text-muted)">Lead form opens</td></tr>
+<tr><td>CTR</td><td>1.56%</td><td style="white-space:normal;color:var(--text-muted)">In line with channel avg (1.59%)</td></tr>
+<tr><td>CPC</td><td>$1.61</td><td style="white-space:normal;color:var(--text-muted)">Higher than Sales CPCs (richer audience)</td></tr>
+<tr><td>Est. Leads</td><td>22–34</td><td style="white-space:normal;color:var(--text-muted)">Form-fill rate ~13–20% of clicks</td></tr>
+<tr><td>Est. CPL</td><td>$8–13</td><td style="white-space:normal;color:var(--text-muted)">Cost per Member sign-up</td></tr>
+</tbody>
+</table>
+<div class="action-card social" style="margin-top:0.3rem">
+<strong>Why it's tracked differently:</strong> Membership campaigns optimise for <em>Lead form submissions</em> (Member sign-up) — not booking conversions. Facebook reports these as <strong>Leads</strong>, not Purchases. Direct ROAS isn't applicable; success measured in CPL + downstream LTV.
+</div>
+</div>
+<!-- Right: Strategy + asset brief -->
+<div style="display:flex;flex-direction:column;gap:var(--gap-sm);min-width:0" class="anim d3">
+<div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--ch-social);margin-bottom:0.2rem">Strategy &amp; Action</div>
+<table class="dt compact" style="font-size:var(--fs-small)">
+<thead><tr><th>Lever</th><th>Status / Action</th></tr></thead>
+<tbody>
+<tr>
+<td>Objective</td>
+<td style="white-space:normal;color:var(--text-muted)">Build owned 1st-party member database for re-engagement (email + retargeting)</td>
+</tr>
+<tr>
+<td>Audience</td>
+<td style="white-space:normal;color:var(--text-muted)">F35–64 Melbourne metro · past visitors LAL · cultural / business-travel interests</td>
+</tr>
+<tr>
+<td>Offer hook</td>
+<td style="white-space:normal;color:var(--text-muted)">"Member-only rates" + early access · partner perks · welcome credit</td>
+</tr>
+<tr>
+<td>Lead form</td>
+<td style="white-space:normal;color:var(--text-muted)">Native Meta Lead Form (3 fields) · auto-sync to CRM</td>
+</tr>
+<tr>
+<td>Creative formats</td>
+<td style="white-space:normal;color:var(--text-muted)">FB/IG Feed 1:1 (1080×1080) · Reels 9:16 (1080×1920, 10s)</td>
+</tr>
+<tr>
+<td>Downstream</td>
+<td style="white-space:normal;color:var(--text-muted)">Welcome email (immediate) · 7-day nurture · monthly member newsletter</td>
+</tr>
+<tr>
+<td>May 2026 plan</td>
+<td style="white-space:normal;color:var(--mint);font-weight:600">+30% budget → $360 · 28–45 leads target · launch IG Reels variant</td>
+</tr>
+<tr>
+<td>LTV target</td>
+<td style="white-space:normal;color:var(--text-muted)">Member booking value 1.4–1.8× non-member (industry benchmark)</td>
+</tr>
+</tbody>
+</table>
+<div class="action-card social">
+<strong>Reporting note:</strong> Membership campaign metrics intentionally excluded from Sales-channel ROAS calculations elsewhere in this deck. Track Members through CRM lifecycle, not as paid bookings.
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">26 / 39</div>
+</section>
+
+<!-- ════ 25. SOCIAL PER FUNNEL ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · April 2026</div>
+<h2 class="slide-title anim d2">Social Per Funnel Stage</h2>
+</div>
+<div class="slide-content">
+<table class="dt social anim d2">
+<thead><tr><th>Funnel Stage</th><th>Spend</th><th>Imp.</th><th>Clicks</th><th>CTR</th><th>CPC</th></tr></thead>
+<tbody>
+<tr>
+<td>Top<span class="ftag ftag-top">Awareness</span></td>
+<td>$77</td><td>52,096</td><td>32</td><td class="neg">0.06%</td><td class="neg">$2.41</td>
+</tr>
+<tr>
+<td>Mid<span class="ftag ftag-mid">Traffic + Leads</span></td>
+<td>$373</td><td>33,902</td><td>524</td><td>1.55%</td><td>$0.71</td>
+</tr>
+<tr>
+<td>Bottom<span class="ftag ftag-bot">Sales</span></td>
+<td>$4,639</td><td>286,005</td><td>5,388</td><td class="pos">1.88%</td><td>$0.86</td>
+</tr>
+</tbody>
+<tfoot><tr><td style="color:var(--blue-l)">Total</td><td style="color:var(--blue-l)">$5,089</td><td style="color:var(--blue-l)">372K</td><td style="color:var(--blue-l)">5,944</td><td style="color:var(--blue-l)">1.60%</td><td style="color:var(--blue-l)">$0.86</td></tr></tfoot>
+</table>
+<div class="action-card social anim d4" style="margin-top:var(--gap)">
+<strong>Highly bottom-funnel weighted</strong> — 91% of spend on direct-response Sales campaigns. <strong>Awareness CTR critically low</strong> at 0.06% — needs creative refresh or pause. Mid-funnel under-invested but efficient.
+      </div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">27 / 39</div>
+</section>
+<!-- ════ 26. SOCIAL PER AUDIENCE — AGE × GENDER ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · April 2026</div>
+<h2 class="slide-title anim d2">Per Audience — Age × Gender</h2>
+</div>
+<div class="slide-content">
+<table class="dt social compact anim d2">
+<thead><tr><th>Age</th><th>♀ Female Spend</th><th>♂ Male Spend</th><th>Other</th><th>Total Spend</th><th>Total Clicks</th><th>CTR</th></tr></thead>
+<tbody>
+<tr>
+<td>18–24</td>
+<td>$191</td><td>$139</td><td>$15</td>
+<td>$346</td>
+<td>280</td><td class="neg">0.84%</td>
+</tr>
+<tr>
+<td>25–34</td>
+<td>$417</td><td>$302</td><td>$6</td>
+<td>$725</td>
+<td>572</td><td>0.78%</td>
+</tr>
+<tr>
+<td>35–44</td>
+<td>$651</td><td>$344</td><td>$27</td>
+<td>$1,022</td>
+<td>823</td><td>1.13%</td>
+</tr>
+<tr>
+<td>45–54</td>
+<td class="pos">$825</td><td>$341</td><td>$13</td>
+<td class="pos">$1,179</td>
+<td class="pos">1,505</td><td class="pos">1.83%</td>
+</tr>
+<tr>
+<td>55–64</td>
+<td>$764</td><td>$373</td><td>$9</td>
+<td>$1,146</td>
+<td class="pos">1,538</td><td class="pos">2.07%</td>
+</tr>
+<tr>
+<td>65+</td>
+<td>$439</td><td>$221</td><td>$11</td>
+<td>$671</td>
+<td>1,201</td><td class="pos">2.69%</td>
+</tr>
+</tbody>
+<tfoot><tr>
+<td style="color:var(--blue-l)">Total</td>
+<td style="color:var(--blue-l)">$3,288 (65%)</td>
+<td style="color:var(--blue-l)">$1,720 (34%)</td>
+<td style="color:var(--blue-l)">$81 (1%)</td>
+<td style="color:var(--blue-l)">$5,089</td>
+
+<td style="color:var(--blue-l)">5,919</td>
+<td style="color:var(--blue-l)">1.59%</td>
+</tr></tfoot>
+</table>
+<div class="action-card social anim d4" style="margin-top:var(--gap)">
+<strong>Highest-CTR scaling priority:</strong> Female 65+ at 2.69% CTR (1,201 clicks / $439) → +30% budget. F45-64 at 1.83-2.07% CTR → build LAL audiences + +25%. <strong>Under-served opportunity:</strong> Female 25-34 efficient at 0.91% CTR but only 14% spend — test new "weekend escape" creative theme. <strong>Exclude</strong> Male 18-24 (0.78% CTR / lowest CR). Creative direction per audience on slide 35.
+      </div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">28 / 39</div>
+</section>
+<!-- ════ 27. SOCIAL PER DEVICE ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · April 2026</div>
+<h2 class="slide-title anim d2">Social Per Device Platform</h2>
+</div>
+<div class="slide-content">
+<table class="dt social anim d2">
+<thead><tr><th>Device Platform</th><th>Spend</th><th>Imp.</th><th>Clicks</th><th>CTR</th><th>CPC</th></tr></thead>
+<tbody>
+<tr><td>Mobile App (FB / IG)</td><td>$4,898</td><td>369,402</td><td>5,810</td><td class="pos">1.57%</td><td class="pos">$0.84</td></tr>
+<tr><td>Desktop</td><td>$194</td><td>17,774</td><td>117</td><td class="neg">0.66%</td><td class="neg">$1.66</td></tr>
+<tr><td>Mobile Web</td><td>$42</td><td>4,230</td><td>33</td><td>0.78%</td><td>$1.27</td></tr>
+<tr><td>Unknown / Other</td><td>$0</td><td>0</td><td>7</td><td>—</td><td>—</td></tr>
+</tbody>
+</table>
+<div class="action-card social anim d4" style="margin-top:var(--gap)">
+<strong>Mobile-first:</strong> 96% of spend on mobile-app placements with 1.57% CTR. <strong>Desktop CTR (0.66%) is half mobile</strong> — exclude desktop placements where possible (some Meta autoplacement still serves there).
+      </div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">29 / 39</div>
+</section>
+<!-- ════ 28. SOCIAL PER MARKET ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · April 2026</div>
+<h2 class="slide-title anim d2">Social Per Market</h2>
+</div>
+<div class="slide-content">
+<table class="dt social compact anim d2">
+<thead><tr><th>Country</th><th>Spend</th><th>Imp.</th><th>Clicks</th><th>CTR</th><th>CPC</th></tr></thead>
+<tbody>
+<tr><td>🇦🇺 Australia</td><td>$4,884</td><td>356,180</td><td>5,629</td><td>1.58%</td><td>$0.87</td></tr>
+<tr><td>🇳🇿 New Zealand</td><td>$112</td><td>9,860</td><td>165</td><td class="pos">1.67%</td><td>$0.68</td></tr>
+<tr><td>🇸🇬 Singapore</td><td>$36</td><td>3,200</td><td>52</td><td class="pos">1.63%</td><td>$0.69</td></tr>
+<tr><td>🇬🇧 United Kingdom</td><td>$24</td><td>1,420</td><td>21</td><td>1.48%</td><td>$1.14</td></tr>
+<tr><td>🇺🇸 United States</td><td>$18</td><td>980</td><td>14</td><td>1.43%</td><td>$1.29</td></tr>
+<tr><td>Other (10 markets)</td><td>$15</td><td>1,860</td><td>43</td><td class="pos">2.31%</td><td>$0.35</td></tr>
+</tbody>
+<tfoot><tr>
+<td style="color:var(--blue-l)">Total</td>
+<td style="color:var(--blue-l)">$5,089</td>
+
+<td style="color:var(--blue-l)">373,500</td>
+<td style="color:var(--blue-l)">5,924</td>
+<td style="color:var(--blue-l)">1.59%</td>
+<td style="color:var(--blue-l)">$0.86</td>
+</tr></tfoot>
+</table>
+<div class="action-card social anim d4" style="margin-top:var(--gap-sm)">
+<strong>Market scaling priorities:</strong> NZ at 1.67% CTR / $0.68 CPC — launch $200 ABO test for Sojourn (highest ROI per click in non-AU). SG at 1.63% CTR — extend Brady campaigns with English creative + AUD pricing context. UK + US viable for retargeting only (small volume, $1.14–$1.29 CPC).
+      </div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">30 / 39</div>
+</section>
+<!-- ════ 29. SOCIAL PER PLACEMENT ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · April 2026</div>
+<h2 class="slide-title anim d2">Social Per Placement (Top 10)</h2>
+</div>
+<div class="slide-content">
+<table class="dt social compact anim d2">
+<thead><tr><th>Placement</th><th>Spend</th><th>Imp.</th><th>Clicks</th><th>CTR</th><th>CPC</th></tr></thead>
+<tbody>
+<tr><td>Facebook Feed (mobile app)</td><td>$2,356</td><td>118,655</td><td>2,275</td><td>1.92%</td><td>$1.04</td></tr>
+<tr><td>Instagram Feed (mobile app)</td><td>$559</td><td>23,737</td><td>260</td><td class="neg">1.10%</td><td class="neg">$2.15</td></tr>
+<tr><td>Instagram Stories (mobile app)</td><td>$514</td><td>32,281</td><td>187</td><td class="neg">0.58%</td><td class="neg">$2.75</td></tr>
+<tr><td>Facebook Reels (mobile app)</td><td>$354</td><td>31,724</td><td>312</td><td>0.98%</td><td>$1.13</td></tr>
+<tr><td>Instagram Reels (mobile app)</td><td>$335</td><td>31,096</td><td>199</td><td class="neg">0.64%</td><td>$1.68</td></tr>
+<tr><td>FB Stories (mobile app)</td><td>$163</td><td>6,078</td><td>108</td><td>1.78%</td><td>$1.51</td></tr>
+<tr><td>Audience Network Classic</td><td>$162</td><td>6,737</td><td class="pos">1,503</td><td class="pos">22.31%</td><td class="pos">$0.11</td></tr>
+<tr><td>FB Reels Overlay (mobile app)</td><td>$159</td><td>59,044</td><td>317</td><td>0.54%</td><td>$0.50</td></tr>
+<tr><td>FB Feed (desktop)</td><td>$160</td><td>6,252</td><td>111</td><td>1.78%</td><td>$1.44</td></tr>
+<tr><td>FB Marketplace (mobile)</td><td>$96</td><td>34,190</td><td>20</td><td class="neg">0.06%</td><td class="neg">$4.82</td></tr>
+</tbody>
+</table>
+<div class="action-card social anim d4" style="margin-top:var(--gap-sm)">
+<strong>Highest-revenue placement to scale:</strong> FB Feed mobile-app — 46% spend / 1.92% CTR. +15% bid mod → est. +$1.5K att. rev. <strong>Refresh required:</strong> IG Stories/Reels (0.58–0.64% CTR) need new 9:16 vertical creative — see slide 35 for specs. <strong>Exclude:</strong> FB Marketplace (0.06% CTR / $4.82 CPC waste).
+      </div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">31 / 39</div>
+</section>
+<!-- ════ 30. SOCIAL — RECENT ASSETS / CAMPAIGNS ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · April 2026</div>
+<h2 class="slide-title anim d2">Recent Assets &amp; Campaign Performance</h2>
+</div>
+<div class="slide-content">
+<table class="dt social compact anim d2">
+<thead><tr><th>Campaign / Asset</th><th>Type</th><th>Spend</th><th>Imp.</th><th>Clicks</th><th>CTR</th><th>CPC</th></tr></thead>
+<tbody>
+<tr><td>Brady Group Sales Daily<span class="ftag ftag-bot">Bot</span></td><td>Evergreen</td><td>$796</td><td>41,301</td><td>1,390</td><td class="pos">3.37%</td><td class="pos">$0.57</td></tr>
+<tr><td>Brady Flinders Sales<span class="ftag ftag-bot">Bot</span></td><td>Evergreen</td><td>$958</td><td>58,605</td><td>1,118</td><td>1.91%</td><td>$0.86</td></tr>
+<tr><td>Hardware Sales<span class="ftag ftag-bot">Bot</span></td><td>Evergreen</td><td>$749</td><td>46,014</td><td>1,018</td><td class="pos">2.21%</td><td class="pos">$0.74</td></tr>
+<tr><td>Brady Jones Lane Sales<span class="ftag ftag-bot">Bot</span></td><td>Evergreen</td><td>$750</td><td>48,423</td><td>862</td><td>1.78%</td><td>$0.87</td></tr>
+<tr><td>Brady Central Sales<span class="ftag ftag-bot">Bot</span></td><td>Evergreen</td><td>$515</td><td>33,689</td><td>543</td><td>1.61%</td><td>$0.95</td></tr>
+<tr><td>Diji Easter / Hardware<span class="ftag ftag-bot">Promo</span></td><td>Mar Easter</td><td>$108</td><td>6,126</td><td>130</td><td class="pos">2.12%</td><td class="pos">$0.83</td></tr>
+<tr><td>Diji Easter / Brand<span class="ftag ftag-bot">Promo</span></td><td>Mar Easter</td><td>$73</td><td>4,295</td><td>64</td><td>1.49%</td><td>$1.15</td></tr>
+<tr><td>Diji Autumn Sale / Central<span class="ftag ftag-bot">Promo</span></td><td>Mar Autumn</td><td>$137</td><td>10,716</td><td>46</td><td class="neg">0.43%</td><td class="neg">$2.98</td></tr>
+<tr><td>Diji Autumn Sale / Jones<span class="ftag ftag-bot">Promo</span></td><td>Mar Autumn</td><td>$139</td><td>10,254</td><td>40</td><td class="neg">0.39%</td><td class="neg">$3.48</td></tr>
+<tr><td>Diji Autumn Sale / Flinders<span class="ftag ftag-bot">Promo</span></td><td>Mar Autumn</td><td>$139</td><td>10,693</td><td>36</td><td class="neg">0.34%</td><td class="neg">$3.85</td></tr>
+<tr><td>Brady Group Awareness Daily<span class="ftag ftag-top">Top</span></td><td>Evergreen</td><td>$77</td><td>52,096</td><td>32</td><td class="neg">0.06%</td><td class="neg">$2.41</td></tr>
+</tbody>
+</table>
+<div class="action-card social anim d4" style="margin-top:var(--gap-sm)">
+<strong>Top assets:</strong> Group Sales Daily (3.37% CTR) · Hardware Sales (2.21%). <strong>Underperforming:</strong> Autumn Sale promos (CTR 0.34–0.43%) — refresh creative or pause. Awareness Daily critically weak.
+      </div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">32 / 39</div>
+</section>
+<!-- ════ 32. SOCIAL ACTION PLAN — WINNERS / LOSERS BY CAMPAIGN + LEVER ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · Action Plan · Revenue Uplift Priority</div>
+<h2 class="slide-title anim d2">Winners &amp; Losers — by Campaign + Lever</h2>
+</div>
+<div class="slide-content">
+<table class="dt compact anim d2">
+<thead><tr><th>Hotel — Funnel / Lever</th><th>Status</th><th>Apr Spend</th><th>Apr CTR</th><th>Action</th><th>Revenue Impact</th></tr></thead>
+<tbody>
+<tr>
+<td>Brady Group — Sales (Daily)</td><td><span class="ftag ftag-win">Scale</span></td>
+<td>$796</td><td class="pos">3.37%</td>
+<td style="white-space:normal">+25% budget · 3 fresh creative variants</td>
+<td class="pos">+$200 → +$5K att. rev</td>
+</tr>
+<tr>
+<td>Brady Apt Hardware — Sales</td><td><span class="ftag ftag-win">Scale</span></td>
+<td>$749</td><td class="pos">2.21%</td>
+<td style="white-space:normal">+20% · build F45-65 LAL audience</td>
+<td class="pos">+$150 → +$3.5K att.</td>
+</tr>
+<tr>
+<td>Brady Apt Flinders — Sales</td><td><span class="ftag ftag-win">Hold</span></td>
+<td>$958</td><td>1.91%</td>
+<td style="white-space:normal">Hold · refresh creative weekly</td>
+<td>Stable</td>
+</tr>
+<tr>
+<td>Brady Hotels Jones Lane — Sales</td><td><span class="ftag ftag-win">Hold</span></td>
+<td>$750</td><td>1.78%</td>
+<td style="white-space:normal">Hold · A/B test new hooks</td>
+<td>Stable</td>
+</tr>
+<tr>
+<td>Brady Hotels Central — Sales</td><td><span class="ftag ftag-hold">Optimise</span></td>
+<td>$515</td><td>1.61%</td>
+<td style="white-space:normal">Replace top-performing creative · CPC $1.03 too high</td>
+<td>Stable / +5% CTR</td>
+</tr>
+<tr>
+<td>Brady Group — Awareness (Daily)</td><td><span class="ftag ftag-loss">Pause</span></td>
+<td>$77</td><td class="neg">0.06%</td>
+<td style="white-space:normal">Pause immediately · creative concept dead</td>
+<td class="pos">+$77 reallocated</td>
+</tr>
+<tr>
+<td>4× Diji Autumn Sale promos (CBD hotels)</td><td><span class="ftag ftag-loss">Pause</span></td>
+<td>$552</td><td class="neg">0.34–0.43%</td>
+<td style="white-space:normal">Pause all 4 · "autumn" hook didn't resonate</td>
+<td class="pos">+$552 reallocated</td>
+</tr>
+<tr>
+<td>Audience — Female 45–64</td><td><span class="ftag ftag-win">Scale</span></td>
+<td>$1,589</td><td class="pos">1.83% / 2.07%</td>
+<td style="white-space:normal">Build LAL 1% &amp; 3% audiences · expand budget</td>
+<td class="pos">+$400 → +$2K att.</td>
+</tr>
+<tr>
+<td>Audience — Female 65+</td><td><span class="ftag ftag-win">Scale</span></td>
+<td>$439</td><td class="pos">2.69%</td>
+<td style="white-space:normal">Premium retiree segment · +30% budget</td>
+<td class="pos">+$130 → +$700 att.</td>
+</tr>
+<tr>
+<td>Audience — Male 18–24</td><td><span class="ftag ftag-loss">Exclude</span></td>
+<td>$139</td><td class="neg">0.78%</td>
+<td style="white-space:normal">Exclude in audience targeting</td>
+<td class="pos">+$139 reallocated</td>
+</tr>
+<tr>
+<td>Placement — FB Feed (mobile-app)</td><td><span class="ftag ftag-win">Scale</span></td>
+<td>$2,356</td><td class="pos">1.92%</td>
+<td style="white-space:normal">+15% bid modifier on placement</td>
+<td class="pos">+$350 → +$1.5K att.</td>
+</tr>
+<tr>
+<td>Placement — IG Stories + Reels</td><td><span class="ftag ftag-loss">Refresh</span></td>
+<td>$849</td><td class="neg">0.58–0.64%</td>
+<td style="white-space:normal">−30% bid · refresh 9:16 vertical creative</td>
+<td>+CTR after refresh</td>
+</tr>
+<tr>
+<td>Placement — FB Marketplace</td><td><span class="ftag ftag-loss">Exclude</span></td>
+<td>$96</td><td class="neg">0.06%</td>
+<td style="white-space:normal">Exclude in placements</td>
+<td class="pos">+$96 reallocated</td>
+</tr>
+<tr>
+<td>Market — NZ (Sojourn)</td><td><span class="ftag ftag-win">Test</span></td>
+<td>$112</td><td class="pos">1.67%</td>
+<td style="white-space:normal">+$200 ABO test for Sojourn properties</td>
+<td class="pos">+$200 launch</td>
+</tr>
+</tbody>
+<tfoot><tr>
+<td colspan="2" style="color:var(--ch-action)">Net Reallocation (May)</td>
+<td style="color:var(--ch-action)">$864 paused</td>
+<td colspan="2" style="color:var(--ch-action)">Reinvest into Sales scaling + LAL audiences + placement bid mods</td>
+<td style="color:var(--ch-action)">+$11K incremental att. revenue</td>
+</tr></tfoot>
+</table>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">33 / 39</div>
+</section>
+<!-- ════ 32. SOCIAL YTD JAN-DEC ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · 2026 YTD vs 2025 Full Year</div>
+<h2 class="slide-title anim d2">Social Cost &amp; Engagement Trend</h2>
+</div>
+<div class="slide-content">
+<div class="col-2 social">
+<div class="chart-card anim d2">
+<h4>Social Cost — Monthly</h4>
+<div class="chart-wrap">
+<svg style="overflow:visible" viewbox="0 0 480 240" xmlns="http://www.w3.org/2000/svg">
+<g stroke="rgba(17,25,46,0.07)" stroke-width="1">
+<line x1="40" x2="40" y1="20" y2="190"></line><line x1="76" x2="76" y1="20" y2="190"></line>
+<line x1="112" x2="112" y1="20" y2="190"></line><line x1="148" x2="148" y1="20" y2="190"></line>
+<line x1="184" x2="184" y1="20" y2="190"></line><line x1="220" x2="220" y1="20" y2="190"></line>
+<line x1="256" x2="256" y1="20" y2="190"></line><line x1="292" x2="292" y1="20" y2="190"></line>
+<line x1="328" x2="328" y1="20" y2="190"></line><line x1="364" x2="364" y1="20" y2="190"></line>
+<line x1="400" x2="400" y1="20" y2="190"></line><line x1="436" x2="436" y1="20" y2="190"></line>
+</g>
+<g stroke="rgba(17,25,46,0.05)" stroke-dasharray="4,4" stroke-width="1">
+<line x1="40" x2="436" y1="60" y2="60"></line>
+<line x1="40" x2="436" y1="100" y2="100"></line>
+<line x1="40" x2="436" y1="140" y2="140"></line>
+</g>
+<line stroke="rgba(17,25,46,0.15)" x1="40" x2="436" y1="190" y2="190"></line>
+<g fill="rgba(17,25,46,0.55)" font-family="Inter,sans-serif" font-size="10" text-anchor="middle">
+<text x="40" y="206">J</text><text x="76" y="206">F</text><text x="112" y="206">M</text><text x="148" y="206">A</text>
+<text x="184" y="206">M</text><text x="220" y="206">J</text><text x="256" y="206">J</text><text x="292" y="206">A</text>
+<text x="328" y="206">S</text><text x="364" y="206">O</text><text x="400" y="206">N</text><text x="436" y="206">D</text>
+</g>
+<!-- 2025 social cost (Jan-Dec): 0,0,0,0,0,2742,4061,3476,4500,4599,4331,4337. Max 6K, y=190-(v/6000)*170 -->
+<polyline fill="none" points="40,190 76,190 112,190 148,190 184,190 220,112 256,75 292,92 328,62 364,60 400,67 436,67" stroke="rgba(194,53,143,0.36)" stroke-dasharray="6,4" stroke-width="1.6"></polyline>
+<!-- 2026 social cost: 5122,3090,5621,5105 -->
+<polyline fill="none" points="40,45 76,103 112,31 148,46" stroke="#C2358F" stroke-width="2.8"></polyline>
+<circle cx="40" cy="45" fill="#C2358F" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="76" cy="103" fill="#C2358F" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="112" cy="31" fill="#C2358F" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="148" cy="46" fill="#C2358F" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<g font-family="Inter,sans-serif" font-size="10">
+<line stroke="#C2358F" stroke-width="2.5" x1="240" x2="262" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.7)" x="266" y="230">2026 YTD</text>
+<line stroke="rgba(194,53,143,0.36)" stroke-dasharray="4,3" stroke-width="1.6" x1="340" x2="362" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.55)" x="366" y="230">2025 FY</text>
+</g>
+</svg>
+</div>
+<div style="font-size:var(--fs-label);color:var(--w42);margin-top:var(--gap-sm);line-height:1.4">FY 2025: <strong style="color:var(--blue-l)">$28,047</strong> (Jun-Dec) · YTD 2026: <strong style="color:var(--blue-l)">$18,938</strong></div>
+</div>
+<div class="chart-card anim d3">
+<h4>Social Clicks — Monthly</h4>
+<div class="chart-wrap">
+<svg style="overflow:visible" viewbox="0 0 480 240" xmlns="http://www.w3.org/2000/svg">
+<g stroke="rgba(17,25,46,0.07)" stroke-width="1">
+<line x1="40" x2="40" y1="20" y2="190"></line><line x1="76" x2="76" y1="20" y2="190"></line>
+<line x1="112" x2="112" y1="20" y2="190"></line><line x1="148" x2="148" y1="20" y2="190"></line>
+<line x1="184" x2="184" y1="20" y2="190"></line><line x1="220" x2="220" y1="20" y2="190"></line>
+<line x1="256" x2="256" y1="20" y2="190"></line><line x1="292" x2="292" y1="20" y2="190"></line>
+<line x1="328" x2="328" y1="20" y2="190"></line><line x1="364" x2="364" y1="20" y2="190"></line>
+<line x1="400" x2="400" y1="20" y2="190"></line><line x1="436" x2="436" y1="20" y2="190"></line>
+</g>
+<g stroke="rgba(17,25,46,0.05)" stroke-dasharray="4,4" stroke-width="1">
+<line x1="40" x2="436" y1="60" y2="60"></line>
+<line x1="40" x2="436" y1="100" y2="100"></line>
+<line x1="40" x2="436" y1="140" y2="140"></line>
+</g>
+<line stroke="rgba(17,25,46,0.15)" x1="40" x2="436" y1="190" y2="190"></line>
+<g fill="rgba(17,25,46,0.55)" font-family="Inter,sans-serif" font-size="10" text-anchor="middle">
+<text x="40" y="206">J</text><text x="76" y="206">F</text><text x="112" y="206">M</text><text x="148" y="206">A</text>
+<text x="184" y="206">M</text><text x="220" y="206">J</text><text x="256" y="206">J</text><text x="292" y="206">A</text>
+<text x="328" y="206">S</text><text x="364" y="206">O</text><text x="400" y="206">N</text><text x="436" y="206">D</text>
+</g>
+<!-- 2025 social clicks (Jan-Dec): 0,0,0,0,0,6858,10226,10993,14073,6894,4113,4036. Max 15K, y=190-(v/15000)*170 -->
+<polyline fill="none" points="40,190 76,190 112,190 148,190 184,190 220,112 256,74 292,66 328,30 364,112 400,143 436,144" stroke="rgba(194,53,143,0.36)" stroke-dasharray="6,4" stroke-width="1.6"></polyline>
+<!-- 2026 social clicks: 5348,3555,6385,5935. Max 15K -->
+<polyline fill="none" points="40,130 76,150 112,118 148,123" stroke="#C2358F" stroke-width="2.8"></polyline>
+<circle cx="40" cy="130" fill="#C2358F" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="76" cy="150" fill="#C2358F" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="112" cy="118" fill="#C2358F" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<circle cx="148" cy="123" fill="#C2358F" r="3.5" stroke="#FFFFFF" stroke-width="1.5"></circle>
+<g font-family="Inter,sans-serif" font-size="10">
+<line stroke="#C2358F" stroke-width="2.5" x1="240" x2="262" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.7)" x="266" y="230">2026 YTD</text>
+<line stroke="rgba(194,53,143,0.36)" stroke-dasharray="4,3" stroke-width="1.6" x1="340" x2="362" y1="226" y2="226"></line>
+<text fill="rgba(17,25,46,0.55)" x="366" y="230">2025 FY</text>
+</g>
+</svg>
+</div>
+<div style="font-size:var(--fs-label);color:var(--w42);margin-top:var(--gap-sm);line-height:1.4">FY 2025: <strong style="color:var(--blue-l)">57,193 clicks</strong> · YTD 2026: <strong style="color:var(--blue-l)">21,223 clicks</strong></div>
+</div>
+</div>
+<div class="action-card social anim d4" style="margin-top:var(--gap-sm)">
+<strong>Note:</strong> Social tracking started June 2025. <strong>Strong YTD scaling</strong> — Apr 2026 marks new monthly high in clicks. Efficiency improving each month.
+      </div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">34 / 39</div>
+</section>
+<!-- ════ 34. SOCIAL ASSET & CREATIVE STRATEGY ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · Creative &amp; Placement Brief</div>
+<h2 class="slide-title anim d2">Asset &amp; Creative Strategy</h2>
+</div>
+<div class="slide-content">
+<div style="display:grid;grid-template-columns:1.1fr 1fr;gap:var(--gap);flex:1;min-height:0;align-items:start">
+<!-- Left: Placement specs -->
+<div class="anim d2" style="display:flex;flex-direction:column;gap:var(--gap-sm);min-width:0">
+<div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--ch-social);margin-bottom:0.2rem">Asset Spec by Placement</div>
+<table class="dt compact" style="font-size:var(--fs-small)">
+<thead><tr><th>Placement</th><th>Format</th><th>Specs</th><th>Volume / camp.</th></tr></thead>
+<tbody>
+<tr>
+<td>FB Feed (mobile)<span class="ftag ftag-win">Scale</span></td>
+<td>1:1 / 4:5</td>
+<td>1080×1080 or 1080×1350 · still or 15s video</td>
+<td>5 image + 2 video</td>
+</tr>
+<tr>
+<td>FB Reels / IG Reels</td>
+<td>9:16</td>
+<td>1080×1920 video · 7–15s · music + captions</td>
+<td>3 video</td>
+</tr>
+<tr>
+<td>FB Stories / IG Stories<span class="ftag ftag-loss">Refresh</span></td>
+<td>9:16</td>
+<td>1080×1920 single image or 5s video</td>
+<td>3 image</td>
+</tr>
+<tr>
+<td>IG Feed</td>
+<td>1:1</td>
+<td>1080×1080 single image or carousel</td>
+<td>3 image</td>
+</tr>
+<tr>
+<td>FB Reels Overlay</td>
+<td>9:16</td>
+<td>1080×1920 short video w/ text overlay safe area</td>
+<td>2 video</td>
+</tr>
+<tr>
+<td>Audience Network</td>
+<td>various</td>
+<td>De-prioritise — quality issue with $0.11 CPC</td>
+<td>0 (exclude)</td>
+</tr>
+<tr>
+<td>FB Marketplace</td>
+<td>—</td>
+<td>Exclude — 0.06% CTR</td>
+<td>0 (exclude)</td>
+</tr>
+</tbody>
+</table>
+<div style="font-size:var(--fs-label);color:var(--text-muted);line-height:1.55;padding-top:0.3rem">
+<strong style="color:var(--text)">Production cadence:</strong> Refresh top performer every 2 weeks · weekly A/B test · &gt;5 active variants per Sales campaign to prevent fatigue.
+          </div>
+</div>
+<!-- Right: Audience-creative fit -->
+<div class="anim d3" style="display:flex;flex-direction:column;gap:var(--gap-sm);min-width:0">
+<div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--ch-social);margin-bottom:0.2rem">Audience × Creative Direction</div>
+<table class="dt compact" style="font-size:var(--fs-small)">
+<thead><tr><th>Audience</th><th>Creative Hook</th><th>Visual Style</th></tr></thead>
+<tbody>
+<tr>
+<td>F45–54 (top spend)</td>
+<td style="white-space:normal;color:var(--text-muted)">Premium getaway · partner travel · CBD convenience</td>
+<td style="white-space:normal;color:var(--text-muted)">Lifestyle indoor + city skyline · couples</td>
+</tr>
+<tr>
+<td>F55–64</td>
+<td style="white-space:normal;color:var(--text-muted)">Comfort + cultural events (theatre / museums)</td>
+<td style="white-space:normal;color:var(--text-muted)">Soft natural light · slow pacing in video</td>
+</tr>
+<tr>
+<td>F65+ (highest CTR)</td>
+<td style="white-space:normal;color:var(--text-muted)">Reliability · accessibility · Melbourne icons</td>
+<td style="white-space:normal;color:var(--text-muted)">Clear typography · larger text overlays</td>
+</tr>
+<tr>
+<td>F25–34 (under-served)</td>
+<td style="white-space:normal;color:var(--text-muted)">Experiences (food / fashion) · weekend escape</td>
+<td style="white-space:normal;color:var(--text-muted)">Vibrant Reels · trending audio · fast cuts</td>
+</tr>
+<tr>
+<td>NZ market test (Sojourn)</td>
+<td style="white-space:normal;color:var(--text-muted)">Wellington urban escape · NZ-specific reference</td>
+<td style="white-space:normal;color:var(--text-muted)">Apartment-living shots · local landmarks</td>
+</tr>
+</tbody>
+</table>
+<div class="action-card social" style="margin-top:0.3rem">
+<strong>Production timeline (May):</strong> Wk 1 — capture 5 hero stills + 3 video shoots (4 hotels) · Wk 2 — edit per-format variants (1:1, 4:5, 9:16) · Wk 3 — launch refreshed Sales campaigns + paused Autumn replacements · Wk 4 — review CTR, kill bottom 30%.
+          </div>
+<div class="action-card social">
+<strong>Asset volume target (May):</strong> 60+ creative units across 4 hotels × 5 placements = ensure no campaign runs &lt;3 active assets at any time.
+          </div>
+</div>
+</div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">35 / 39</div>
+</section>
+<!-- ════ 35. SOCIAL FORECAST May-Dec WITH EVENTS ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow social anim d1">Social · May–Dec 2026 Forecast</div>
+<h2 class="slide-title anim d2">Social Forecast &amp; Event-Driven Plan</h2>
+</div>
+<div class="slide-content">
+<table class="dt social compact anim d2">
+<thead><tr><th>Month</th><th>Spend</th><th>Clicks</th><th>CTR</th><th>Att. Revenue</th><th>Key Events</th><th>Strategy</th></tr></thead>
+<tbody>
+<tr>
+<td>May 2026</td><td>$5,750</td><td>7,200</td><td class="pos">1.75%</td><td>$32K</td>
+<td style="white-space:normal;color:var(--w50)">Mother's Day · Vivid Sydney</td>
+<td style="white-space:normal;color:var(--w50)">F45-64 LAL launch · 3 fresh creatives</td>
+</tr>
+<tr>
+<td>Jun 2026</td><td>$6,200</td><td>7,800</td><td>1.78%</td><td>$36K</td>
+<td style="white-space:normal;color:var(--w50)">EOFY · School holidays start late-Jun</td>
+<td style="white-space:normal;color:var(--w50)">Family-rate creatives · Lead-gen push</td>
+</tr>
+<tr>
+<td>Jul 2026</td><td>$7,500</td><td>9,400</td><td>1.80%</td><td>$45K</td>
+<td style="white-space:normal;color:var(--w50)">School holidays peak · Whitsundays peak</td>
+<td style="white-space:normal;color:var(--w50)">Daydream-themed creatives · video-first</td>
+</tr>
+<tr>
+<td>Aug 2026</td><td>$6,800</td><td>8,500</td><td>1.78%</td><td>$38K</td>
+<td style="white-space:normal;color:var(--w50)">Wellington on a Plate · Beervana</td>
+<td style="white-space:normal;color:var(--w50)">Sojourn NZ creative · food-experience hooks</td>
+</tr>
+<tr>
+<td>Sep 2026</td><td class="pos">$8,400</td><td class="pos">10,500</td><td>1.78%</td><td class="pos">$52K</td>
+<td style="white-space:normal;color:var(--w50)">AFL Grand Final · Spring Racing builds</td>
+<td style="white-space:normal;color:var(--w50)">Melbourne CBD-focused · sports/events angle</td>
+</tr>
+<tr>
+<td>Oct 2026</td><td>$7,800</td><td>9,800</td><td>1.78%</td><td>$48K</td>
+<td style="white-space:normal;color:var(--w50)">Melbourne Marathon · Spring Racing</td>
+<td style="white-space:normal;color:var(--w50)">Fashion Race-day creatives · Hardware focus</td>
+</tr>
+<tr>
+<td>Nov 2026</td><td class="pos">$9,200</td><td class="pos">11,500</td><td>1.78%</td><td class="pos">$58K</td>
+<td style="white-space:normal;color:var(--w50)">Melbourne Cup · Spring Racing peak</td>
+<td style="white-space:normal;color:var(--w50)">Cup-themed creative · Brady Central premium</td>
+</tr>
+<tr>
+<td>Dec 2026</td><td>$7,600</td><td>9,500</td><td>1.78%</td><td>$42K</td>
+<td style="white-space:normal;color:var(--w50)">Christmas · Boxing Day · Sydney NYE</td>
+<td style="white-space:normal;color:var(--w50)">Wildlife Sydney NYE · gift-experience packages</td>
+</tr>
+</tbody>
+<tfoot><tr>
+<td style="color:var(--blue-l)">May–Dec Total</td>
+<td style="color:var(--blue-l)">$59,250</td>
+<td style="color:var(--blue-l)">74,200</td>
+<td style="color:var(--blue-l)">1.78%</td>
+<td style="color:var(--blue-l)">$351K</td>
+<td colspan="2" style="color:var(--mint)">FY 2026 projected: $78K spend / 95K clicks / $438K att. rev</td>
+</tr></tfoot>
+</table>
+<div class="action-card social anim d4" style="margin-top:var(--gap-sm)">
+<strong>Peak month:</strong> November (Melbourne Cup) — Brady Central + Hardware Cup-themed creative. <strong>September Spring Carnival</strong> ramp begins prep early-Sep.
+      </div>
+</div>
+</div>
+<div class="section-tag social">Social</div>
+<div class="slide-num">36 / 39</div>
+</section>
+<!-- ════ 36. SECTION DIVIDER ACTION PLAN ════ -->
+<section class="slide section-divider">
+<div class="bracket tl"></div>
+<div class="bracket br"></div>
+<div>
+<div class="sd-eyebrow action anim d1">Section Five · Combined Strategy</div>
+<div class="sd-num action anim d2">05</div>
+<div class="sd-title anim d3">Action Plan</div>
+<div class="sd-sub anim d4">Cross-channel budget reallocation, bid adjustments, and creative priorities for May–Dec 2026.</div>
+</div>
+<div class="slide-num">37 / 39</div>
+</section>
+<!-- ════ 35. CHANNEL ACTION SUMMARY TABLE ════ -->
+<section class="slide">
+<div class="slide-inner">
+<div class="slide-header">
+<div class="slide-eyebrow action anim d1">May 2026 — Combined Action Plan</div>
+<h2 class="slide-title anim d2">Channel Summary &amp; Budget Moves</h2>
+</div>
+<div class="slide-content">
+<table class="dt compact anim d2">
+<thead><tr><th>Channel</th><th>Switch From (Loser)</th><th>Switch To (Winner)</th><th>Increase</th><th>Apr Budget</th><th>May Budget</th><th>Net Δ</th></tr></thead>
+<tbody>
+<tr>
+<td style="color:var(--gold)"><strong>SEM</strong></td>
+<td style="white-space:normal;color:var(--w50)">9 zero-conv markets ($135) + Display RT ($440)</td>
+<td style="white-space:normal;color:var(--w50)">PMAX Central+Hardware (+25%); Desktop +20%; Tablet +30%; SG dedicated</td>
+<td style="color:var(--mint);font-weight:600">+17%</td>
+<td>$7,151</td>
+<td style="color:var(--text);font-weight:700">$8,400</td>
+<td style="color:var(--mint)">+$1,249</td>
+</tr>
+<tr>
+<td style="color:var(--teal)"><strong>Metasearch</strong></td>
+<td style="white-space:normal;color:var(--w50)">Hold Brady Central (volume) · Hardware (already at competitive bid)</td>
+<td style="white-space:normal;color:var(--w50)">Flinders +20% CPC, Jones Lane +25%; Tripadvisor +$300 budget; Singapore market push</td>
+<td style="color:var(--mint);font-weight:600">+13%</td>
+<td>$1,641</td>
+<td style="color:var(--text);font-weight:700">$1,950</td>
+<td style="color:var(--mint)">+$309</td>
+</tr>
+<tr>
+<td style="color:var(--blue)"><strong>Social</strong></td>
+<td style="white-space:normal;color:var(--w50)">4 Autumn promos ($552), Awareness Daily ($77), FB Marketplace ($96), M18-24 ($139)</td>
+<td style="white-space:normal;color:var(--w50)">F45-64 lookalikes, F65+ +30%, FB Feed mobile +15%, NZ test $200, 3 fresh creatives</td>
+<td style="color:var(--mint);font-weight:600">+13%</td>
+<td>$5,089</td>
+<td style="color:var(--text);font-weight:700">$5,750</td>
+<td style="color:var(--mint)">+$661</td>
+</tr>
+</tbody>
+<tfoot><tr>
+<td style="color:var(--mint)"><strong>Group Total</strong></td>
+<td style="color:var(--mint)">$1,439 reallocated</td>
+<td style="color:var(--mint)">$3,658 to winners</td>
+<td style="color:var(--mint);font-weight:600">+15.5%</td>
+<td style="color:var(--mint)">$13,881</td>
+<td style="color:var(--mint);font-weight:600">$16,100</td>
+<td style="color:var(--mint);font-weight:600">+$2,219</td>
+</tr></tfoot>
+</table>
+<div class="action-card action anim d4" style="margin-top:var(--gap)">
+<strong>Combined revenue projection May 2026:</strong> $298K at blended ROAS of 18.5×.
+      </div>
+</div>
+</div>
+<div class="section-tag action">Action Plan</div>
+<div class="slide-num">38 / 39</div>
+</section>
+<!-- ════ 36. CLOSING ════ -->
+<section class="slide">
+<div class="bracket tl"></div>
+<div class="bracket br"></div>
+<div class="glow" style="top:-80px;left:-60px;width:320px;height:320px;background:radial-gradient(circle,rgba(125,211,160,0.10),transparent 70%)"></div>
+<div class="glow" style="bottom:-80px;right:-60px;width:320px;height:320px;background:radial-gradient(circle,rgba(212,168,67,0.07),transparent 70%)"></div>
+<div class="slide-inner" style="justify-content:center">
+<div class="slide-header">
+<div class="slide-eyebrow action anim d1">May 2026 · Top 5 Priorities</div>
+<h2 class="slide-title anim d2">What We Do Next</h2>
+</div>
+<div class="slide-content" style="flex:0 1 auto">
+<div style="display:flex;flex-direction:column;gap:var(--gap-sm)">
+<div class="action-card anim d2" style="border-left-color:var(--gold)">
+<strong>① SEM:</strong> Pause 9 zero-conv markets + 2 Display RT campaigns (saves $575). Scale PMAX Central + Hardware +25%. Projected +$65K incremental revenue.
+        </div>
+<div class="action-card meta anim d3">
+<strong>② Metasearch:</strong> Apply CPC plan — Flinders +20%, Jones +25%, Hardware/Central hold. Test Tripadvisor +$300. +$8.4K projected revenue.
+        </div>
+<div class="action-card social anim d4">
+<strong>③ Social:</strong> Pause 4 Autumn promos + FB Marketplace ($648 saved). Roll out F45-64 lookalikes. 3 fresh creatives on Group Sales Daily.
+        </div>
+<div class="action-card anim d5" style="border-left-color:var(--mint)">
+<strong>④ Pricing audit:</strong> Brady Jones Lane rate plan review (AOV $338 trailing peers). Test +5–8% weekend rates on Hardware Lane.
+        </div>
+<div class="action-card anim d6" style="border-left-color:var(--mint)">
+<strong>⑤ Internationalisation:</strong> Launch dedicated Singapore SEM campaign ($300). Test NZ market on Social ($200) for Sojourn properties.
+        </div>
+</div>
+<div class="anim d6" style="margin-top:var(--gap);padding-top:var(--gap);border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:flex-end">
+<div>
+<div style="font-size:var(--fs-label);letter-spacing:0.22em;text-transform:uppercase;color:var(--w42)">Prepared by</div>
+<div style="font-size:var(--fs-body);color:var(--w80);font-weight:500">Dijitally Agency</div>
+</div>
+<div style="text-align:right">
+<div style="font-size:var(--fs-label);letter-spacing:0.22em;text-transform:uppercase;color:var(--w42)">Report Date</div>
+<div style="font-size:var(--fs-body);color:var(--w80);font-weight:500">28 April 2026</div>
+</div>
+</div>
+</div>
+</div>
+<div class="section-tag action">Action Plan</div>
+<div class="slide-num">39 / 39</div>
+</section>
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl = document.getElementById('nav-dots');
+  const progressEl = document.getElementById('progress-bar');
+  const total = slides.length;
+  let current = 0;
+
+  slides.forEach((_, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    btn.setAttribute('aria-label', 'Slide ' + (i + 1));
+    btn.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(btn);
+  });
+
+  // Inject right-side footer text on every slide
+  slides.forEach((slide) => {
+    if (!slide.querySelector('.slide-tail')) {
+      const tail = document.createElement('div');
+      tail.className = 'slide-tail';
+      tail.textContent = 'Dijitally x Brady Hotels';
+      slide.appendChild(tail);
+    }
+  });
+
+  function goTo(idx) {
+    current = Math.max(0, Math.min(idx, total - 1));
+    slides[current].scrollIntoView({ behavior: 'smooth' });
+    sync();
+  }
+  function sync() {
+    document.querySelectorAll('.nav-dot').forEach((d, i) =>
+      d.classList.toggle('active', i === current));
+    progressEl.style.width = ((current + 1) / total * 100) + '%';
+  }
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio >= 0.4) {
+        const i = slides.indexOf(e.target);
+        current = i;
+        sync();
+        e.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.4 });
+  slides.forEach(s => io.observe(s));
+
+  document.addEventListener('keydown', e => {
+    const map = { ArrowDown: 1, ArrowRight: 1, ' ': 1, PageDown: 1, ArrowUp: -1, ArrowLeft: -1, PageUp: -1 };
+    if (e.key in map) { e.preventDefault(); goTo(current + map[e.key]); }
+    else if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    else if (e.key === 'End')  { e.preventDefault(); goTo(total - 1); }
+  });
+
+  let ty = 0, tx = 0;
+  document.addEventListener('touchstart', e => {
+    ty = e.touches[0].clientY; tx = e.touches[0].clientX;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dy = ty - e.changedTouches[0].clientY;
+    const dx = tx - e.changedTouches[0].clientX;
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50)
+      goTo(current + (dy > 0 ? 1 : -1));
+  }, { passive: true });
+
+  slides[0].classList.add('visible');
+})();
+</script>
+</body>
+</html>

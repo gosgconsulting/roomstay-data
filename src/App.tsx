@@ -20,6 +20,8 @@ import Integrations from "./pages/Integrations";
 import TagsPage from "./pages/TagsPage";
 import CustomReportsPage from "./pages/CustomReportsPage";
 import CustomReportViewPage from "./pages/CustomReportViewPage";
+import SlidesPage from "./pages/SlidesPage";
+import SlideViewerPage from "./pages/SlideViewerPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -56,6 +58,9 @@ const App = () => (
           <Route path="/tools/reports" element={<ProtectedRoute><CustomReportsPage /></ProtectedRoute>} />
           <Route path="/tools/reports/:accountId" element={<ProtectedRoute><CustomReportsPage /></ProtectedRoute>} />
           <Route path="/tools/reports/:accountId/:reportId" element={<ProtectedRoute><CustomReportViewPage /></ProtectedRoute>} />
+          <Route path="/tools/slides" element={<ProtectedRoute><SlidesPage /></ProtectedRoute>} />
+          <Route path="/tools/slides/:accountId" element={<ProtectedRoute><SlidesPage /></ProtectedRoute>} />
+          <Route path="/tools/slides/:accountId/:slideId" element={<ProtectedRoute><SlideViewerPage /></ProtectedRoute>} />
           <Route path="/tools/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
           <Route path="/tools/users/:accountId" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
           <Route path="/tools/forecasting" element={<ProtectedRoute><ForecastingDashboard /></ProtectedRoute>} />

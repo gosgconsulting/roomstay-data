@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brady Elizabeth — Melbourne Launch Strategy · 12-Month Plan</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow-x: hidden; }
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+    :root {
+      --navy: #11192E; --navy-2: #1A2342;
+      --black: #000000; --white: #FFFFFF;
+      --text: #11192E; --text-muted: #5A6377; --text-light: #8C93A4;
+      --line: #E5E7EB; --line-soft: #F0F2F5; --bg-soft: #F7F8FA;
+      --grad-1: #E84B3C; --grad-2: #C2358F; --grad-3: #5E3FBE; --grad-4: #2B6FE0; --grad-5: #5DC8C5;
+      --grad-bar-v: linear-gradient(180deg, #E84B3C 0%, #C2358F 25%, #5E3FBE 50%, #2B6FE0 75%, #5DC8C5 100%);
+      --grad-bar-h: linear-gradient(90deg,  #E84B3C 0%, #C2358F 25%, #5E3FBE 50%, #2B6FE0 75%, #5DC8C5 100%);
+      --ch-sem: #2B6FE0; --ch-meta: #5DC8C5; --ch-social: #C2358F;
+      --ch-creator: #5E3FBE; --ch-event: #E84B3C; --ch-action: #1B7A3E;
+      --pos: #1B7A3E; --pos-l: #2DA655; --neg: #DC2626;
+
+      --font-display: 'Syne', system-ui, sans-serif;
+      --font-body: 'Manrope', system-ui, sans-serif;
+      --fs-display: clamp(2rem, 5vw, 3.8rem);
+      --fs-h1: clamp(1.4rem, 3.2vw, 2.4rem);
+      --fs-h2: clamp(1.1rem, 2.4vw, 1.8rem);
+      --fs-h3: clamp(0.9rem, 1.7vw, 1.2rem);
+      --fs-body: clamp(0.72rem, 1.2vw, 0.92rem);
+      --fs-small: clamp(0.62rem, 0.95vw, 0.76rem);
+      --fs-label: clamp(0.56rem, 0.8vw, 0.68rem);
+      --pad: clamp(1.4rem, 3.5vw, 3.5rem);
+      --gap: clamp(0.6rem, 1.4vw, 1.4rem);
+      --gap-sm: clamp(0.3rem, 0.7vw, 0.7rem);
+    }
+    .slide {
+      width: 100vw; height: 100vh; height: 100dvh;
+      overflow: hidden; scroll-snap-align: start;
+      display: flex; flex-direction: column;
+      position: relative; background: var(--white); color: var(--text);
+      font-family: var(--font-body); font-weight: 400;
+    }
+    .slide::before {
+      content: ''; position: absolute; top: 0; left: 0; bottom: 0;
+      width: 12px; background: var(--grad-bar-v);
+      z-index: 5; pointer-events: none;
+    }
+    .slide.section-divider, .slide#s1 { background: var(--navy); color: var(--white); }
+    .slide.section-divider::before, .slide#s1::before {
+      width: 100%; height: 6px; bottom: auto; background: var(--grad-bar-h);
+    }
+    #nav-dots {
+      position: fixed; right: clamp(0.5rem, 1.4vw, 1.4rem); top: 50%;
+      transform: translateY(-50%); display: flex; flex-direction: column;
+      gap: 0.4rem; z-index: 200; max-height: 70vh; padding: 0.5rem 0.3rem;
+    }
+    .nav-dot {
+      width: 5px; height: 5px; border-radius: 50%;
+      background: rgba(17,25,46,0.20); cursor: pointer;
+      transition: all 0.3s ease; border: none; padding: 0; flex-shrink: 0;
+    }
+    .nav-dot.active { background: var(--navy); transform: scale(1.6); }
+    .nav-dot:hover { background: rgba(17,25,46,0.6); }
+    #progress-bar {
+      position: fixed; top: 0; left: 0; height: 3px;
+      background: var(--grad-bar-h); z-index: 200; transition: width 0.4s ease;
+    }
+    .slide-num {
+      position: absolute; bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      left: 50%; transform: translateX(-50%);
+      font-family: var(--font-body); font-size: var(--fs-label);
+      color: var(--text-light); font-variant-numeric: tabular-nums;
+      letter-spacing: 0.06em; z-index: 6;
+    }
+    .slide.section-divider .slide-num, .slide#s1 .slide-num { color: rgba(255,255,255,0.40); }
+    .slide::after {
+      content: 'DIJITALLY';
+      position: absolute; bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      left: clamp(1.6rem, 3.4vw, 3.4rem);
+      font-family: var(--font-display); font-size: var(--fs-label);
+      font-weight: 700; letter-spacing: 0.18em;
+      color: var(--text); z-index: 6; pointer-events: none;
+    }
+    .slide.section-divider::after, .slide#s1::after { color: var(--white); }
+    .slide-tail {
+      position: absolute; bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      right: clamp(1.4rem, 3vw, 3rem);
+      font-family: var(--font-body); font-size: var(--fs-label);
+      color: var(--text-muted); letter-spacing: 0.04em;
+      z-index: 6; pointer-events: none;
+    }
+    .slide.section-divider .slide-tail, .slide#s1 .slide-tail { color: rgba(255,255,255,0.55); }
+    .section-tag {
+      position: absolute; top: clamp(0.7rem, 1.4vw, 1.4rem);
+      right: clamp(1.2rem, 2.4vw, 2.8rem);
+      font-size: var(--fs-label); letter-spacing: 0.22em;
+      text-transform: uppercase; color: var(--text-muted);
+      font-weight: 600; font-family: var(--font-body);
+    }
+    .slide-eyebrow {
+      font-family: var(--font-body); font-size: var(--fs-label);
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--ch-meta); font-weight: 600; margin-bottom: 0.45rem;
+    }
+    .slide-title {
+      font-family: var(--font-display); font-size: var(--fs-h1);
+      font-weight: 700; line-height: 1.15;
+      color: var(--text); letter-spacing: -0.01em;
+    }
+    .slide.section-divider .slide-title, .slide#s1 .slide-title { color: var(--white); }
+    .slide-header { margin-bottom: var(--gap); flex-shrink: 0; }
+    .slide-inner {
+      flex: 1; display: flex; flex-direction: column;
+      padding: var(--pad);
+      padding-left: calc(var(--pad) + 0.6rem);
+      padding-bottom: clamp(2.2rem, 4vw, 4rem);
+      overflow: hidden;
+    }
+    .slide-content {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: center; overflow: hidden; min-height: 0;
+    }
+    .anim {
+      opacity: 0; transform: translateY(14px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .slide.visible .anim { opacity: 1; transform: translateY(0); }
+    .d1 { transition-delay: 0.08s !important; }
+    .d2 { transition-delay: 0.16s !important; }
+    .d3 { transition-delay: 0.24s !important; }
+    .d4 { transition-delay: 0.32s !important; }
+    .d5 { transition-delay: 0.40s !important; }
+    .d6 { transition-delay: 0.48s !important; }
+
+    #s1 {
+      background: linear-gradient(140deg, #0d1428 0%, #11192E 50%, #0a1224 100%);
+      justify-content: center; align-items: center; text-align: center;
+    }
+    .cover-eyebrow {
+      font-size: var(--fs-label); letter-spacing: 0.32em;
+      text-transform: uppercase; color: var(--grad-5);
+      font-weight: 600; margin-bottom: clamp(0.5rem, 1.5vw, 1.5rem);
+    }
+    .cover-title {
+      font-family: var(--font-display); font-size: var(--fs-display);
+      font-weight: 700; line-height: 1.04; letter-spacing: -0.015em;
+      color: var(--white); margin-bottom: 0.3em;
+    }
+    .cover-sub {
+      font-family: var(--font-body); font-size: clamp(1rem, 2.4vw, 1.7rem);
+      font-weight: 400; color: rgba(255,255,255,0.78);
+      margin-bottom: clamp(1rem, 2.5vw, 2.5rem);
+      display: flex; align-items: center; justify-content: center; gap: 0.6em;
+    }
+    .cover-sub::before { content: '//'; color: var(--grad-5); font-weight: 700; font-family: var(--font-display); }
+    .cover-divider {
+      width: 80px; height: 2px; background: var(--grad-bar-h);
+      margin: 0 auto clamp(1rem, 2vw, 2rem); border-radius: 1px;
+    }
+    .cover-meta { display: flex; justify-content: center; gap: clamp(1rem, 3vw, 3rem); flex-wrap: wrap; }
+    .cover-meta-label {
+      font-size: var(--fs-label); letter-spacing: 0.18em;
+      text-transform: uppercase; color: rgba(255,255,255,0.50);
+      margin-bottom: 0.3rem; font-weight: 600;
+    }
+    .cover-meta-value { font-size: var(--fs-small); color: rgba(255,255,255,0.88); font-weight: 500; }
+    .bracket {
+      position: absolute; width: 44px; height: 44px;
+      border-color: rgba(255,255,255,0.35); border-style: solid;
+    }
+    .bracket.tl { top: 1.6rem; left: 1.6rem; border-width: 1px 0 0 1px; }
+    .bracket.br { bottom: 1.6rem; right: 1.6rem; border-width: 0 1px 1px 0; }
+
+    .section-divider {
+      background: linear-gradient(135deg, #0d1428 0%, #11192E 55%, #0a1224 100%);
+      justify-content: center; align-items: center; text-align: center;
+    }
+    .sd-num {
+      font-family: var(--font-display); font-size: clamp(4rem, 12vw, 10rem);
+      font-weight: 800; color: rgba(255,255,255,0.06);
+      line-height: 0.9; margin-bottom: 0.2em; letter-spacing: -0.02em;
+    }
+    .sd-eyebrow {
+      font-family: var(--font-body); font-size: var(--fs-label);
+      letter-spacing: 0.32em; text-transform: uppercase;
+      color: var(--grad-5); font-weight: 600; margin-bottom: 0.7rem;
+    }
+    .sd-title {
+      font-family: var(--font-display); font-size: var(--fs-display);
+      font-weight: 700; line-height: 1.04; margin-bottom: 0.8rem;
+      color: var(--white); letter-spacing: -0.015em;
+    }
+    .sd-sub {
+      font-family: var(--font-body); font-size: var(--fs-body);
+      color: rgba(255,255,255,0.62); max-width: 580px;
+      margin: 0 auto; line-height: 1.6;
+    }
+
+    /* DATA TABLE */
+    .dt {
+      width: 100%; border-collapse: collapse;
+      font-size: var(--fs-small); font-family: var(--font-body);
+    }
+    .dt thead tr { border-bottom: 1px solid var(--line); }
+    .dt th {
+      padding: 0.55rem 0.7rem; text-align: right;
+      font-size: var(--fs-label); letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--text-light);
+      font-weight: 500; white-space: nowrap;
+    }
+    .dt th:first-child { text-align: left; }
+    .dt td {
+      padding: 0.5rem 0.7rem; text-align: right;
+      border-bottom: 1px solid var(--line-soft);
+      color: var(--text); white-space: nowrap;
+      font-variant-numeric: tabular-nums; font-weight: 500;
+    }
+    .dt td:first-child {
+      text-align: left; font-weight: 500;
+      max-width: 220px; white-space: normal;
+    }
+    .dt tfoot td {
+      border-bottom: none; border-top: 1px solid var(--line);
+      font-weight: 700; padding-top: 0.65rem;
+    }
+    .dt.compact td, .dt.compact th { padding: 0.38rem 0.6rem; }
+    .dt .pos { color: var(--pos); font-weight: 600; }
+    .dt .neg { color: var(--neg); font-weight: 600; }
+
+    .action-card {
+      background: var(--bg-soft); border-left: 3px solid var(--ch-sem);
+      border-radius: 0 6px 6px 0; padding: 0.6rem var(--gap);
+      font-size: var(--fs-small); color: var(--text); line-height: 1.55;
+    }
+    .action-card.hot { border-left-color: var(--grad-1); }
+    .action-card.creator { border-left-color: var(--grad-3); }
+    .action-card.event { border-left-color: var(--grad-1); }
+    .action-card.action { border-left-color: var(--ch-action); }
+    .action-card strong { color: var(--text); font-weight: 700; }
+
+    /* KPI strip */
+    .kpi-strip {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: var(--gap-sm); margin-bottom: var(--gap);
+    }
+    .kpi-strip-card {
+      background: var(--bg-soft); border-radius: 8px;
+      padding: 0.7rem var(--gap-sm);
+      border-top: 3px solid var(--ch-sem);
+    }
+    .kpi-strip-card.hot { border-top-color: var(--grad-1); }
+    .kpi-strip-card.creator { border-top-color: var(--grad-3); }
+    .kpi-strip-card .ks-label {
+      font-size: var(--fs-label); letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--text-light);
+      font-weight: 600; margin-bottom: 0.2rem;
+    }
+    .kpi-strip-card .ks-value {
+      font-family: var(--font-display); font-size: clamp(1.1rem, 2vw, 1.6rem);
+      font-weight: 700; color: var(--text); line-height: 1;
+    }
+    .kpi-strip-card .ks-value.pos { color: var(--pos); }
+
+    /* BIG STAT (hero) */
+    .big-stat {
+      font-family: var(--font-display);
+      font-size: clamp(2.5rem, 7vw, 5.5rem);
+      font-weight: 800; line-height: 0.95;
+      color: var(--text); letter-spacing: -0.025em;
+      margin: var(--gap) 0;
+    }
+    .big-stat.gradient {
+      background: var(--grad-bar-h);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; color: transparent;
+    }
+
+    /* PHASE BLOCKS */
+    .phase-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: var(--gap); flex: 1; min-height: 0;
+    }
+    .phase-card {
+      background: var(--bg-soft); border-radius: 10px;
+      padding: var(--gap); display: flex; flex-direction: column;
+      border-top: 4px solid var(--grad-3);
+    }
+    .phase-card.p1 { border-top-color: var(--grad-2); }
+    .phase-card.p2 { border-top-color: var(--grad-4); }
+    .phase-card.p3 { border-top-color: var(--grad-5); }
+    .phase-stage {
+      font-family: var(--font-body); font-size: var(--fs-label);
+      font-weight: 700; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--grad-3);
+      margin-bottom: 0.2rem;
+    }
+    .phase-card.p1 .phase-stage { color: var(--grad-2); }
+    .phase-card.p2 .phase-stage { color: var(--grad-4); }
+    .phase-card.p3 .phase-stage { color: var(--grad-5); }
+    .phase-name {
+      font-family: var(--font-display); font-size: var(--fs-h3);
+      font-weight: 700; color: var(--text); margin-bottom: 0.4rem;
+    }
+    .phase-budget {
+      font-family: var(--font-display);
+      font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+      font-weight: 700; color: var(--text);
+      letter-spacing: -0.01em; margin-bottom: 0.6rem;
+    }
+    .phase-list {
+      list-style: none; font-size: var(--fs-small);
+      color: var(--text); line-height: 1.55; flex: 1;
+    }
+    .phase-list li {
+      padding: 0.25rem 0;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .phase-list li:last-child { border-bottom: none; }
+    .phase-list strong { font-weight: 700; color: var(--text); }
+
+    /* BET CARDS */
+    .bet-card {
+      background: var(--bg-soft); border-radius: 12px;
+      padding: var(--gap); display: flex; flex-direction: column;
+      border-left: 4px solid var(--grad-1);
+      flex: 1; min-height: 0; overflow: hidden;
+    }
+    .bet-card.creator { border-left-color: var(--grad-3); }
+    .bet-card.event { border-left-color: var(--grad-1); }
+    .bet-num {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      font-weight: 800; color: rgba(232,75,60,0.18);
+      line-height: 0.85; letter-spacing: -0.02em;
+    }
+    .bet-card.creator .bet-num { color: rgba(94,63,190,0.20); }
+    .bet-num-label {
+      font-family: var(--font-body); font-size: var(--fs-label);
+      font-weight: 700; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--grad-1);
+      margin-bottom: 0.4rem;
+    }
+    .bet-card.creator .bet-num-label { color: var(--grad-3); }
+
+    /* HORIZONTAL BARS */
+    .hbar { display: flex; flex-direction: column; gap: 0.6rem; }
+    .hbar-row { font-size: var(--fs-small); }
+    .hbar-top { display: flex; justify-content: space-between; margin-bottom: 0.25rem; }
+    .hbar-label { font-weight: 600; color: var(--text); }
+    .hbar-value { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .hbar-track { height: 8px; background: var(--line-soft); border-radius: 4px; overflow: hidden; }
+    .hbar-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
+    .hbar-fill.sem { background: var(--ch-sem); }
+    .hbar-fill.meta { background: var(--ch-meta); }
+    .hbar-fill.social { background: var(--ch-social); }
+    .hbar-fill.creator { background: var(--ch-creator); }
+    .hbar-fill.event { background: var(--ch-event); }
+    .hbar-fill.gradient { background: var(--grad-bar-h); }
+
+    /* CALENDAR */
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 4px; margin-top: var(--gap-sm);
+    }
+    .cal-month {
+      font-size: var(--fs-label); text-align: center;
+      padding: 0.4rem 0; color: var(--text-muted);
+      font-weight: 600; letter-spacing: 0.08em;
+    }
+    .cal-cell {
+      background: var(--bg-soft); border-radius: 4px;
+      padding: 0.4rem 0.3rem; min-height: 30px;
+      font-size: 0.62rem; line-height: 1.3;
+      color: var(--text); font-weight: 500; text-align: center;
+    }
+    .cal-cell.event { background: rgba(232,75,60,0.12); color: var(--grad-1); }
+    .cal-cell.peak { background: rgba(43,111,224,0.14); color: var(--grad-4); font-weight: 700; }
+    .cal-cell.cup { background: rgba(232,75,60,0.22); color: var(--grad-1); font-weight: 700; }
+
+    @media (max-height: 720px) { :root { --pad: clamp(0.9rem, 2.4vw, 2rem); --gap: clamp(0.4rem, 1vw, 0.9rem); } }
+    @media (max-height: 600px) { #nav-dots { display: none; } }
+    @media (max-width: 760px) {
+      .phase-grid { grid-template-columns: 1fr; }
+      .cal-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.15s !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="nav-dots"></div>
+<div id="progress-bar" style="width:4%"></div>
+
+<!-- ════ 1. COVER ════ -->
+<section class="slide" id="s1">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div style="z-index:2;padding:var(--pad);text-align:center">
+    <div class="cover-eyebrow anim d1">Dijitally × Brady Hotels · Strategic Plan</div>
+    <h1 class="cover-title anim d2">Brady Elizabeth<br>Launch Strategy</h1>
+    <div class="cover-sub anim d3">Melbourne · 12-Month Digital Plan</div>
+    <div class="cover-divider anim d4"></div>
+    <div class="cover-meta anim d5">
+      <div><div class="cover-meta-label">Property</div><div class="cover-meta-value">250 rooms · 4-star</div></div>
+      <div><div class="cover-meta-label">Budget</div><div class="cover-meta-value">$100K Year 1</div></div>
+      <div><div class="cover-meta-label">Channels</div><div class="cover-meta-value">Google · Social · Meta · Creators</div></div>
+      <div><div class="cover-meta-label">Goal</div><div class="cover-meta-value">Demand creation + capture</div></div>
+    </div>
+  </div>
+  <div class="slide-num">01 / 26</div>
+</section>
+
+<!-- CAP CAPACITY & REVENUE SCENARIOS -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Property &middot; Capacity Modelling</div>
+      <h2 class="slide-title anim d2">Capacity, ADR &amp; Revenue Scenarios</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr>
+          <th>Scenario</th><th>Rooms</th><th>Occ.</th><th>ADR</th><th>Annual Room-Nights</th><th>Annual Revenue</th><th>Mktg %</th><th>Est. Marketing Rev</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td>Conservative Y1 (slow ramp)</td>
+            <td>250</td><td>55%</td><td>$220</td>
+            <td>50,188</td><td>$11.0M</td><td>6.0%</td><td class="neg">$663K</td>
+          </tr>
+          <tr>
+            <td>Target Y1 (recommended)</td>
+            <td>250</td><td class="pos">65%</td><td class="pos">$250</td>
+            <td>59,313</td><td class="pos">$14.8M</td><td class="pos">7.0%</td><td class="pos">$1.04M</td>
+          </tr>
+          <tr>
+            <td>Stretch Y1 (heavy spend)</td>
+            <td>250</td><td class="pos">75%</td><td class="pos">$280</td>
+            <td>68,438</td><td class="pos">$19.2M</td><td class="pos">8.0%</td><td class="pos">$1.53M</td>
+          </tr>
+          <tr>
+            <td>Y2 Mature</td>
+            <td>250</td><td>78%</td><td>$260</td>
+            <td>71,175</td><td>$18.5M</td><td>5.5%</td><td>$1.02M</td>
+          </tr>
+          <tr>
+            <td>Y3 Stabilised</td>
+            <td>250</td><td>82%</td><td>$280</td>
+            <td>74,825</td><td>$20.9M</td><td>4.8%</td><td>$1.00M</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap)">
+        <div class="action-card anim d3"><strong>Marketing penetration benchmark &mdash; Brady CBD portfolio (Apr 2026):</strong> Central 4.7% (200 rms &middot; $210 ADR) &middot; Hardware Lane 4.9% (120 rms &middot; $310) &middot; Flinders 4.9% (100 rms &middot; $270) &middot; Jones 3.6% (180 rms &middot; $220) &mdash; blended <strong>4.5%</strong> at 21x SEM ROAS.</div>
+        <div class="action-card anim d4" style="border-left-color:var(--grad-1)"><strong>Why Y1 launch penetration is higher (6&ndash;8%):</strong> Front-loaded awareness investment + Founders Club lead-gen + creator content amplification. Penetration normalises to ~5% by Y2 once organic + brand demand kicks in. <strong>The $1M target is achievable at 65% occupancy.</strong></div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Capacity</div>
+  <div class="slide-num">02 / 26</div>
+</section>
+
+<!-- ════ 2. THE BRIEF ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Context</div>
+      <h2 class="slide-title anim d2">The Brief</h2>
+    </div>
+    <div class="slide-content">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:1;align-items:start">
+        <div class="anim d2">
+          <div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--text);margin-bottom:0.5rem">The Property</div>
+          <ul style="list-style:none;font-size:var(--fs-body);line-height:1.8;color:var(--text)">
+            <li>📍 <strong>Brady Elizabeth</strong> — new 250-room 4-star hotel</li>
+            <li>📍 Melbourne CBD location</li>
+            <li>📍 Opening into a saturated 4-star market</li>
+            <li>📍 Multiple competitor hotels also opening</li>
+            <li>📍 Year-1 marketing budget: <strong>$100K</strong></li>
+          </ul>
+        </div>
+        <div class="anim d3">
+          <div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--text);margin-bottom:0.5rem">The Strategic Question</div>
+          <div style="font-size:var(--fs-h2);font-family:var(--font-display);font-weight:600;line-height:1.25;color:var(--text);margin-bottom:0.6rem;letter-spacing:-0.01em">
+            <span style="background:var(--grad-bar-h);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">"We don't have the budget to outspend competitors —</span><br>
+            <span style="color:var(--text)">so where are we going to <em>outthink</em> them?"</span>
+          </div>
+          <div style="font-size:var(--fs-small);color:var(--text-muted);line-height:1.55">
+            $100K against Melbourne CBD competitors spending $300K+ each on launch. We must be <strong style="color:var(--text)">irresistible somewhere specific</strong>, then expand.
+          </div>
+        </div>
+      </div>
+      <div class="action-card anim d4" style="margin-top:var(--gap)">
+        <strong>Benchmark from Brady portfolio (4 CBD hotels):</strong> blended 21× SEM ROAS · $246 ADR · 4.5% marketing penetration · ~$200K/yr marketing rev per hotel. Brady Elizabeth target Year 1: <strong>$1.0M+ marketing revenue · 6–8% penetration · 4,000+ marketing-attributed bookings.</strong>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Context</div>
+  <div class="slide-num">03 / 26</div>
+</section>
+
+<!-- ════ 3. STRATEGIC FRAMEWORK ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Strategic Framework</div>
+      <h2 class="slide-title anim d2">Demand Creation vs Demand Capture</h2>
+    </div>
+    <div class="slide-content">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:1">
+        <div class="anim d2" style="background:var(--bg-soft);border-radius:10px;padding:var(--gap);border-left:4px solid var(--grad-1)">
+          <div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--grad-1);margin-bottom:0.4rem">Demand CREATION</div>
+          <div style="font-size:var(--fs-body);color:var(--text-muted);line-height:1.6;margin-bottom:0.6rem">Putting Brady Elizabeth into <strong style="color:var(--text)">consideration</strong> before someone Googles "hotel Melbourne".</div>
+          <div style="font-size:var(--fs-small);font-weight:700;color:var(--text);margin-bottom:0.3rem">Tactics:</div>
+          <ul style="font-size:var(--fs-small);line-height:1.7;color:var(--text);list-style:none">
+            <li>📍 Founders' Club narrative (story + scarcity)</li>
+            <li>📍 Micro-creator content network</li>
+            <li>📍 YouTube TrueView + IG Reels</li>
+            <li>📍 PR + earned editorial</li>
+            <li>📍 Event content angles</li>
+          </ul>
+          <div style="margin-top:0.6rem;font-size:var(--fs-label);color:var(--grad-1);font-weight:700">Recommended split: <strong>~55%</strong> of $100K</div>
+        </div>
+        <div class="anim d3" style="background:var(--bg-soft);border-radius:10px;padding:var(--gap);border-left:4px solid var(--grad-4)">
+          <div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--grad-4);margin-bottom:0.4rem">Demand CAPTURE</div>
+          <div style="font-size:var(--fs-body);color:var(--text-muted);line-height:1.6;margin-bottom:0.6rem">Converting people <strong style="color:var(--text)">already searching</strong> for a Melbourne hotel into Brady Elizabeth bookings.</div>
+          <div style="font-size:var(--fs-small);font-weight:700;color:var(--text);margin-bottom:0.3rem">Tactics:</div>
+          <ul style="font-size:var(--fs-small);line-height:1.7;color:var(--text);list-style:none">
+            <li>📍 Brand search (defence)</li>
+            <li>📍 Generic "hotel Melbourne" Search</li>
+            <li>📍 PMAX (intent-led)</li>
+            <li>📍 Metasearch (Google · Trivago · TripAdvisor)</li>
+            <li>📍 Display + Social retargeting</li>
+          </ul>
+          <div style="margin-top:0.6rem;font-size:var(--fs-label);color:var(--grad-4);font-weight:700">Recommended split: <strong>~45%</strong> of $100K</div>
+        </div>
+      </div>
+      <div class="action-card anim d4" style="margin-top:var(--gap)">
+        <strong>The trap:</strong> Most launch strategies are 90% capture · 10% creation → "Be visible everywhere, hope demand converts." That fails in Melbourne. <strong>Our shift:</strong> Front-load creation in months 1–3, then ramp capture as branded demand appears in search.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Framework</div>
+  <div class="slide-num">04 / 26</div>
+</section>
+
+<!-- ════ 4. UNFAIR ADVANTAGE ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Positioning</div>
+      <h2 class="slide-title anim d2">The Unfair Advantage</h2>
+    </div>
+    <div class="slide-content">
+      <div class="anim d2" style="text-align:center;margin:var(--gap) 0">
+        <div style="font-size:var(--fs-label);letter-spacing:0.32em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.5rem">Brady Elizabeth Launch Hook</div>
+        <div class="big-stat gradient">"Founder Rates,<br>Locked for Life."</div>
+        <div style="font-size:var(--fs-body);color:var(--text-muted);max-width:640px;margin:0 auto;line-height:1.6">
+          First <strong style="color:var(--text)">1,000 Brady Elizabeth Founders</strong> get a permanent 20% rate below BAR — every stay, every year, forever. Members-only · transferable to immediate family · cap at 1,000.
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--gap);margin-top:var(--gap)">
+        <div class="anim d3" style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm) var(--gap);border-top:3px solid var(--grad-1)">
+          <div style="font-family:var(--font-display);font-weight:700;font-size:var(--fs-h3);color:var(--text);margin-bottom:0.3rem">Story</div>
+          <div style="font-size:var(--fs-small);color:var(--text-muted);line-height:1.55">Not "Now Open" — <strong style="color:var(--text)">"Be one of the first 1,000."</strong> Newsworthy. Shareable. Time-bound.</div>
+        </div>
+        <div class="anim d4" style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm) var(--gap);border-top:3px solid var(--grad-3)">
+          <div style="font-family:var(--font-display);font-weight:700;font-size:var(--fs-h3);color:var(--text);margin-bottom:0.3rem">Scarcity</div>
+          <div style="font-size:var(--fs-small);color:var(--text-muted);line-height:1.55">Only <strong style="color:var(--text)">1,000 slots</strong>. Drives FOMO + urgency. Avoids the "I'll book later" trap.</div>
+        </div>
+        <div class="anim d5" style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm) var(--gap);border-top:3px solid var(--grad-5)">
+          <div style="font-family:var(--font-display);font-weight:700;font-size:var(--fs-h3);color:var(--text);margin-bottom:0.3rem">LTV</div>
+          <div style="font-size:var(--fs-small);color:var(--text-muted);line-height:1.55">Lifetime members = <strong style="color:var(--text)">repeat bookers + word-of-mouth.</strong> Builds owned audience day one.</div>
+        </div>
+      </div>
+      <div class="action-card anim d6" style="margin-top:var(--gap)">
+        <strong>Why this works in a saturated market:</strong> Competitors will lead with location, rooms, service — table stakes. We lead with a <strong>distribution mechanism</strong> nobody else is using. Every paid dollar reinforces a story that has urgency built in.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Positioning</div>
+  <div class="slide-num">05 / 26</div>
+</section>
+
+<!-- ════ 5. SECTION DIVIDER — THREE BETS ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow anim d1">Section Two</div>
+    <div class="sd-num anim d2">01</div>
+    <div class="sd-title anim d3">Three Strategic Bets</div>
+    <div class="sd-sub anim d4">Three campaign concepts that create demand instead of just capturing it. Designed to be testable in months 1–3, scalable from month 4.</div>
+  </div>
+  <div class="slide-num">06 / 26</div>
+</section>
+
+<!-- ════ 6. BET #1 — FOUNDERS' CLUB ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--grad-1)">Bet #1 · Demand Creation</div>
+      <h2 class="slide-title anim d2">The Founders' Club Launch</h2>
+    </div>
+    <div class="slide-content">
+      <div style="display:grid;grid-template-columns:0.4fr 1fr;gap:var(--gap);flex:1;min-height:0">
+        <div class="anim d2 bet-card" style="border-left-color:var(--grad-1)">
+          <div class="bet-num-label">Bet 01</div>
+          <div class="bet-num">FOUNDERS<br>CLUB</div>
+          <div style="margin-top:auto;font-size:var(--fs-label);color:var(--text-muted);line-height:1.5;padding-top:0.6rem;border-top:1px solid var(--line)">
+            <strong style="color:var(--text)">Goal:</strong> 1,000 sign-ups in 90 days · build owned audience<br>
+            <strong style="color:var(--text)">Budget:</strong> $35K (Mo 1–3)<br>
+            <strong style="color:var(--text)">KPI:</strong> CPL &lt; $35
+          </div>
+        </div>
+        <div class="anim d3" style="display:flex;flex-direction:column;gap:var(--gap-sm);min-width:0">
+          <div>
+            <div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--text);margin-bottom:0.3rem">Hook</div>
+            <div style="font-size:var(--fs-body);color:var(--text-muted);line-height:1.55">"First 1,000 Founders get rates locked for life — 20% below BAR, forever." Lead-form sign-up before public booking opens.</div>
+          </div>
+          <table class="dt compact" style="font-size:var(--fs-small)">
+            <thead><tr><th>Channel</th><th>Format / Asset</th><th>Targeting</th><th>Spend</th></tr></thead>
+            <tbody>
+              <tr><td>Meta Lead Ads</td><td style="white-space:normal;color:var(--text-muted)">FB/IG Feed 1:1 + Reels 9:16 video</td><td style="white-space:normal;color:var(--text-muted)">Melbourne + Sydney + Brisbane · F30–60 · travel/luxury interests</td><td>$15K</td></tr>
+              <tr><td>YouTube TrueView</td><td style="white-space:normal;color:var(--text-muted)">15s + 30s skippable in-stream</td><td style="white-space:normal;color:var(--text-muted)">In-market: Hotels Melbourne · Affinity: Travel Buffs</td><td>$8K</td></tr>
+              <tr><td>Google Discovery</td><td style="white-space:normal;color:var(--text-muted)">Carousel + image · "Founders' Club" creative</td><td style="white-space:normal;color:var(--text-muted)">Melbourne metro 50km radius</td><td>$5K</td></tr>
+              <tr><td>Email (CRM)</td><td style="white-space:normal;color:var(--text-muted)">Brady portfolio existing list (7-day welcome)</td><td style="white-space:normal;color:var(--text-muted)">Past Brady CBD bookers</td><td>$2K (infra)</td></tr>
+              <tr><td>PR + earned</td><td style="white-space:normal;color:var(--text-muted)">Concierge / Broadsheet / Time Out hooks</td><td style="white-space:normal;color:var(--text-muted)">Melbourne lifestyle media</td><td>$5K</td></tr>
+            </tbody>
+            <tfoot><tr><td>Total Bet 01</td><td colspan="2"></td><td>$35K</td></tr></tfoot>
+          </table>
+          <div class="action-card hot"><strong>Why it works:</strong> You're not selling a hotel — you're selling membership. Lead-gen replaces booking conversions, builds CRM, removes the "I'll wait until I'm in Melbourne" objection.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag" style="color:var(--grad-1)">Bet 01</div>
+  <div class="slide-num">07 / 26</div>
+</section>
+
+<!-- BET 2 - CREATOR-LED MEDIA ACTIVATION -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--grad-3)">Bet #2 &middot; Creator-Led Paid Media</div>
+      <h2 class="slide-title anim d2">Creator-Led Media Activation</h2>
+    </div>
+    <div class="slide-content">
+      <div style="display:grid;grid-template-columns:0.4fr 1fr;gap:var(--gap);flex:1;min-height:0">
+        <div class="anim d2 bet-card creator">
+          <div class="bet-num-label">Bet 02</div>
+          <div class="bet-num">CREATOR<br>MEDIA</div>
+          <div style="margin-top:auto;font-size:var(--fs-label);color:var(--text-muted);line-height:1.5;padding-top:0.6rem;border-top:1px solid var(--line)">
+            <strong style="color:var(--text)">Goal:</strong> 75+ ad-quality video assets &middot; whitelist top performers &middot; scale paid<br>
+            <strong style="color:var(--text)">Budget (paid media):</strong> $20K (Mo 1&ndash;4)<br>
+            <strong style="color:var(--text)">KPI:</strong> CAC &lt; $90 via whitelist
+          </div>
+        </div>
+        <div class="anim d3" style="display:flex;flex-direction:column;gap:var(--gap-sm);min-width:0">
+          <div>
+            <div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--text);margin-bottom:0.3rem">Our role: <span style="color:var(--grad-3)">media activation</span> &mdash; not influencer management</div>
+            <div style="font-size:var(--fs-body);color:var(--text-muted);line-height:1.55">Brady sources creators &amp; content rights. <strong style="color:var(--text)">Dijitally activates the creator-produced video content as paid media at scale</strong> &mdash; across Meta, YouTube Shorts, TikTok Spark Ads, and programmatic. We don't manage influencer relationships; we make their content perform.</div>
+          </div>
+          <table class="dt compact" style="font-size:var(--fs-small)">
+            <thead><tr><th>Activation Channel</th><th>Format</th><th>Mechanism</th><th>Spend</th></tr></thead>
+            <tbody>
+              <tr><td>Meta Whitelisted Ads</td><td style="white-space:normal;color:var(--text-muted)">FB/IG Feed + Reels (vertical 9:16)</td><td style="white-space:normal;color:var(--text-muted)">Boost creator's organic post via <em>their</em> handle (more native than brand) &mdash; Brand Partner Tag</td><td>$8K</td></tr>
+              <tr><td>YouTube Shorts Ads</td><td style="white-space:normal;color:var(--text-muted)">9:16 vertical &middot; 15&ndash;30s</td><td style="white-space:normal;color:var(--text-muted)">Use creator content as video creative &mdash; geo Melbourne metro + LAL</td><td>$5K</td></tr>
+              <tr><td>TikTok Spark Ads</td><td style="white-space:normal;color:var(--text-muted)">9:16 native</td><td style="white-space:normal;color:var(--text-muted)">Promote creator's actual post (not re-uploaded) &mdash; preserves authenticity signals</td><td>$4K</td></tr>
+              <tr><td>Programmatic Display</td><td style="white-space:normal;color:var(--text-muted)">Static + 1080x1080 stills</td><td style="white-space:normal;color:var(--text-muted)">Creator stills used for retargeting site visitors</td><td>$3K</td></tr>
+            </tbody>
+            <tfoot><tr><td>Dijitally &mdash; Paid Media Total</td><td colspan="2"></td><td>$20K</td></tr></tfoot>
+          </table>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm)">
+            <div class="action-card creator"><strong>Brady's role (separate from this $20K):</strong> Sources 25 Melbourne creators &middot; stays + perks + content-rights agreement (12-month paid usage). Estimated client cost: ~$8K.</div>
+            <div class="action-card creator"><strong>Why this works:</strong> Creator content = native, authentic, locally credible. We test all 25 creators' content as ads &middot; whitelist the top 5 winners &middot; scale the rest as a content library. <strong>Production cost to Brady: near-zero.</strong></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag" style="color:var(--grad-3)">Bet 02</div>
+  <div class="slide-num">08 / 26</div>
+</section>
+
+<!-- ════ 8. BET #3 — EVENT HIJACKING ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--grad-1)">Bet #3 · Demand Capture</div>
+      <h2 class="slide-title anim d2">Event Demand Hijacking</h2>
+    </div>
+    <div class="slide-content">
+      <div style="display:grid;grid-template-columns:0.4fr 1fr;gap:var(--gap);flex:1;min-height:0">
+        <div class="anim d2 bet-card event">
+          <div class="bet-num-label">Bet 03</div>
+          <div class="bet-num">EVENT<br>HIJACK</div>
+          <div style="margin-top:auto;font-size:var(--fs-label);color:var(--text-muted);line-height:1.5;padding-top:0.6rem;border-top:1px solid var(--line)">
+            <strong style="color:var(--text)">Goal:</strong> Capture 3 high-demand event windows · own event-intent SERP<br>
+            <strong style="color:var(--text)">Budget:</strong> $15K (rolling)<br>
+            <strong style="color:var(--text)">KPI:</strong> ROAS &gt; 8× event windows
+          </div>
+        </div>
+        <div class="anim d3" style="display:flex;flex-direction:column;gap:var(--gap-sm);min-width:0">
+          <div>
+            <div style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:700;color:var(--text);margin-bottom:0.3rem">Tap pre-existing demand pools</div>
+            <div style="font-size:var(--fs-body);color:var(--text-muted);line-height:1.55">Melbourne is event-driven. Pick 3 high-demand windows · build event-specific landing pages · run intent-keyword Search + targeted Social + aggressive Metasearch bidding for the 4 weeks before each event.</div>
+          </div>
+          <table class="dt compact" style="font-size:var(--fs-small)">
+            <thead><tr><th>Event</th><th>Window</th><th>Hook</th><th>Spend</th></tr></thead>
+            <tbody>
+              <tr><td>🎾 Australian Open</td><td>Late-Dec → Jan</td><td style="white-space:normal;color:var(--text-muted)">"Stay 10 minutes from Rod Laver Arena · fixed launch rates · avoid surge pricing"</td><td>$5K</td></tr>
+              <tr><td>🏎️ F1 Grand Prix</td><td>Early-Mar</td><td style="white-space:normal;color:var(--text-muted)">"Walking distance to Albert Park · packages w/ trackside transfers"</td><td>$4K</td></tr>
+              <tr><td>🎤 Melbourne Comedy Festival</td><td>Mar–Apr</td><td style="white-space:normal;color:var(--text-muted)">"Festival-rate stays · walkable to all venues"</td><td>$3K</td></tr>
+              <tr><td>🏈 AFL Grand Final</td><td>Late-Sep</td><td style="white-space:normal;color:var(--text-muted)">"Grand Final HQ · 5 min to MCG"</td><td>$3K (later in year)</td></tr>
+            </tbody>
+            <tfoot><tr><td>Channels per event</td><td colspan="2">Search (event KWs) · Meta search +50% bid · Paid social geo-targeting attendees · Retargeting</td><td>$15K</td></tr></tfoot>
+          </table>
+          <div class="action-card event"><strong>Why it works:</strong> Event keywords (e.g. "hotel near rod laver") have transactional intent at premium ADRs. We're not competing on brand — we're competing on <strong>walkability + price-certainty</strong>, which a new property can credibly own.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag" style="color:var(--grad-1)">Bet 03</div>
+  <div class="slide-num">09 / 26</div>
+</section>
+
+<!-- ════ 9. SECTION DIVIDER — CHANNEL PLAN ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow anim d1">Section Three</div>
+    <div class="sd-num anim d2">02</div>
+    <div class="sd-title anim d3">Channel Plan</div>
+    <div class="sd-sub anim d4">How the three bets translate into Google · Social · Metasearch infrastructure — and which campaigns get launched when.</div>
+  </div>
+  <div class="slide-num">10 / 26</div>
+</section>
+
+<!-- ════ 10. GOOGLE ADS ARCHITECTURE ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--ch-sem)">Channel · Google Ads</div>
+      <h2 class="slide-title anim d2">Google Ads Architecture</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr><th>Campaign</th><th>Funnel</th><th>Goal</th><th>Targeting / KW</th><th>Budget Y1</th></tr></thead>
+        <tbody>
+          <tr><td>Brand Search — "Brady Elizabeth"</td><td>Bottom</td><td>Defence (essential)</td><td style="white-space:normal;color:var(--text-muted)">Brand exact + phrase · stop competitors stealing branded traffic</td><td>$4K</td></tr>
+          <tr><td>Generic Hotel Search</td><td>Bottom</td><td>Capture in-market searchers</td><td style="white-space:normal;color:var(--text-muted)">"hotel melbourne", "4 star melbourne CBD", "boutique hotel melbourne"</td><td>$8K</td></tr>
+          <tr><td>Event Search (3 events)</td><td>Bottom</td><td>Capture event intent</td><td style="white-space:normal;color:var(--text-muted)">"hotel near rod laver", "f1 melbourne hotel", "comedy festival accommodation"</td><td>$6K</td></tr>
+          <tr><td>PMAX — Brady Elizabeth (broad)</td><td>Top</td><td>Awareness + assist</td><td style="white-space:normal;color:var(--text-muted)">Affinity + In-market signals · all Google surfaces (incl. YouTube, Discover, Maps)</td><td>$10K</td></tr>
+          <tr><td>YouTube TrueView</td><td>Top</td><td>Founders' Club narrative</td><td style="white-space:normal;color:var(--text-muted)">15s + 30s · in-market: Hotels Melbourne · custom: visited brady.com</td><td>$8K</td></tr>
+          <tr><td>Display Retargeting</td><td>Bottom</td><td>Re-engage visitors</td><td style="white-space:normal;color:var(--text-muted)">All site visitors 30/60/90-day windows · members vs non-members</td><td>$3K</td></tr>
+          <tr><td>Hotel Ads (Google Hotel Ads)</td><td>Bottom</td><td>Metasearch capture</td><td style="white-space:normal;color:var(--text-muted)">Google Travel · price parity + member rate visible</td><td>$6K</td></tr>
+        </tbody>
+        <tfoot><tr><td>Google Ads Total</td><td colspan="3"></td><td>$45K (45% of $100K)</td></tr></tfoot>
+      </table>
+      <div class="action-card anim d4" style="margin-top:var(--gap-sm)">
+        <strong>Sequencing:</strong> Brand Search + Hotel Ads from Day 1 (always-on). PMAX broad + YouTube launch with Founders' Club at T-30. Generic + Event Search ramp at T-7 once landing pages are live. Display Retargeting begins as soon as we have site traffic to retarget (~T-14).
+      </div>
+    </div>
+  </div>
+  <div class="section-tag" style="color:var(--ch-sem)">Google Ads</div>
+  <div class="slide-num">11 / 26</div>
+</section>
+
+<!-- ════ 11. SOCIAL ARCHITECTURE ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--ch-social)">Channel · Meta + Creators</div>
+      <h2 class="slide-title anim d2">Social Architecture</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr><th>Campaign</th><th>Funnel</th><th>Format / Placement</th><th>Audience</th><th>Budget Y1</th></tr></thead>
+        <tbody>
+          <tr><td>Founders' Club — Lead Gen</td><td>Mid</td><td style="white-space:normal;color:var(--text-muted)">Native Lead Form · FB/IG Feed 1:1, 4:5 · Reels 9:16</td><td style="white-space:normal;color:var(--text-muted)">Melbourne metro · F30–60 · luxury/travel interests</td><td>$15K</td></tr>
+          <tr><td>Awareness — Brand Story</td><td>Top</td><td style="white-space:normal;color:var(--text-muted)">FB/IG Feed + Reels · 15s video · TrueView equivalent</td><td style="white-space:normal;color:var(--text-muted)">VIC + Sydney + Brisbane · interest stack</td><td>$6K</td></tr>
+          <tr><td>Sales — Direct Booking</td><td>Bottom</td><td style="white-space:normal;color:var(--text-muted)">FB Feed mobile + IG Feed · static + carousel</td><td style="white-space:normal;color:var(--text-muted)">Site visitors · LAL of email subscribers</td><td>$8K</td></tr>
+          <tr><td>Creator Content (whitelisted)</td><td>Mid</td><td style="white-space:normal;color:var(--text-muted)">Reels 9:16 + Feed 1:1 · creator handle</td><td style="white-space:normal;color:var(--text-muted)">Creator's own audience + LAL · Melbourne metro</td><td>$8K</td></tr>
+          <tr><td>Event Activations (3 events)</td><td>Bottom</td><td style="white-space:normal;color:var(--text-muted)">Stories + Feed · event-specific creative</td><td style="white-space:normal;color:var(--text-muted)">Geo-targeted ticket buyers · event interest signals</td><td>$3K</td></tr>
+        </tbody>
+        <tfoot><tr><td>Social Total</td><td colspan="3"></td><td>$40K (40% of $100K)</td></tr></tfoot>
+      </table>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap-sm)">
+        <div class="action-card anim d3"><strong>Asset production:</strong> 5 hero stills · 3 video shoots · 1 hero brand film (60s) · refreshed every 4 weeks. Creator content provides 75+ derivative ad assets at zero production cost.</div>
+        <div class="action-card anim d4"><strong>Audience strategy:</strong> Build LAL from Brady CBD existing bookers (Central, Hardware, Flinders, Jones) + Brady Elizabeth waitlist — proven F35–64 traveller signal already validated in Brady portfolio.</div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag" style="color:var(--ch-social)">Social</div>
+  <div class="slide-num">12 / 26</div>
+</section>
+
+<!-- ════ 12. METASEARCH ARCHITECTURE ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--ch-meta)">Channel · Metasearch</div>
+      <h2 class="slide-title anim d2">Metasearch Architecture</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr><th>Channel</th><th>Link Type</th><th>Strategy</th><th>Markets</th><th>Budget Y1</th></tr></thead>
+        <tbody>
+          <tr><td>Google Hotel Ads</td><td>Paid CPC</td><td style="white-space:normal;color:var(--text-muted)">Aggressive bidding · price-parity enforcement · highlight Founder rate visibility</td><td style="white-space:normal;color:var(--text-muted)">AU primary · SG/JP/UK secondary (proven from Brady portfolio: 64×–308× ROAS)</td><td>$8K</td></tr>
+          <tr><td>Google Hotel Ads</td><td>Free Booking Links</td><td style="white-space:normal;color:var(--text-muted)">Always-on · maximise organic-style real estate</td><td>All</td><td>$0</td></tr>
+          <tr><td>Trivago</td><td>Paid + Free</td><td style="white-space:normal;color:var(--text-muted)">CPC bidding on Trivago Hotel Manager</td><td>AU + NZ</td><td>$3K</td></tr>
+          <tr><td>TripAdvisor</td><td>Sponsored Listing + Meta</td><td style="white-space:normal;color:var(--text-muted)">Sponsored placement Melbourne CBD set + meta CPC bids</td><td>AU + UK + US</td><td>$3K</td></tr>
+          <tr><td>Skyscanner Hotels (test)</td><td>Paid CPC</td><td style="white-space:normal;color:var(--text-muted)">$1K test in Q3 · evaluate vs Tripadvisor performance</td><td>AU + UK</td><td>$1K</td></tr>
+        </tbody>
+        <tfoot><tr><td>Metasearch Total</td><td colspan="3"></td><td>$15K (15% of $100K)</td></tr></tfoot>
+      </table>
+      <div class="action-card anim d4" style="margin-top:var(--gap-sm)">
+        <strong>Why metasearch is critical at launch:</strong> When new bookers shop comparison sites, our brand must appear at parity or better than OTAs. <strong>Direct-rate edge:</strong> publish member-rate (5% better than OTA) on Google Hotel Ads · drives shoppers to direct.com bookings (no OTA commission · higher LTV).
+      </div>
+    </div>
+  </div>
+  <div class="section-tag" style="color:var(--ch-meta)">Metasearch</div>
+  <div class="slide-num">13 / 26</div>
+</section>
+
+<!-- ════ 13. SECTION DIVIDER — BUDGET & PHASING ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow anim d1">Section Four</div>
+    <div class="sd-num anim d2">03</div>
+    <div class="sd-title anim d3">Budget &amp; Phasing</div>
+    <div class="sd-sub anim d4">$100K spread across 12 months in 3 phases. Front-loaded creation, ramping capture, always-on defence.</div>
+  </div>
+  <div class="slide-num">14 / 26</div>
+</section>
+
+<!-- BUDGET SCENARIOS -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Budget Planning</div>
+      <h2 class="slide-title anim d2">Three Budget Scenarios</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr>
+          <th>Scenario</th><th>Y1 Budget</th><th>Creation / Capture</th><th>Channel Mix</th><th>Y1 Bookings</th><th>Y1 Revenue</th><th>Members</th><th>ROAS</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>A &middot; Conservative</strong></td>
+            <td>$60K</td>
+            <td style="white-space:normal;color:var(--text-muted)"><strong>40% / 60%</strong> &mdash; capture-heavy</td>
+            <td style="white-space:normal;color:var(--text-muted)">Google 50% &middot; Social 25% &middot; Meta 20% &middot; Creator media 5%</td>
+            <td>~2,200</td>
+            <td>$580K</td>
+            <td>1,500</td>
+            <td>9.7x</td>
+          </tr>
+          <tr style="background:rgba(43,111,224,0.05)">
+            <td><strong style="color:var(--ch-action)">B &middot; Target &#9733; Recommended</strong></td>
+            <td><strong>$100K</strong></td>
+            <td style="white-space:normal"><strong>55% / 45%</strong> &mdash; balanced</td>
+            <td style="white-space:normal">Google 45% &middot; Social 32% &middot; Meta 15% &middot; Creator media 8%</td>
+            <td class="pos">3,900</td>
+            <td class="pos">$1.06M</td>
+            <td class="pos">5,000</td>
+            <td class="pos">10.6x</td>
+          </tr>
+          <tr>
+            <td><strong>C &middot; Aggressive</strong></td>
+            <td>$150K</td>
+            <td style="white-space:normal;color:var(--text-muted)"><strong>65% / 35%</strong> &mdash; creation-heavy</td>
+            <td style="white-space:normal;color:var(--text-muted)">Google 38% &middot; Social 38% &middot; Meta 14% &middot; Creator media 10%</td>
+            <td class="pos">5,800</td>
+            <td class="pos">$1.55M</td>
+            <td class="pos">8,000</td>
+            <td>10.3x</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap)">
+        <div class="action-card anim d3"><strong>Scenario A &mdash; $60K:</strong> Will get Brady Elizabeth bookings live but <em>no real awareness build</em>. Brand Search demand stays low, dependent on capture. Higher OTA leakage. Year-2 marketing penetration drops.</div>
+        <div class="action-card action anim d4"><strong>Scenario B &mdash; $100K (recommended):</strong> Front-loaded awareness with Founders Club + creator media activation. By Mo 6 organic Brand Search materialises &middot; CRM compounds. Best risk-adjusted return.</div>
+        <div class="action-card anim d5" style="border-left-color:var(--grad-3)"><strong>Scenario C &mdash; $150K:</strong> Maximises launch awareness &middot; faster Brand Search build &middot; larger CRM (8K members). Diminishing return per dollar past $100K &mdash; but if revenue at-stake is &gt;$1M, the +$50K is high-leverage.</div>
+      </div>
+      <div class="action-card anim d6" style="margin-top:var(--gap-sm);border-left-color:var(--grad-1)"><strong>The awareness-first principle:</strong> For a NEW launch in saturated Melbourne, awareness/creation must lead. Scenarios A&rarr;C all spend &ge;40% on creation. Below that ratio, launch becomes a soft open &mdash; bookings come, but no brand equity is built and Y2 marketing efficiency stalls.</div>
+    </div>
+  </div>
+  <div class="section-tag">Budget Scenarios</div>
+  <div class="slide-num">15 / 26</div>
+</section>
+
+<!-- ════ 14. $100K BUDGET ALLOCATION (charts) ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Budget · 12-Month Allocation</div>
+      <h2 class="slide-title anim d2">$100K Budget Split</h2>
+    </div>
+    <div class="slide-content">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:1;align-items:start">
+        <div class="anim d2" style="background:var(--bg-soft);border-radius:10px;padding:var(--gap)">
+          <div style="font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:var(--gap-sm)">By Channel</div>
+          <div class="hbar">
+            <div class="hbar-row"><div class="hbar-top"><span class="hbar-label">Google Ads</span><span class="hbar-value">$45,000 · 45%</span></div><div class="hbar-track"><div class="hbar-fill sem" style="width:45%"></div></div></div>
+            <div class="hbar-row"><div class="hbar-top"><span class="hbar-label">Social (Meta)</span><span class="hbar-value">$32,000 · 32%</span></div><div class="hbar-track"><div class="hbar-fill social" style="width:32%"></div></div></div>
+            <div class="hbar-row"><div class="hbar-top"><span class="hbar-label">Metasearch</span><span class="hbar-value">$15,000 · 15%</span></div><div class="hbar-track"><div class="hbar-fill meta" style="width:15%"></div></div></div>
+            <div class="hbar-row"><div class="hbar-top"><span class="hbar-label">Creators + Content</span><span class="hbar-value">$8,000 · 8%</span></div><div class="hbar-track"><div class="hbar-fill creator" style="width:8%"></div></div></div>
+          </div>
+          <div style="margin-top:var(--gap);padding-top:var(--gap-sm);border-top:1px solid var(--line);font-size:var(--fs-label);color:var(--text-muted);line-height:1.5">Of the $100K: <strong style="color:var(--text)">~55% creation-led</strong> (Top + Mid funnel) · <strong style="color:var(--text)">~45% capture-led</strong> (Brand + Generic + Meta + RT)</div>
+        </div>
+        <div class="anim d3" style="background:var(--bg-soft);border-radius:10px;padding:var(--gap)">
+          <div style="font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:var(--gap-sm)">By Phase</div>
+          <div class="hbar">
+            <div class="hbar-row"><div class="hbar-top"><span class="hbar-label">Phase 1 — Pre-launch (T-60 → T-0)</span><span class="hbar-value">$25,000 · 25%</span></div><div class="hbar-track"><div class="hbar-fill gradient" style="width:25%"></div></div></div>
+            <div class="hbar-row"><div class="hbar-top"><span class="hbar-label">Phase 2 — Launch (Mo 1–3)</span><span class="hbar-value">$45,000 · 45%</span></div><div class="hbar-track"><div class="hbar-fill gradient" style="width:45%"></div></div></div>
+            <div class="hbar-row"><div class="hbar-top"><span class="hbar-label">Phase 3 — Scale (Mo 4–12)</span><span class="hbar-value">$30,000 · 30%</span></div><div class="hbar-track"><div class="hbar-fill gradient" style="width:30%"></div></div></div>
+          </div>
+          <div style="margin-top:var(--gap);padding-top:var(--gap-sm);border-top:1px solid var(--line);font-size:var(--fs-label);color:var(--text-muted);line-height:1.5">Phase 3 ($30K spread over 9 mo = $3.3K/mo) feels light by design — by Mo 4 the Founders' Club CRM + organic momentum should be doing meaningful work for free.</div>
+        </div>
+      </div>
+      <div class="action-card anim d4" style="margin-top:var(--gap)">
+        <strong>The 70/20/10 rule applied here:</strong> 70% on proven plays (Brand defence, Hotel Ads, Generic Search, Meta Lead Gen), 20% on the Founders' Club bet (highest expected return), 10% on experiments (event hijacks, Skyscanner, new placements). Re-balance every 30 days based on actual data.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Budget</div>
+  <div class="slide-num">16 / 26</div>
+</section>
+
+<!-- ════ 15. PHASE BREAKDOWN ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Phasing · 3 Stages</div>
+      <h2 class="slide-title anim d2">Phase-by-Phase Budget Detail</h2>
+    </div>
+    <div class="slide-content">
+      <div class="phase-grid">
+        <div class="phase-card p1 anim d2">
+          <div class="phase-stage">Phase 1</div>
+          <div class="phase-name">Pre-Launch</div>
+          <div class="phase-budget">$25,000</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-bottom:0.5rem">T-60 → T-0 (8 weeks before opening)</div>
+          <ul class="phase-list">
+            <li><strong>$10K</strong> — Founders' Club Lead Gen (Meta + YouTube)</li>
+            <li><strong>$5K</strong> — Brand Search + Hotel Ads always-on</li>
+            <li><strong>$5K</strong> — Creator briefing + initial 10 stays</li>
+            <li><strong>$3K</strong> — PR + Broadsheet/Time Out hook</li>
+            <li><strong>$2K</strong> — Asset production (5 stills + 1 hero film)</li>
+          </ul>
+        </div>
+        <div class="phase-card p2 anim d3">
+          <div class="phase-stage">Phase 2</div>
+          <div class="phase-name">Launch</div>
+          <div class="phase-budget">$45,000</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-bottom:0.5rem">Months 1–3 (~$15K/mo)</div>
+          <ul class="phase-list">
+            <li><strong>$15K</strong> — Social ramp (Sales + Awareness + retargeting)</li>
+            <li><strong>$10K</strong> — PMAX + YouTube + Generic Search</li>
+            <li><strong>$8K</strong> — Creator content + whitelisted ads (15 more creators)</li>
+            <li><strong>$6K</strong> — Metasearch (full ramp · Google Hotel + Trivago + TA)</li>
+            <li><strong>$4K</strong> — Display + Search retargeting</li>
+            <li><strong>$2K</strong> — Email/CRM nurture flows + welcome series</li>
+          </ul>
+        </div>
+        <div class="phase-card p3 anim d4">
+          <div class="phase-stage">Phase 3</div>
+          <div class="phase-name">Scale &amp; Sustain</div>
+          <div class="phase-budget">$30,000</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-bottom:0.5rem">Months 4–12 (~$3.3K/mo)</div>
+          <ul class="phase-list">
+            <li><strong>$10K</strong> — Always-on Brand + Hotel Ads + Search</li>
+            <li><strong>$8K</strong> — Event activations (AO · F1 · Comedy · AFL)</li>
+            <li><strong>$5K</strong> — Membership re-engagement + nurture</li>
+            <li><strong>$4K</strong> — Quarterly creative refresh + LAL audiences</li>
+            <li><strong>$3K</strong> — Experiments (Skyscanner · TikTok test)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Phasing</div>
+  <div class="slide-num">17 / 26</div>
+</section>
+
+<!-- ════ 16. PHASE 1 PRE-LAUNCH WEEKLY ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--grad-2)">Phase 1 · Pre-Launch · 8 Weeks</div>
+      <h2 class="slide-title anim d2">Pre-Launch Execution Plan</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr><th>Week</th><th>Milestone</th><th>Channels Active</th><th>Asset Output</th></tr></thead>
+        <tbody>
+          <tr><td>T-8</td><td style="white-space:normal">Brand foundation set up</td><td style="white-space:normal;color:var(--text-muted)">Brand search live · GA4 + GTM · Hotel Ads pixel</td><td style="white-space:normal;color:var(--text-muted)">Logo · brand fonts · landing-page wireframes</td></tr>
+          <tr><td>T-7 → T-6</td><td style="white-space:normal">PR + creator briefing</td><td style="white-space:normal;color:var(--text-muted)">Pitch decks to Broadsheet, Time Out, Concierge · 25 creator outreach</td><td style="white-space:normal;color:var(--text-muted)">PR media kit · creator brief deck</td></tr>
+          <tr><td>T-5 → T-4</td><td style="white-space:normal">Asset production sprint</td><td style="white-space:normal;color:var(--text-muted)">Photo shoot at hotel (rooms, lobby, restaurant)</td><td style="white-space:normal;color:var(--text-muted)">5 hero stills · 60s brand film · 9:16 cuts</td></tr>
+          <tr><td>T-3</td><td style="white-space:normal">Founders' Club lead campaign launches</td><td style="white-space:normal;color:var(--text-muted)">Meta Lead Gen · YouTube TrueView · Google Discovery</td><td style="white-space:normal;color:var(--text-muted)">Lead form live · welcome email built · CRM tagged</td></tr>
+          <tr><td>T-2</td><td style="white-space:normal">First 10 creator stays activated</td><td style="white-space:normal;color:var(--text-muted)">Creator content production (food + couples niche first)</td><td style="white-space:normal;color:var(--text-muted)">~30 creator content pieces (organic on creator channels)</td></tr>
+          <tr><td>T-1</td><td style="white-space:normal">PMAX broad + Generic Search go live</td><td style="white-space:normal;color:var(--text-muted)">Google Hotel Ads activated · price parity verified</td><td style="white-space:normal;color:var(--text-muted)">All ad copy approved · LP A/B test live</td></tr>
+          <tr><td>T-0</td><td style="white-space:normal">Public Opening · Founders' Club announcement</td><td style="white-space:normal;color:var(--text-muted)">All channels live · launch press release · creator content amplification</td><td style="white-space:normal;color:var(--text-muted)">PR earned coverage starts · first paid social wave hits</td></tr>
+        </tbody>
+      </table>
+      <div class="action-card anim d4" style="margin-top:var(--gap-sm)">
+        <strong>Pre-launch outcome targets:</strong> 1,000 Founders' Club sign-ups by T-0 · 10K Brand Search impressions · 30 pieces of creator content (75% organic) · 3 earned editorial mentions · CRM list ≥1,500 emails captured.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag" style="color:var(--grad-2)">Phase 1</div>
+  <div class="slide-num">18 / 26</div>
+</section>
+
+<!-- ════ 17. PHASE 2 — LAUNCH MONTHLY DETAIL ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--grad-4)">Phase 2 · Launch · Months 1–3</div>
+      <h2 class="slide-title anim d2">Launch Phase Monthly Plan</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr><th>Month</th><th>Spend</th><th>Focus</th><th>Channel Mix</th><th>Target Outcome</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Month 1</td><td>$17K</td>
+            <td style="white-space:normal">Demand creation peak</td>
+            <td style="white-space:normal;color:var(--text-muted)">Social $7K · Google $5K · Meta $3K · Creators $2K</td>
+            <td style="white-space:normal;color:var(--text-muted)">Bookings: 200 · Brand Search: 800/mo · 1,500 Founders</td>
+          </tr>
+          <tr>
+            <td>Month 2</td><td>$15K</td>
+            <td style="white-space:normal">Capture ramp (organic momentum)</td>
+            <td style="white-space:normal;color:var(--text-muted)">Social $5K · Google $5K · Meta $3K · Creators $2K</td>
+            <td style="white-space:normal;color:var(--text-muted)">Bookings: 280 · Brand Search: 1,400/mo · ROAS &gt; 5×</td>
+          </tr>
+          <tr>
+            <td>Month 3</td><td>$13K</td>
+            <td style="white-space:normal">Optimisation + first event push (F1)</td>
+            <td style="white-space:normal;color:var(--text-muted)">Social $4K · Google $4K · Meta $3K · F1 Event $2K</td>
+            <td style="white-space:normal;color:var(--text-muted)">Bookings: 340 · ROAS &gt; 7× · F1 ADR uplift +25%</td>
+          </tr>
+        </tbody>
+        <tfoot><tr>
+          <td>Phase 2 Total</td><td>$45K</td>
+          <td colspan="2">820 bookings · 50K Founders' Club leads (cumulative) · ~$220K revenue</td>
+          <td>Blended <strong>4.9× ROAS</strong></td>
+        </tr></tfoot>
+      </table>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap-sm)">
+        <div class="action-card anim d3"><strong>Why ROAS starts low:</strong> First 90 days are creation-heavy → CRM building, not bookings. Real ROAS materialises Mo 4+ when re-engagement + repeat bookings kick in. Don't optimise to bookings too early or you'll cut your future demand.</div>
+        <div class="action-card anim d4"><strong>Weekly review cadence:</strong> Wk 1 · 4 · 8 · 12 → 30-min sync. Cut bottom 20% creative every 2 weeks. Reallocate underperforming budget to top winners by Mo 2.</div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag" style="color:var(--grad-4)">Phase 2</div>
+  <div class="slide-num">19 / 26</div>
+</section>
+
+<!-- ════ 18. PHASE 3 — SCALE MONTHLY ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--grad-5)">Phase 3 · Scale &amp; Sustain · Months 4–12</div>
+      <h2 class="slide-title anim d2">Scale Phase Monthly Plan</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr><th>Month</th><th>Spend</th><th>Theme / Event</th><th>Strategy</th><th>Target Bookings</th></tr></thead>
+        <tbody>
+          <tr><td>Month 4 (Apr)</td><td>$3.3K</td><td style="white-space:normal">Easter holidays</td><td style="white-space:normal;color:var(--text-muted)">Family-rate creative · school-holiday hook</td><td>320</td></tr>
+          <tr><td>Month 5 (May)</td><td>$3K</td><td style="white-space:normal">Mother's Day · low season</td><td style="white-space:normal;color:var(--text-muted)">Hold Brand · refresh creative · membership nurture</td><td>280</td></tr>
+          <tr><td>Month 6 (Jun)</td><td>$3K</td><td style="white-space:normal">EOFY corporate</td><td style="white-space:normal;color:var(--text-muted)">Corporate-rate push · LinkedIn add-on test</td><td>290</td></tr>
+          <tr><td>Month 7 (Jul)</td><td>$3K</td><td style="white-space:normal">School holidays peak</td><td style="white-space:normal;color:var(--text-muted)">Family-rate creative · Sydney/Brisbane geo</td><td>340</td></tr>
+          <tr><td>Month 8 (Aug)</td><td>$3K</td><td style="white-space:normal">Winter trough</td><td style="white-space:normal;color:var(--text-muted)">Rate parity defence · long-stay packages</td><td>270</td></tr>
+          <tr><td>Month 9 (Sep)</td><td class="pos">$4.5K</td><td style="white-space:normal">AFL Grand Final · Spring Racing builds</td><td style="white-space:normal;color:var(--text-muted)">Event landing pages · CBD properties +50%</td><td class="pos">410</td></tr>
+          <tr><td>Month 10 (Oct)</td><td>$3.3K</td><td style="white-space:normal">Melbourne Marathon</td><td style="white-space:normal;color:var(--text-muted)">Hardware Lane / Flinders peak push</td><td>360</td></tr>
+          <tr><td>Month 11 (Nov)</td><td class="pos">$5K</td><td style="white-space:normal">Melbourne Cup · Spring Racing peak</td><td style="white-space:normal;color:var(--text-muted)">Cup-themed campaigns · premium rate plans</td><td class="pos">470</td></tr>
+          <tr><td>Month 12 (Dec)</td><td>$2K</td><td style="white-space:normal">Christmas + AO build-up</td><td style="white-space:normal;color:var(--text-muted)">AO event prep · gift packages</td><td>320</td></tr>
+        </tbody>
+        <tfoot><tr>
+          <td>Phase 3 Total</td><td>$30K</td>
+          <td colspan="2">3,060 bookings projected</td>
+          <td><strong>~$770K revenue · 26× ROAS</strong></td>
+        </tr></tfoot>
+      </table>
+      <div class="action-card anim d4" style="margin-top:var(--gap-sm)">
+        <strong>Scale-phase principle:</strong> Spend less, earn more. By Mo 4, branded demand exists, the CRM is repeating, creators are still publishing. The remaining $30K is event-amplification + always-on defence — not demand creation.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag" style="color:var(--grad-5)">Phase 3</div>
+  <div class="slide-num">20 / 26</div>
+</section>
+
+<!-- ════ 19. EVENT CALENDAR ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">12-Month Event Calendar</div>
+      <h2 class="slide-title anim d2">Melbourne Demand Map</h2>
+    </div>
+    <div class="slide-content">
+      <div class="anim d2" style="font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:var(--gap-sm)">Months · Year 1 (assuming Jan launch)</div>
+      <div class="cal-grid">
+        <div class="cal-month">JAN</div><div class="cal-month">FEB</div><div class="cal-month">MAR</div><div class="cal-month">APR</div>
+        <div class="cal-month">MAY</div><div class="cal-month">JUN</div><div class="cal-month">JUL</div><div class="cal-month">AUG</div>
+        <div class="cal-month">SEP</div><div class="cal-month">OCT</div><div class="cal-month">NOV</div><div class="cal-month">DEC</div>
+        <div class="cal-cell event">🎾 Australian Open</div>
+        <div class="cal-cell">Valentine's</div>
+        <div class="cal-cell event">🏎️ F1 GP<br>🎤 Comedy Fest</div>
+        <div class="cal-cell">Easter holidays</div>
+        <div class="cal-cell">Mother's Day</div>
+        <div class="cal-cell">EOFY corporate</div>
+        <div class="cal-cell peak">School holidays</div>
+        <div class="cal-cell">Writers Fest</div>
+        <div class="cal-cell event">🏈 AFL Grand Final<br>Spring builds</div>
+        <div class="cal-cell">Marathon · Spring</div>
+        <div class="cal-cell cup">🏆 MELBOURNE CUP<br>Spring peak</div>
+        <div class="cal-cell">Christmas · NYE</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap)">
+        <div class="action-card event anim d3"><strong>Hard launches (high spend):</strong> 🎾 AO · 🏎️ F1 · 🎤 Comedy Fest · 🏈 AFL Grand Final · 🏆 Melbourne Cup. Event-specific landing pages + Search KW + paid social geo + Metasearch +50% bid 4 weeks before.</div>
+        <div class="action-card anim d4"><strong>Softer pushes:</strong> School holidays (family) · EOFY (corporate) · Christmas (gift). Lighter spend · creative refresh · CRM nurture · always-on Brand defence.</div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Calendar</div>
+  <div class="slide-num">21 / 26</div>
+</section>
+
+<!-- ════ 20. SECTION DIVIDER — MEASUREMENT & FORECAST ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow anim d1">Section Five</div>
+    <div class="sd-num anim d2">04</div>
+    <div class="sd-title anim d3">Measurement &amp; Forecast</div>
+    <div class="sd-sub anim d4">How we know it's working — and what we expect by Month 12.</div>
+  </div>
+  <div class="slide-num">22 / 26</div>
+</section>
+
+<!-- ════ 21. SUCCESS KPIs ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Measurement</div>
+      <h2 class="slide-title anim d2">Success KPIs &amp; Diagnostic Health Checks</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr><th>KPI</th><th>Phase 1 (Pre)</th><th>Phase 2 (Mo 1–3)</th><th>Phase 3 (Mo 4–12)</th><th>Why it matters</th></tr></thead>
+        <tbody>
+          <tr><td>Founders' Club sign-ups</td><td>1,000</td><td>3,500 cumulative</td><td>5,000 (Mo 12)</td><td style="white-space:normal;color:var(--text-muted)">Owned audience for life · drives repeat &amp; LTV</td></tr>
+          <tr><td>CPL (Founders)</td><td>&lt; $25</td><td>&lt; $35</td><td>&lt; $45</td><td style="white-space:normal;color:var(--text-muted)">Cost-per-Member-acquired · benchmark vs creative cost</td></tr>
+          <tr><td>Brand Search volume</td><td>50/mo</td><td>1,400/mo (Mo 3)</td><td>3,500/mo (Mo 12)</td><td style="white-space:normal;color:var(--text-muted)">The single best signal that creation is working</td></tr>
+          <tr><td>CPA (booking)</td><td>n/a</td><td>$80 → $50</td><td>$30 → $40</td><td style="white-space:normal;color:var(--text-muted)">Falls as branded demand &amp; CRM repeat kick in</td></tr>
+          <tr><td>Booking ROAS (paid)</td><td>n/a</td><td>4–7×</td><td>15–28×</td><td style="white-space:normal;color:var(--text-muted)">Real ROAS materialises Mo 4+ once owned audience repeats</td></tr>
+          <tr><td>Direct booking share</td><td>n/a</td><td>25%</td><td>40%+ (Mo 12)</td><td style="white-space:normal;color:var(--text-muted)">Member-rate edge driving direct over OTA</td></tr>
+          <tr><td>Creator content output</td><td>30 pieces</td><td>+45 pieces</td><td>+60 pieces</td><td style="white-space:normal;color:var(--text-muted)">75+ ad-quality assets at zero production cost</td></tr>
+          <tr><td>Earned PR mentions</td><td>3</td><td>+5</td><td>+8</td><td style="white-space:normal;color:var(--text-muted)">Validates story · drives referral search</td></tr>
+        </tbody>
+      </table>
+      <div class="action-card anim d4" style="margin-top:var(--gap-sm)">
+        <strong>The diagnostic question</strong> (asked monthly): <em>"If I turned off Google tomorrow, would anyone still discover us?"</em> By Mo 6, the answer must be <strong>yes</strong> — through Brand Search, creator content, PR, and CRM nurture. If it's still no, we've over-indexed on capture.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">KPIs</div>
+  <div class="slide-num">23 / 26</div>
+</section>
+
+<!-- ════ 22. 12-MONTH FORECAST ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Year 1 Forecast</div>
+      <h2 class="slide-title anim d2">Outcome Projection</h2>
+    </div>
+    <div class="slide-content">
+      <div class="kpi-strip anim d2">
+        <div class="kpi-strip-card"><div class="ks-label">Marketing Spend Y1</div><div class="ks-value">$100K</div></div>
+        <div class="kpi-strip-card"><div class="ks-label">Bookings (Mktg.)</div><div class="ks-value pos">3,900</div></div>
+        <div class="kpi-strip-card"><div class="ks-label">Marketing Revenue</div><div class="ks-value pos">$1.0M</div></div>
+        <div class="kpi-strip-card"><div class="ks-label">Blended ROAS Y1</div><div class="ks-value">10×</div></div>
+        <div class="kpi-strip-card"><div class="ks-label">Founders Members</div><div class="ks-value pos">5,000</div></div>
+        <div class="kpi-strip-card"><div class="ks-label">Marketing %-share</div><div class="ks-value">~6%</div></div>
+      </div>
+      <table class="dt compact anim d3">
+        <thead><tr><th>Quarter</th><th>Spend</th><th>Bookings</th><th>Revenue</th><th>ROAS</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Pre-launch</td><td>$25K</td><td>—</td><td>—</td><td>—</td><td style="white-space:normal;color:var(--text-muted)">1,000 Founders · 30 creator pieces · brand foundation</td></tr>
+          <tr><td>Q1 (Mo 1–3)</td><td>$45K</td><td>820</td><td>$220K</td><td>4.9×</td><td style="white-space:normal;color:var(--text-muted)">Creation-heavy · CRM building · early F1 event</td></tr>
+          <tr><td>Q2 (Mo 4–6)</td><td>$10K</td><td>890</td><td>$240K</td><td class="pos">24×</td><td style="white-space:normal;color:var(--text-muted)">Easter · Mother's Day · EOFY corporate</td></tr>
+          <tr><td>Q3 (Mo 7–9)</td><td>$10K</td><td>1,020</td><td>$280K</td><td class="pos">28×</td><td style="white-space:normal;color:var(--text-muted)">School hols · AFL Grand Final · Spring builds</td></tr>
+          <tr><td>Q4 (Mo 10–12)</td><td>$10K</td><td class="pos">1,150</td><td class="pos">$320K</td><td class="pos">32×</td><td style="white-space:normal;color:var(--text-muted)">Marathon · Melbourne Cup · NYE peak</td></tr>
+        </tbody>
+        <tfoot><tr>
+          <td>Year 1 Total</td><td>$100K</td><td>3,880</td><td>$1.06M</td><td>10.6×</td>
+          <td style="color:var(--ch-action)">Blended Y1 · benchmark Brady CBD portfolio: $200K rev/property avg</td>
+        </tr></tfoot>
+      </table>
+      <div class="action-card anim d4" style="margin-top:var(--gap-sm)">
+        <strong>Year 2 trajectory:</strong> With CRM (5K members) + brand search momentum + creator library + event playbook proven · Year 2 marketing spend can hold at $80K but drive ~$1.8M revenue (22× ROAS) — the classic launch-investment payoff curve.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Forecast</div>
+  <div class="slide-num">24 / 26</div>
+</section>
+
+<!-- ════ 23. WEEK 1 ACTIONS ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Week 1 — What We Ship Monday</div>
+      <h2 class="slide-title anim d2">Execution Kickoff</h2>
+    </div>
+    <div class="slide-content">
+      <div style="display:flex;flex-direction:column;gap:var(--gap-sm);flex:1;justify-content:center">
+        <div class="action-card anim d2"><strong>Day 1–2:</strong> Property differentiator workshop (1 hr) — agree the Founder rate mechanics, lock the 1,000-cap promise. Write the 3 key headlines. Brief copywriter + photographer.</div>
+        <div class="action-card anim d3" style="border-left-color:var(--grad-3)"><strong>Day 3–4:</strong> Creator long-list of 60 → 25 final. Outreach DM + email template. Brief deck shared. CRM platform stood up (Mailchimp / HubSpot) + Lead Form built in Meta.</div>
+        <div class="action-card anim d4" style="border-left-color:var(--grad-2)"><strong>Day 5:</strong> GA4 + GTM live. Hotel Ads pixel installed. Brand Search campaign live with 5 ad groups. Google Hotel Ads setup begun (parity manager configured).</div>
+        <div class="action-card anim d5"><strong>Week 2:</strong> Photo shoot · 5 hero stills + 60s film. PR pitch sent to Broadsheet, Time Out, Concierge, Urban List. First 5 creator stays scheduled.</div>
+        <div class="action-card action anim d6"><strong>Week 3 (T-3 weeks before opening):</strong> 🚀 Founders' Club lead campaign launches. Meta Lead Gen + YouTube TrueView + Google Discovery live. Target: 200 sign-ups in week 1 of activation.</div>
+      </div>
+      <div class="anim d6" style="margin-top:var(--gap);padding-top:var(--gap);border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end">
+        <div>
+          <div style="font-size:var(--fs-label);letter-spacing:0.22em;text-transform:uppercase;color:var(--text-light)">Owner</div>
+          <div style="font-size:var(--fs-body);color:var(--text);font-weight:600">Dijitally Account Lead + Brady Marketing</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:var(--fs-label);letter-spacing:0.22em;text-transform:uppercase;color:var(--text-light)">Cadence</div>
+          <div style="font-size:var(--fs-body);color:var(--text);font-weight:600">Weekly · 30-min check-in</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Execution</div>
+  <div class="slide-num">25 / 26</div>
+</section>
+
+<!-- ════ 24. CLOSING ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div style="z-index:2;padding:var(--pad);text-align:center;max-width:720px">
+    <div class="sd-eyebrow anim d1">The Strategic Bet</div>
+    <div class="anim d2" style="font-family:var(--font-display);font-size:clamp(1.6rem,3.6vw,2.8rem);font-weight:700;line-height:1.18;color:var(--white);letter-spacing:-0.015em;margin-bottom:0.8rem">
+      "Be irresistible somewhere<br>specific, then expand."
+    </div>
+    <div class="anim d3" style="font-size:var(--fs-body);color:rgba(255,255,255,0.62);max-width:540px;margin:0 auto;line-height:1.6;margin-bottom:var(--gap)">
+      $100K won't outspend Melbourne's incumbents. But three focused bets — Founders' Club narrative, micro-creator content network, event demand hijacks — turn $100K into $1M+ revenue Year 1, and a 5,000-strong member CRM that compounds for years.
+    </div>
+    <div class="anim d4" style="display:flex;justify-content:center;gap:clamp(1rem,3vw,3rem);margin-top:var(--gap)">
+      <div>
+        <div style="font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.50);margin-bottom:0.3rem;font-weight:600">Spend</div>
+        <div style="font-family:var(--font-display);font-size:clamp(1.4rem,2.6vw,2rem);color:var(--grad-5);font-weight:700">$100K</div>
+      </div>
+      <div>
+        <div style="font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.50);margin-bottom:0.3rem;font-weight:600">Year 1 Revenue</div>
+        <div style="font-family:var(--font-display);font-size:clamp(1.4rem,2.6vw,2rem);color:var(--grad-5);font-weight:700">$1.06M</div>
+      </div>
+      <div>
+        <div style="font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;color:rgba(255,255,255,0.50);margin-bottom:0.3rem;font-weight:600">Members Built</div>
+        <div style="font-family:var(--font-display);font-size:clamp(1.4rem,2.6vw,2rem);color:var(--grad-5);font-weight:700">5,000</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">26 / 26</div>
+</section>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl = document.getElementById('nav-dots');
+  const progressEl = document.getElementById('progress-bar');
+  const total = slides.length;
+  let current = 0;
+  slides.forEach((_, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    btn.setAttribute('aria-label', 'Slide ' + (i + 1));
+    btn.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(btn);
+  });
+  slides.forEach((slide) => {
+    if (!slide.querySelector('.slide-tail')) {
+      const tail = document.createElement('div');
+      tail.className = 'slide-tail';
+      tail.textContent = 'Dijitally x Brady Hotels';
+      slide.appendChild(tail);
+    }
+  });
+  function goTo(idx) {
+    current = Math.max(0, Math.min(idx, total - 1));
+    slides[current].scrollIntoView({ behavior: 'smooth' });
+    sync();
+  }
+  function sync() {
+    document.querySelectorAll('.nav-dot').forEach((d, i) =>
+      d.classList.toggle('active', i === current));
+    progressEl.style.width = ((current + 1) / total * 100) + '%';
+  }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio >= 0.4) {
+        const i = slides.indexOf(e.target);
+        current = i; sync();
+        e.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.4 });
+  slides.forEach(s => io.observe(s));
+  document.addEventListener('keydown', e => {
+    const map = { ArrowDown: 1, ArrowRight: 1, ' ': 1, PageDown: 1, ArrowUp: -1, ArrowLeft: -1, PageUp: -1 };
+    if (e.key in map) { e.preventDefault(); goTo(current + map[e.key]); }
+    else if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    else if (e.key === 'End')  { e.preventDefault(); goTo(total - 1); }
+  });
+  let ty = 0, tx = 0;
+  document.addEventListener('touchstart', e => { ty = e.touches[0].clientY; tx = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dy = ty - e.changedTouches[0].clientY;
+    const dx = tx - e.changedTouches[0].clientX;
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50)
+      goTo(current + (dy > 0 ? 1 : -1));
+  }, { passive: true });
+  slides[0].classList.add('visible');
+})();
+</script>
+</body>
+</html>

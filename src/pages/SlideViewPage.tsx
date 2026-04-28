@@ -3407,7 +3407,7 @@ export default function SlideViewPage() {
         onDataSources={() => navigate(accountId ? `/tools/data-sources/${accountId}` : '/tools/data-sources')}
         onDimensions={() => navigate(accountId ? `/tools/dimensions/${accountId}` : '/tools/dimensions')}
         onTags={() => navigate(accountId ? `/tools/tags/${accountId}` : '/tools/tags')}
-        onReports={() => navigate(accountId ? `/tools/reports/${accountId}` : '/tools/reports')}
+        onSlides={() => navigate(accountId ? `/tools/slides/${accountId}` : '/tools/slides')}
         onUsers={() => navigate(accountId ? `/tools/users/${accountId}` : '/tools/users')}
         selectedViewId={selectedViewId}
         setSelectedViewId={setSelectedViewId}

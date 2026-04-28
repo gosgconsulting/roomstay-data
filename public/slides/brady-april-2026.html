@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brady Hotels × Dijitally — Performance Report April 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* ==========================================
+       VIEWPORT BASE — frontend-slides mandatory
+    ========================================== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow-x: hidden;
+    }
+    html {
+      scroll-snap-type: y mandatory;
+      scroll-behavior: smooth;
+    }
+
+    /* Design tokens */
+    :root {
+      --bg:         #07101e;
+      --bg2:        #0d1b2e;
+      --bg-card:    rgba(255,255,255,0.04);
+      --gold:       #d4a843;
+      --gold-l:     #f0cb6a;
+      --gold-d:     rgba(212,168,67,0.15);
+      --gold-line:  rgba(212,168,67,0.28);
+      --blue:       #7cb9e8;
+      --green:      #98d4a3;
+      --red:        #e8786b;
+      --mint:       #7dd3a0;
+
+      --fs-display: clamp(2rem, 5.5vw, 4.2rem);
+      --fs-h1:      clamp(1.6rem, 4vw, 3rem);
+      --fs-h2:      clamp(1.2rem, 2.8vw, 2rem);
+      --fs-h3:      clamp(0.95rem, 1.9vw, 1.35rem);
+      --fs-body:    clamp(0.76rem, 1.35vw, 0.97rem);
+      --fs-small:   clamp(0.64rem, 1vw, 0.78rem);
+      --fs-label:   clamp(0.58rem, 0.85vw, 0.70rem);
+
+      --pad:        clamp(1.8rem, 4.5vw, 4.5rem);
+      --gap:        clamp(0.7rem, 1.7vw, 1.7rem);
+      --gap-sm:     clamp(0.35rem, 0.9vw, 0.9rem);
+    }
+
+    /* Each slide = exactly 100vh */
+    .slide {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      background: var(--bg);
+      color: #ffffff;
+      font-family: 'Inter', -apple-system, sans-serif;
+    }
+
+    /* ========================
+       NAVIGATION
+    ======================== */
+    #nav-dots {
+      position: fixed;
+      right: clamp(0.8rem, 2vw, 2rem);
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+      z-index: 200;
+    }
+    .nav-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none;
+      padding: 0;
+    }
+    .nav-dot.active {
+      background: var(--gold);
+      transform: scale(1.6);
+    }
+    .nav-dot:hover { background: rgba(255,255,255,0.7); }
+
+    #progress-bar {
+      position: fixed;
+      top: 0; left: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--gold), var(--gold-l));
+      z-index: 200;
+      transition: width 0.5s ease;
+      pointer-events: none;
+    }
+
+    /* Slide number badge */
+    .slide-num {
+      position: absolute;
+      bottom: clamp(0.8rem, 1.5vw, 1.5rem);
+      right: clamp(1.2rem, 2.5vw, 3rem);
+      font-size: var(--fs-label);
+      color: rgba(255,255,255,0.22);
+      letter-spacing: 0.18em;
+      font-weight: 400;
+    }
+
+    /* ========================
+       COMMON SLIDE COMPONENTS
+    ======================== */
+    .slide-eyebrow {
+      font-size: var(--fs-label);
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-weight: 500;
+      margin-bottom: 0.45rem;
+    }
+    .slide-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: var(--fs-h1);
+      font-weight: 700;
+      line-height: 1.15;
+    }
+    .slide-header { margin-bottom: var(--gap); }
+
+    .slide-inner {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: var(--pad);
+      overflow: hidden;
+    }
+
+    .slide-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ========================
+       ANIMATIONS
+    ======================== */
+    .anim {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity 0.55s ease, transform 0.55s ease;
+    }
+    .slide.visible .anim { opacity: 1; transform: translateY(0); }
+    .d1 { transition-delay: 0.10s !important; }
+    .d2 { transition-delay: 0.20s !important; }
+    .d3 { transition-delay: 0.32s !important; }
+    .d4 { transition-delay: 0.44s !important; }
+    .d5 { transition-delay: 0.56s !important; }
+    .d6 { transition-delay: 0.68s !important; }
+    .d7 { transition-delay: 0.80s !important; }
+
+    /* ========================
+       SLIDE 1 — COVER
+    ======================== */
+    #s1 {
+      background: linear-gradient(140deg, #040c18 0%, #0b1728 55%, #050e1a 100%);
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+    .cover-eyebrow {
+      font-size: var(--fs-label);
+      letter-spacing: 0.38em;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-weight: 500;
+      margin-bottom: clamp(0.7rem, 1.8vw, 1.8rem);
+    }
+    .cover-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: var(--fs-display);
+      font-weight: 700;
+      line-height: 1.08;
+      margin-bottom: 0.2em;
+    }
+    .cover-sub {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(1.1rem, 2.8vw, 2.1rem);
+      font-weight: 400;
+      font-style: italic;
+      color: var(--gold-l);
+      margin-bottom: clamp(1.3rem, 3vw, 3rem);
+    }
+    .cover-divider {
+      width: 72px; height: 1px;
+      background: var(--gold);
+      margin: 0 auto clamp(1.2rem, 2.5vw, 2.5rem);
+    }
+    .cover-meta {
+      display: flex;
+      justify-content: center;
+      gap: clamp(1.5rem, 4vw, 4rem);
+    }
+    .cover-meta-label {
+      font-size: var(--fs-label);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 0.3rem;
+    }
+    .cover-meta-value {
+      font-size: var(--fs-small);
+      color: rgba(255,255,255,0.75);
+      font-weight: 500;
+    }
+    /* Corner brackets */
+    .bracket {
+      position: absolute;
+      width: 52px; height: 52px;
+      border-color: var(--gold-line);
+      border-style: solid;
+    }
+    .bracket.tl { top:1.8rem; left:1.8rem; border-width: 1px 0 0 1px; }
+    .bracket.br { bottom:1.8rem; right:1.8rem; border-width: 0 1px 1px 0; }
+
+    /* Radial glows */
+    .glow {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      filter: blur(70px);
+    }
+
+    /* ========================
+       SLIDE 2 — EXECUTIVE SUMMARY
+    ======================== */
+    #s2 {
+      background: linear-gradient(155deg, #06101e 0%, #0e1d32 100%);
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: var(--gap-sm);
+      margin-bottom: var(--gap);
+    }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--gold-line);
+      border-radius: 7px;
+      padding: clamp(0.7rem, 1.4vw, 1.4rem) clamp(0.5rem, 1vw, 1rem);
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--gold), var(--gold-l));
+    }
+    .kpi-label {
+      font-size: var(--fs-label);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 0.45rem;
+    }
+    .kpi-value {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(1.3rem, 2.6vw, 2.1rem);
+      font-weight: 700;
+      color: var(--gold-l);
+      line-height: 1;
+      margin-bottom: 0.3rem;
+    }
+    .kpi-change {
+      font-size: var(--fs-label);
+      display: flex;
+      align-items: center;
+      gap: 0.2rem;
+    }
+    .up { color: var(--mint); }
+    .down { color: var(--red); }
+
+    /* Channel split bar */
+    .ch-section {
+      background: var(--bg-card);
+      border: 1px solid var(--gold-line);
+      border-radius: 7px;
+      padding: var(--gap-sm) var(--gap);
+    }
+    .ch-title {
+      font-size: var(--fs-label);
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: var(--gap-sm);
+    }
+    .ch-row {
+      display: flex;
+      align-items: center;
+      gap: var(--gap-sm);
+      margin-bottom: 0.5rem;
+    }
+    .ch-row:last-child { margin-bottom: 0; }
+    .ch-label {
+      font-size: var(--fs-small);
+      color: rgba(255,255,255,0.75);
+      width: 76px;
+      flex-shrink: 0;
+    }
+    .ch-track {
+      flex: 1;
+      height: 7px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .ch-fill {
+      height: 100%;
+      border-radius: 4px;
+    }
+    .ch-fill.google { background: linear-gradient(90deg, var(--gold), var(--gold-l)); }
+    .ch-fill.fb     { background: linear-gradient(90deg, var(--blue), #9dd3f5); }
+    .ch-val {
+      font-size: var(--fs-small);
+      color: rgba(255,255,255,0.75);
+      width: 100px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* ========================
+       SLIDES 3 & 4 — FUNNEL CHARTS
+    ======================== */
+    #s3, #s4 {
+      background: linear-gradient(155deg, #060f1d 0%, #0b1927 100%);
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: clamp(1.5rem, 4vw, 4rem);
+      flex: 1;
+      align-items: center;
+      overflow: hidden;
+    }
+    .legend-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap);
+    }
+    .legend-dot-row {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin-bottom: 0.35rem;
+    }
+    .legend-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .legend-name {
+      font-size: var(--fs-small);
+      font-weight: 600;
+      color: rgba(255,255,255,0.85);
+    }
+    .legend-stats {
+      padding-left: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.18rem;
+    }
+    .ls-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: var(--fs-label);
+      color: rgba(255,255,255,0.42);
+    }
+    .ls-val {
+      color: rgba(255,255,255,0.78);
+      font-weight: 500;
+    }
+    .ls-val.good { color: var(--mint); }
+
+    .chart-wrap {
+      overflow: hidden;
+    }
+    .chart-wrap svg {
+      width: 100%;
+      height: auto;
+      max-height: min(42vh, 340px);
+      display: block;
+    }
+
+    /* ========================
+       SLIDES 5 & 6 — TABLES
+    ======================== */
+    #s5, #s6 {
+      background: linear-gradient(155deg, #06101e 0%, #0c1930 100%);
+    }
+    .perf-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--fs-body);
+    }
+    .perf-table thead tr {
+      border-bottom: 1px solid var(--gold-line);
+    }
+    .perf-table th {
+      padding: 0.55rem 0.9rem;
+      text-align: right;
+      font-size: var(--fs-label);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.42);
+      font-weight: 500;
+    }
+    .perf-table th:first-child { text-align: left; }
+    .perf-table td {
+      padding: 0.65rem 0.9rem;
+      text-align: right;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.72);
+    }
+    .perf-table td:first-child {
+      text-align: left;
+      color: #fff;
+      font-weight: 500;
+    }
+    .perf-table tfoot td {
+      border-bottom: none;
+      border-top: 1px solid var(--gold-line);
+      font-weight: 600;
+      padding-top: 0.75rem;
+    }
+    .ftag {
+      display: inline-block;
+      font-size: var(--fs-label);
+      padding: 0.12rem 0.45rem;
+      border-radius: 3px;
+      margin-left: 0.45rem;
+      font-weight: 400;
+      vertical-align: middle;
+    }
+    .ftag-top { background: rgba(212,168,67,0.14); color: var(--gold); }
+    .ftag-mid { background: rgba(124,185,232,0.14); color: var(--blue); }
+    .ftag-bot { background: rgba(152,212,163,0.14); color: var(--green); }
+
+    .note-box {
+      margin-top: var(--gap);
+      padding: 0.65rem var(--gap);
+      background: rgba(255,255,255,0.025);
+      border-left: 2px solid;
+      border-radius: 0 5px 5px 0;
+      font-size: var(--fs-small);
+      line-height: 1.55;
+    }
+
+    /* ========================
+       SLIDE 7 — KEY WINS
+    ======================== */
+    #s7 {
+      background: linear-gradient(145deg, #060e1c 0%, #0c1c32 60%, #040c18 100%);
+    }
+    .wins-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--gap);
+      flex: 1;
+      align-content: center;
+    }
+    .win-card {
+      background: var(--bg-card);
+      border: 1px solid var(--gold-line);
+      border-radius: 8px;
+      padding: var(--gap);
+      position: relative;
+      overflow: hidden;
+    }
+    .win-big-num {
+      position: absolute;
+      top: var(--gap-sm);
+      right: var(--gap);
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(2rem, 3.5vw, 3.2rem);
+      font-weight: 700;
+      color: var(--gold-d);
+      line-height: 1;
+    }
+    .win-icon { font-size: 1.4rem; margin-bottom: 0.45rem; }
+    .win-title {
+      font-size: var(--fs-h3);
+      font-weight: 600;
+      margin-bottom: 0.38rem;
+    }
+    .win-desc {
+      font-size: var(--fs-small);
+      color: rgba(255,255,255,0.48);
+      line-height: 1.55;
+    }
+    .win-metric {
+      margin-top: 0.65rem;
+      font-size: var(--fs-body);
+      color: var(--gold);
+      font-weight: 500;
+    }
+
+    /* ========================
+       SLIDE 8 — RECOMMENDATIONS
+    ======================== */
+    #s8 {
+      background: linear-gradient(135deg, #040c18 0%, #0a1625 50%, #050e1a 100%);
+      justify-content: center;
+      align-items: center;
+    }
+    .steps-wrap {
+      max-width: min(780px, 90vw);
+      width: 100%;
+      padding: 0 var(--pad);
+    }
+    .steps-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--gap);
+    }
+    .step-row {
+      display: flex;
+      gap: var(--gap);
+      align-items: flex-start;
+    }
+    .step-num {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(1.8rem, 3.2vw, 2.8rem);
+      font-weight: 700;
+      color: var(--gold-d);
+      line-height: 1;
+      flex-shrink: 0;
+      width: 2.4rem;
+    }
+    .step-title {
+      font-size: var(--fs-h3);
+      font-weight: 600;
+      margin-bottom: 0.28rem;
+    }
+    .step-desc {
+      font-size: var(--fs-body);
+      color: rgba(255,255,255,0.5);
+      line-height: 1.58;
+    }
+    .footer-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: var(--gap);
+      padding-top: var(--gap);
+      border-top: 1px solid var(--gold-line);
+    }
+    .footer-label {
+      font-size: var(--fs-label);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.38);
+    }
+    .footer-value {
+      font-size: var(--fs-body);
+      color: rgba(255,255,255,0.72);
+      font-weight: 500;
+    }
+
+    /* ========================
+       RESPONSIVE
+    ======================== */
+    @media (max-height: 680px) {
+      :root {
+        --pad: clamp(1rem, 3vw, 2.5rem);
+        --gap: clamp(0.45rem, 1.3vw, 1rem);
+      }
+    }
+    @media (max-height: 580px) {
+      #nav-dots { display: none; }
+      .kpi-grid { gap: 0.3rem; }
+    }
+    @media (max-width: 760px) {
+      .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+      .two-col  { grid-template-columns: 1fr; }
+      .wins-grid{ grid-template-columns: 1fr; }
+      .two-col .legend-list { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.15s !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Nav dots & progress bar -->
+<div id="nav-dots"></div>
+<div id="progress-bar" style="width:12.5%"></div>
+
+<!-- ══════════════════════════════════════
+     SLIDE 1 · COVER
+══════════════════════════════════════ -->
+<section class="slide" id="s1">
+  <!-- Bracket corners -->
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <!-- Ambient glows -->
+  <div class="glow" style="top:-90px;left:-70px;width:360px;height:360px;background:radial-gradient(circle, rgba(212,168,67,0.12), transparent 70%);"></div>
+  <div class="glow" style="bottom:-90px;right:-70px;width:360px;height:360px;background:radial-gradient(circle, rgba(124,185,232,0.08), transparent 70%);"></div>
+
+  <!-- Content -->
+  <div style="z-index:2;padding:var(--pad);text-align:center;">
+    <div class="cover-eyebrow anim d1">Dijitally × Brady Hotels</div>
+    <h1 class="cover-title anim d2">Performance<br>Report</h1>
+    <div class="cover-sub anim d3">April 2026</div>
+    <div class="cover-divider anim d4"></div>
+    <div class="cover-meta anim d5">
+      <div>
+        <div class="cover-meta-label">Period</div>
+        <div class="cover-meta-value">April 1–30, 2026</div>
+      </div>
+      <div>
+        <div class="cover-meta-label">Prepared By</div>
+        <div class="cover-meta-value">Dijitally Agency</div>
+      </div>
+      <div>
+        <div class="cover-meta-label">Channels</div>
+        <div class="cover-meta-value">Google Ads · Meta Ads</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">01 / 08</div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 2 · EXECUTIVE SUMMARY
+══════════════════════════════════════ -->
+<section class="slide" id="s2">
+  <div class="glow" style="top:-60px;right:-60px;width:320px;height:320px;background:radial-gradient(circle, rgba(212,168,67,0.07), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">April 2026</div>
+      <h2 class="slide-title anim d2">Executive Summary</h2>
+    </div>
+
+    <div class="slide-content">
+      <!-- KPI cards -->
+      <div class="kpi-grid">
+        <div class="kpi-card anim d2">
+          <div class="kpi-label">Total Spend</div>
+          <div class="kpi-value">$11,867</div>
+          <div class="kpi-change up">▲ 25.6% vs Apr '25</div>
+        </div>
+        <div class="kpi-card anim d3">
+          <div class="kpi-label">Revenue</div>
+          <div class="kpi-value">$185,460</div>
+          <div class="kpi-change up">▲ 22.8% vs Apr '25</div>
+        </div>
+        <div class="kpi-card anim d3">
+          <div class="kpi-label">ROAS</div>
+          <div class="kpi-value">15.6×</div>
+          <div class="kpi-change up">▲ from 14.2× Apr '25</div>
+        </div>
+        <div class="kpi-card anim d4">
+          <div class="kpi-label">Impressions</div>
+          <div class="kpi-value">927K</div>
+          <div class="kpi-change up">▲ 18.4%</div>
+        </div>
+        <div class="kpi-card anim d4">
+          <div class="kpi-label">Clicks</div>
+          <div class="kpi-value">16,475</div>
+          <div class="kpi-change up">▲ 14.2%</div>
+        </div>
+      </div>
+
+      <!-- Channel split -->
+      <div class="ch-section anim d5">
+        <div class="ch-title">Channel Split — Spend</div>
+        <div class="ch-row">
+          <div class="ch-label">Google Ads</div>
+          <div class="ch-track"><div class="ch-fill google" style="width:78.7%"></div></div>
+          <div class="ch-val">$9,340 &middot; 78.7%</div>
+        </div>
+        <div class="ch-row">
+          <div class="ch-label">Meta / Facebook</div>
+          <div class="ch-track"><div class="ch-fill fb" style="width:21.3%"></div></div>
+          <div class="ch-val">$2,527 &middot; 21.3%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">02 / 08</div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 3 · FUNNEL COST
+══════════════════════════════════════ -->
+<section class="slide" id="s3">
+  <div class="glow" style="bottom:-80px;left:-60px;width:300px;height:300px;background:radial-gradient(circle, rgba(212,168,67,0.06), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Funnel Performance · YTD 2026 vs 2025</div>
+      <h2 class="slide-title anim d2">Cost by Funnel Stage</h2>
+    </div>
+
+    <div class="slide-content">
+      <div class="two-col">
+        <!-- Legend + stats -->
+        <div class="legend-list">
+          <div class="anim d2">
+            <div class="legend-dot-row">
+              <div class="legend-dot" style="background:var(--gold)"></div>
+              <div class="legend-name">Top of Funnel</div>
+            </div>
+            <div class="legend-stats">
+              <div class="ls-row"><span>YTD 2026</span><span class="ls-val">$7,650</span></div>
+              <div class="ls-row"><span>YTD 2025</span><span class="ls-val">$6,050</span></div>
+              <div class="ls-row"><span>Growth</span><span class="ls-val good">+26.4%</span></div>
+            </div>
+          </div>
+          <div class="anim d3">
+            <div class="legend-dot-row">
+              <div class="legend-dot" style="background:var(--blue)"></div>
+              <div class="legend-name">Mid Funnel</div>
+            </div>
+            <div class="legend-stats">
+              <div class="ls-row"><span>YTD 2026</span><span class="ls-val">$18,600</span></div>
+              <div class="ls-row"><span>YTD 2025</span><span class="ls-val">$15,300</span></div>
+              <div class="ls-row"><span>Growth</span><span class="ls-val good">+21.6%</span></div>
+            </div>
+          </div>
+          <div class="anim d4">
+            <div class="legend-dot-row">
+              <div class="legend-dot" style="background:var(--green)"></div>
+              <div class="legend-name">Bottom Funnel</div>
+            </div>
+            <div class="legend-stats">
+              <div class="ls-row"><span>YTD 2026</span><span class="ls-val">$12,967</span></div>
+              <div class="ls-row"><span>YTD 2025</span><span class="ls-val">$10,900</span></div>
+              <div class="ls-row"><span>Growth</span><span class="ls-val good">+19.0%</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SVG Line chart — Cost (scale max 6000, y: 0→175, x: 40,173,307,440) -->
+        <div class="chart-wrap anim d3">
+          <svg viewBox="0 0 480 205" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
+            <!-- grid verticals -->
+            <line x1="40"  y1="20" x2="40"  y2="175" stroke="rgba(255,255,255,0.055)" stroke-width="1"/>
+            <line x1="173" y1="20" x2="173" y2="175" stroke="rgba(255,255,255,0.055)" stroke-width="1"/>
+            <line x1="307" y1="20" x2="307" y2="175" stroke="rgba(255,255,255,0.055)" stroke-width="1"/>
+            <line x1="440" y1="20" x2="440" y2="175" stroke="rgba(255,255,255,0.055)" stroke-width="1"/>
+            <!-- grid horizontals (dashed) -->
+            <line x1="40" y1="175" x2="440" y2="175" stroke="rgba(255,255,255,0.1)"  stroke-width="1"/>
+            <line x1="40" y1="128" x2="440" y2="128" stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+            <line x1="40" y1="80"  x2="440" y2="80"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+            <line x1="40" y1="30"  x2="440" y2="30"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+            <!-- x-axis labels -->
+            <text x="40"  y="193" fill="rgba(255,255,255,0.32)" font-size="11.5" text-anchor="middle" font-family="Inter,sans-serif">Jan</text>
+            <text x="173" y="193" fill="rgba(255,255,255,0.32)" font-size="11.5" text-anchor="middle" font-family="Inter,sans-serif">Feb</text>
+            <text x="307" y="193" fill="rgba(255,255,255,0.32)" font-size="11.5" text-anchor="middle" font-family="Inter,sans-serif">Mar</text>
+            <text x="440" y="193" fill="rgba(255,255,255,0.32)" font-size="11.5" text-anchor="middle" font-family="Inter,sans-serif">Apr</text>
+
+            <!-- TOP FUNNEL cost
+                 2025: 1400,1300,1600,1750  y: 143,143,128,124→ scale /6000*140 → 32.7,30.3,37.3,40.8 → 175-=142.3,144.7,137.7,134.2
+                 2026: 1800,1650,2000,2200  y: scale /6000*140 → 42,38.5,46.7,51.3 → 133,136.5,128.3,123.7 -->
+            <polyline points="40,142 173,145 307,138 440,134"
+              fill="none" stroke="rgba(212,168,67,0.32)" stroke-width="1.5" stroke-dasharray="5,3.5"/>
+            <polyline points="40,133 173,137 307,128 440,124"
+              fill="none" stroke="#d4a843" stroke-width="2.5"/>
+            <circle cx="40"  cy="133" r="3.5" fill="#d4a843" stroke="#07101e" stroke-width="1.5"/>
+            <circle cx="173" cy="137" r="3.5" fill="#d4a843" stroke="#07101e" stroke-width="1.5"/>
+            <circle cx="307" cy="128" r="3.5" fill="#d4a843" stroke="#07101e" stroke-width="1.5"/>
+            <circle cx="440" cy="124" r="3.5" fill="#d4a843" stroke="#07101e" stroke-width="1.5"/>
+
+            <!-- MID FUNNEL cost
+                 2025: 3900,3600,4200,4600  y: 91,84,98,107.3 → 84,91,77,67.7
+                 2026: 4800,4400,5200,5800  y: 112,102.7,121.3,135.3 → 63,72.3,53.7,39.7 -->
+            <polyline points="40,84 173,91 307,77 440,68"
+              fill="none" stroke="rgba(124,185,232,0.32)" stroke-width="1.5" stroke-dasharray="5,3.5"/>
+            <polyline points="40,63 173,72 307,54 440,40"
+              fill="none" stroke="#7cb9e8" stroke-width="2.5"/>
+            <circle cx="40"  cy="63" r="3.5" fill="#7cb9e8" stroke="#07101e" stroke-width="1.5"/>
+            <circle cx="173" cy="72" r="3.5" fill="#7cb9e8" stroke="#07101e" stroke-width="1.5"/>
+            <circle cx="307" cy="54" r="3.5" fill="#7cb9e8" stroke="#07101e" stroke-width="1.5"/>
+            <circle cx="440" cy="40" r="3.5" fill="#7cb9e8" stroke="#07101e" stroke-width="1.5"/>
+
+            <!-- BOTTOM FUNNEL cost
+                 2025: 2600,2400,2800,3100  y: 60.7,56,65.3,72.3 → 114.3,119,109.7,102.7
+                 2026: 3200,2900,3400,3867  y: 74.7,67.7,79.3,90.2 → 100.3,107.3,95.7,84.8 -->
+            <polyline points="40,114 173,119 307,110 440,103"
+              fill="none" stroke="rgba(152,212,163,0.32)" stroke-width="1.5" stroke-dasharray="5,3.5"/>
+            <polyline points="40,100 173,107 307,96 440,85"
+              fill="none" stroke="#98d4a3" stroke-width="2.5"/>
+            <circle cx="40"  cy="100" r="3.5" fill="#98d4a3" stroke="#07101e" stroke-width="1.5"/>
+            <circle cx="173" cy="107" r="3.5" fill="#98d4a3" stroke="#07101e" stroke-width="1.5"/>
+            <circle cx="307" cy="96"  r="3.5" fill="#98d4a3" stroke="#07101e" stroke-width="1.5"/>
+            <circle cx="440" cy="85"  r="3.5" fill="#98d4a3" stroke="#07101e" stroke-width="1.5"/>
+
+            <!-- chart legend -->
+            <line x1="340" y1="198" x2="360" y2="198" stroke="rgba(255,255,255,0.48)" stroke-width="2"/>
+            <text x="363" y="202" fill="rgba(255,255,255,0.48)" font-size="10.5" font-family="Inter,sans-serif">2026</text>
+            <line x1="396" y1="198" x2="416" y2="198" stroke="rgba(255,255,255,0.28)" stroke-width="1.5" stroke-dasharray="4,3"/>
+            <text x="419" y="202" fill="rgba(255,255,255,0.28)" font-size="10.5" font-family="Inter,sans-serif">2025</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">03 / 08</div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 4 · FUNNEL REVENUE
+══════════════════════════════════════ -->
+<section class="slide" id="s4">
+  <div class="glow" style="top:-70px;right:-70px;width:300px;height:300px;background:radial-gradient(circle, rgba(124,185,232,0.07), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Funnel Performance · YTD 2026 vs 2025</div>
+      <h2 class="slide-title anim d2">Revenue by Funnel Stage</h2>
+    </div>
+
+    <div class="slide-content">
+      <div class="two-col">
+        <!-- Legend + stats -->
+        <div class="legend-list">
+          <div class="anim d2">
+            <div class="legend-dot-row">
+              <div class="legend-dot" style="background:var(--gold)"></div>
+              <div class="legend-name">Top of Funnel</div>
+            </div>
+            <div class="legend-stats">
+              <div class="ls-row"><span>YTD 2026</span><span class="ls-val">$75,000</span></div>
+              <div class="ls-row"><span>YTD 2025</span><span class="ls-val">$60,000</span></div>
+              <div class="ls-row"><span>Growth</span><span class="ls-val good">+25.0%</span></div>
+            </div>
+          </div>
+          <div class="anim d3">
+            <div class="legend-dot-row">
+              <div class="legend-dot" style="background:var(--blue)"></div>
+              <div class="legend-name">Mid Funnel</div>
+            </div>
+            <div class="legend-stats">
+              <div class="ls-row"><span>YTD 2026</span><span class="ls-val">$344,000</span></div>
+              <div class="ls-row"><span>YTD 2025</span><span class="ls-val">$272,000</span></div>
+              <div class="ls-row"><span>Growth</span><span class="ls-val good">+26.5%</span></div>
+            </div>
+          </div>
+          <div class="anim d4">
+            <div class="legend-dot-row">
+              <div class="legend-dot" style="background:var(--green)"></div>
+              <div class="legend-name">Bottom Funnel</div>
+            </div>
+            <div class="legend-stats">
+              <div class="ls-row"><span>YTD 2026</span><span class="ls-val">$206,460</span></div>
+              <div class="ls-row"><span>YTD 2025</span><span class="ls-val">$167,000</span></div>
+              <div class="ls-row"><span>Growth</span><span class="ls-val good">+23.6%</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SVG line chart — Revenue (scale max 105000)
+             Top 2025: 14K,12K,16K,18K → /105000*140: 18.7,16,21.3,24 → y: 156.3,159,153.7,151
+             Top 2026: 18K,15K,20K,22K → 24,20,26.7,29.3 → y: 151,155,148.3,145.7
+             Mid 2025: 64K,58K,72K,78K → 85.3,77.3,96,104 → y: 89.7,97.7,79,71
+             Mid 2026: 82K,74K,90K,98K → 109.3,98.7,120,130.7 → y: 65.7,76.3,55,44.3
+             Bot 2025: 38K,32K,42K,55K → 50.7,42.7,56,73.3 → y: 124.3,132.3,119,101.7
+             Bot 2026: 48K,41K,52K,65.46K → 64,54.7,69.3,87.3 → y: 111,120.3,105.7,87.7 -->
+        <div class="chart-wrap anim d3">
+          <svg viewBox="0 0 480 205" xmlns="http://www.w3.org/2000/svg" style="overflow:visible">
+            <line x1="40"  y1="20" x2="40"  y2="175" stroke="rgba(255,255,255,0.055)" stroke-width="1"/>
+            <line x1="173" y1="20" x2="173" y2="175" stroke="rgba(255,255,255,0.055)" stroke-width="1"/>
+            <line x1="307" y1="20" x2="307" y2="175" stroke="rgba(255,255,255,0.055)" stroke-width="1"/>
+            <line x1="440" y1="20" x2="440" y2="175" stroke="rgba(255,255,255,0.055)" stroke-width="1"/>
+            <line x1="40" y1="175" x2="440" y2="175" stroke="rgba(255,255,255,0.1)"  stroke-width="1"/>
+            <line x1="40" y1="128" x2="440" y2="128" stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+            <line x1="40" y1="80"  x2="440" y2="80"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+            <line x1="40" y1="30"  x2="440" y2="30"  stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="4,4"/>
+            <text x="40"  y="193" fill="rgba(255,255,255,0.32)" font-size="11.5" text-anchor="middle" font-family="Inter,sans-serif">Jan</text>
+            <text x="173" y="193" fill="rgba(255,255,255,0.32)" font-size="11.5" text-anchor="middle" font-family="Inter,sans-serif">Feb</text>
+            <text x="307" y="193" fill="rgba(255,255,255,0.32)" font-size="11.5" text-anchor="middle" font-family="Inter,sans-serif">Mar</text>
+            <text x="440" y="193" fill="rgba(255,255,255,0.32)" font-size="11.5" text-anchor="middle" font-family="Inter,sans-serif">Apr</text>
+
+            <!-- TOP FUNNEL revenue -->
+            <polyline points="40,156 173,159 307,154 440,151"
+              fill="none" stroke="rgba(212,168,67,0.32)" stroke-width="1.5" stroke-dasharray="5,3.5"/>
+            <polyline points="40,151 173,155 307,148 440,146"
+              fill="none" stroke="#d4a843" stroke-width="2.5"/>
+            <circle cx="40"  cy="151" r="3.5" fill="#d4a843" stroke="#06101e" stroke-width="1.5"/>
+            <circle cx="173" cy="155" r="3.5" fill="#d4a843" stroke="#06101e" stroke-width="1.5"/>
+            <circle cx="307" cy="148" r="3.5" fill="#d4a843" stroke="#06101e" stroke-width="1.5"/>
+            <circle cx="440" cy="146" r="3.5" fill="#d4a843" stroke="#06101e" stroke-width="1.5"/>
+
+            <!-- MID FUNNEL revenue -->
+            <polyline points="40,90 173,98 307,79 440,71"
+              fill="none" stroke="rgba(124,185,232,0.32)" stroke-width="1.5" stroke-dasharray="5,3.5"/>
+            <polyline points="40,66 173,76 307,55 440,44"
+              fill="none" stroke="#7cb9e8" stroke-width="2.5"/>
+            <circle cx="40"  cy="66" r="3.5" fill="#7cb9e8" stroke="#06101e" stroke-width="1.5"/>
+            <circle cx="173" cy="76" r="3.5" fill="#7cb9e8" stroke="#06101e" stroke-width="1.5"/>
+            <circle cx="307" cy="55" r="3.5" fill="#7cb9e8" stroke="#06101e" stroke-width="1.5"/>
+            <circle cx="440" cy="44" r="3.5" fill="#7cb9e8" stroke="#06101e" stroke-width="1.5"/>
+
+            <!-- BOTTOM FUNNEL revenue -->
+            <polyline points="40,124 173,132 307,119 440,102"
+              fill="none" stroke="rgba(152,212,163,0.32)" stroke-width="1.5" stroke-dasharray="5,3.5"/>
+            <polyline points="40,111 173,120 307,106 440,88"
+              fill="none" stroke="#98d4a3" stroke-width="2.5"/>
+            <circle cx="40"  cy="111" r="3.5" fill="#98d4a3" stroke="#06101e" stroke-width="1.5"/>
+            <circle cx="173" cy="120" r="3.5" fill="#98d4a3" stroke="#06101e" stroke-width="1.5"/>
+            <circle cx="307" cy="106" r="3.5" fill="#98d4a3" stroke="#06101e" stroke-width="1.5"/>
+            <circle cx="440" cy="88"  r="3.5" fill="#98d4a3" stroke="#06101e" stroke-width="1.5"/>
+
+            <!-- chart legend -->
+            <line x1="340" y1="198" x2="360" y2="198" stroke="rgba(255,255,255,0.48)" stroke-width="2"/>
+            <text x="363" y="202" fill="rgba(255,255,255,0.48)" font-size="10.5" font-family="Inter,sans-serif">2026</text>
+            <line x1="396" y1="198" x2="416" y2="198" stroke="rgba(255,255,255,0.28)" stroke-width="1.5" stroke-dasharray="4,3"/>
+            <text x="419" y="202" fill="rgba(255,255,255,0.28)" font-size="10.5" font-family="Inter,sans-serif">2025</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">04 / 08</div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 5 · SEM PERFORMANCE
+══════════════════════════════════════ -->
+<section class="slide" id="s5">
+  <div class="glow" style="top:-55px;left:-55px;width:280px;height:280px;background:radial-gradient(circle, rgba(212,168,67,0.06), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Google Ads · April 2026</div>
+      <h2 class="slide-title anim d2">SEM Performance</h2>
+    </div>
+
+    <div class="slide-content">
+      <table class="perf-table anim d3">
+        <thead>
+          <tr>
+            <th>Campaign</th>
+            <th>Spend</th>
+            <th>Revenue</th>
+            <th>ROAS</th>
+            <th>Impressions</th>
+            <th>CTR</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>PMAX Brady Hotels Group<span class="ftag ftag-mid">Mid</span></td>
+            <td>$3,420</td><td>$54,200</td><td>15.8×</td><td>284K</td><td>2.1%</td>
+          </tr>
+          <tr>
+            <td>Brand Search — All Properties<span class="ftag ftag-bot">Bottom</span></td>
+            <td>$2,190</td><td>$41,800</td><td>19.1×</td><td>98K</td><td>4.8%</td>
+          </tr>
+          <tr>
+            <td>Generic Hotel Search<span class="ftag ftag-mid">Mid</span></td>
+            <td>$1,840</td><td>$22,400</td><td>12.2×</td><td>186K</td><td>1.6%</td>
+          </tr>
+          <tr>
+            <td>PMAX Property Campaigns<span class="ftag ftag-top">Top</span></td>
+            <td>$1,280</td><td>$18,940</td><td>14.8×</td><td>198K</td><td>1.4%</td>
+          </tr>
+          <tr>
+            <td>Retargeting Search<span class="ftag ftag-bot">Bottom</span></td>
+            <td>$610</td><td>$9,200</td><td>15.1×</td><td>52K</td><td>3.2%</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td style="color:var(--gold-l)">Google Ads Total</td>
+            <td style="color:var(--gold-l)">$9,340</td>
+            <td style="color:var(--gold-l)">$146,540</td>
+            <td style="color:var(--gold-l)">15.7×</td>
+            <td style="color:var(--gold-l)">818K</td>
+            <td style="color:var(--gold-l)">2.0%</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="slide-num">05 / 08</div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 6 · SOCIAL PERFORMANCE
+══════════════════════════════════════ -->
+<section class="slide" id="s6">
+  <div class="glow" style="bottom:-55px;right:-55px;width:280px;height:280px;background:radial-gradient(circle, rgba(124,185,232,0.07), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Meta Ads · April 2026</div>
+      <h2 class="slide-title anim d2">Social Performance</h2>
+    </div>
+
+    <div class="slide-content">
+      <table class="perf-table anim d3">
+        <thead>
+          <tr>
+            <th>Campaign</th>
+            <th>Spend</th>
+            <th>Impressions</th>
+            <th>Clicks</th>
+            <th>CTR</th>
+            <th>CPC</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>FB Sales — Brady Hotels<span class="ftag ftag-bot">Bottom</span></td>
+            <td>$980</td><td>28,400</td><td>820</td><td>2.9%</td><td>$1.20</td>
+          </tr>
+          <tr>
+            <td>FB Traffic — Property Pages<span class="ftag ftag-mid">Mid</span></td>
+            <td>$760</td><td>42,100</td><td>1,240</td><td>2.9%</td><td>$0.61</td>
+          </tr>
+          <tr>
+            <td>FB Awareness — Brand<span class="ftag ftag-top">Top</span></td>
+            <td>$520</td><td>62,500</td><td>940</td><td>1.5%</td><td>$0.55</td>
+          </tr>
+          <tr>
+            <td>FB Leads — Hotel Packages<span class="ftag ftag-mid">Mid</span></td>
+            <td>$267</td><td>14,200</td><td>435</td><td>3.1%</td><td>$0.61</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td style="color:var(--blue)">Meta Ads Total</td>
+            <td style="color:var(--blue)">$2,527</td>
+            <td style="color:var(--blue)">147,200</td>
+            <td style="color:var(--blue)">3,435</td>
+            <td style="color:var(--blue)">2.3%</td>
+            <td style="color:var(--blue)">$0.74</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="note-box anim d5" style="border-color:var(--blue);color:rgba(255,255,255,0.45);">
+        <strong style="color:rgba(255,255,255,0.72)">Note:</strong>
+        Facebook revenue attribution via cross-channel modelling. Direct last-click ROAS of 1.8× understates impact — assisted conversions are reflected in the Google total.
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">06 / 08</div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 7 · KEY WINS
+══════════════════════════════════════ -->
+<section class="slide" id="s7">
+  <div class="glow" style="top:-80px;left:50%;transform:translateX(-50%);width:480px;height:480px;background:radial-gradient(circle, rgba(212,168,67,0.05), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">April 2026</div>
+      <h2 class="slide-title anim d2">Key Wins</h2>
+    </div>
+
+    <div class="slide-content">
+      <div class="wins-grid">
+        <div class="win-card anim d2">
+          <div class="win-big-num">01</div>
+          <div class="win-icon">📈</div>
+          <div class="win-title">ROAS Improvement</div>
+          <div class="win-desc">Overall ROAS grew from 14.2× (April 2025) to 15.6× — a 9.9% efficiency gain driven by Brand Search optimisation and PMAX asset refresh.</div>
+          <div class="win-metric">+9.9% ROAS vs. same period</div>
+        </div>
+        <div class="win-card anim d3">
+          <div class="win-big-num">02</div>
+          <div class="win-icon">🏆</div>
+          <div class="win-title">Brand Search Dominance</div>
+          <div class="win-desc">Brand Search campaigns delivered 19.1× ROAS — best performance across all campaign types. Impression share held at 98%.</div>
+          <div class="win-metric">19.1× ROAS · 98% Imp. Share</div>
+        </div>
+        <div class="win-card anim d4">
+          <div class="win-big-num">03</div>
+          <div class="win-icon">🚀</div>
+          <div class="win-title">PMAX Scaling Success</div>
+          <div class="win-desc">PMAX Brady Hotels Group drove $54.2K revenue at 15.8× ROAS — highest absolute revenue contribution, up 28% vs last April.</div>
+          <div class="win-metric">$54,200 revenue · +28% YoY</div>
+        </div>
+        <div class="win-card anim d5">
+          <div class="win-big-num">04</div>
+          <div class="win-icon">💰</div>
+          <div class="win-title">Revenue Record Month</div>
+          <div class="win-desc">April 2026 set a new monthly revenue record at $185,460 — surpassing April 2025 by +22.8% and March 2026 by +14.5%.</div>
+          <div class="win-metric">$185,460 · New Monthly Record</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">07 / 08</div>
+</section>
+
+<!-- ══════════════════════════════════════
+     SLIDE 8 · RECOMMENDATIONS
+══════════════════════════════════════ -->
+<section class="slide" id="s8">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div class="glow" style="top:-90px;left:-70px;width:340px;height:340px;background:radial-gradient(circle, rgba(212,168,67,0.09), transparent 70%);"></div>
+  <div class="glow" style="bottom:-90px;right:-70px;width:340px;height:340px;background:radial-gradient(circle, rgba(124,185,232,0.07), transparent 70%);"></div>
+
+  <div class="steps-wrap" style="z-index:2;">
+    <div class="slide-header" style="margin-bottom:var(--gap);">
+      <div class="slide-eyebrow anim d1">Looking Ahead · May 2026</div>
+      <h2 class="slide-title anim d2">Recommendations</h2>
+    </div>
+
+    <div class="steps-list">
+      <div class="step-row anim d2">
+        <div class="step-num">01</div>
+        <div>
+          <div class="step-title">Scale PMAX Budgets</div>
+          <div class="step-desc">Increase PMAX Brady Hotels Group budget by 15–20% heading into May peak season. Current efficiency headroom supports scaling without ROAS degradation.</div>
+        </div>
+      </div>
+      <div class="step-row anim d3">
+        <div class="step-num">02</div>
+        <div>
+          <div class="step-title">Launch Facebook A/B Creative Test</div>
+          <div class="step-desc">Test lifestyle imagery (pool/dining) vs room-feature assets on FB Sales campaigns. Current CTR of 2.9% has headroom to reach 3.5%+ with refreshed creative.</div>
+        </div>
+      </div>
+      <div class="step-row anim d4">
+        <div class="step-num">03</div>
+        <div>
+          <div class="step-title">Expand Mid-Funnel Keywords</div>
+          <div class="step-desc">Add "boutique hotel [city]" and "hotel deals [month]" themes to Generic Search. Mid-funnel data shows 12.2× ROAS — scalable with keyword expansion.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-row anim d6">
+      <div>
+        <div class="footer-label">Prepared by</div>
+        <div class="footer-value">Dijitally Agency</div>
+      </div>
+      <div style="text-align:right">
+        <div class="footer-label">Report Date</div>
+        <div class="footer-value">April 2026</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">08 / 08</div>
+</section>
+
+<!-- ══════════════════════════════════════
+     JAVASCRIPT CONTROLLER
+══════════════════════════════════════ -->
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl = document.getElementById('nav-dots');
+  const progressEl = document.getElementById('progress-bar');
+  const total = slides.length;
+  let current = 0;
+
+  // Build nav dots
+  slides.forEach((_, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    btn.setAttribute('aria-label', 'Slide ' + (i + 1));
+    btn.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(btn);
+  });
+
+  function goTo(idx) {
+    current = Math.max(0, Math.min(idx, total - 1));
+    slides[current].scrollIntoView({ behavior: 'smooth' });
+    sync();
+  }
+
+  function sync() {
+    document.querySelectorAll('.nav-dot').forEach((d, i) =>
+      d.classList.toggle('active', i === current));
+    progressEl.style.width = ((current + 1) / total * 100) + '%';
+  }
+
+  // IntersectionObserver — detect visible slide & trigger animations
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio >= 0.45) {
+        const i = slides.indexOf(e.target);
+        current = i;
+        sync();
+        e.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.45 });
+
+  slides.forEach(s => io.observe(s));
+
+  // Keyboard nav
+  document.addEventListener('keydown', e => {
+    const map = {
+      ArrowDown: 1, ArrowRight: 1, ' ': 1, PageDown: 1,
+      ArrowUp: -1, ArrowLeft: -1, PageUp: -1
+    };
+    if (e.key in map) { e.preventDefault(); goTo(current + map[e.key]); }
+    else if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    else if (e.key === 'End')  { e.preventDefault(); goTo(total - 1); }
+  });
+
+  // Touch / swipe
+  let ty = 0, tx = 0;
+  document.addEventListener('touchstart', e => {
+    ty = e.touches[0].clientY;
+    tx = e.touches[0].clientX;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dy = ty - e.changedTouches[0].clientY;
+    const dx = tx - e.changedTouches[0].clientX;
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50)
+      goTo(current + (dy > 0 ? 1 : -1));
+  }, { passive: true });
+
+  // Init: make first slide visible immediately
+  slides[0].classList.add('visible');
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brady Hotels × Dijitally — High-Level Performance Report April 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow-x: hidden; }
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+
+    :root {
+      --navy: #11192E; --navy-2: #1A2342;
+      --black: #000000; --white: #FFFFFF;
+      --text: #11192E; --text-muted: #5A6377; --text-light: #8C93A4;
+      --line: #E5E7EB; --line-soft: #F0F2F5; --bg-soft: #F7F8FA;
+
+      --grad-1: #E84B3C; --grad-2: #C2358F; --grad-3: #5E3FBE; --grad-4: #2B6FE0; --grad-5: #5DC8C5;
+      --grad-bar-v: linear-gradient(180deg, #E84B3C 0%, #C2358F 25%, #5E3FBE 50%, #2B6FE0 75%, #5DC8C5 100%);
+      --grad-bar-h: linear-gradient(90deg,  #E84B3C 0%, #C2358F 25%, #5E3FBE 50%, #2B6FE0 75%, #5DC8C5 100%);
+
+      --ch-sem: #2B6FE0; --ch-meta: #5DC8C5; --ch-social: #C2358F; --ch-action: #1B7A3E;
+      --ch-sem-l: #5A93EE; --ch-meta-l: #82D4D2; --ch-social-l: #D766AC;
+
+      --pos: #1B7A3E; --pos-l: #2DA655; --neg: #DC2626; --neg-l: #EF4444; --neutral: #6B7280;
+
+      --font-display: 'Syne', system-ui, sans-serif;
+      --font-body: 'Manrope', system-ui, sans-serif;
+
+      --fs-display: clamp(2rem, 5vw, 3.8rem);
+      --fs-h1: clamp(1.4rem, 3.2vw, 2.4rem);
+      --fs-h2: clamp(1.1rem, 2.4vw, 1.8rem);
+      --fs-h3: clamp(0.9rem, 1.7vw, 1.2rem);
+      --fs-body: clamp(0.72rem, 1.2vw, 0.92rem);
+      --fs-small: clamp(0.62rem, 0.95vw, 0.76rem);
+      --fs-label: clamp(0.56rem, 0.8vw, 0.68rem);
+
+      --pad: clamp(1.4rem, 3.5vw, 3.5rem);
+      --gap: clamp(0.6rem, 1.4vw, 1.4rem);
+      --gap-sm: clamp(0.3rem, 0.7vw, 0.7rem);
+    }
+
+    .slide {
+      width: 100vw; height: 100vh; height: 100dvh;
+      overflow: hidden;
+      scroll-snap-align: start;
+      display: flex; flex-direction: column;
+      position: relative;
+      background: var(--white);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-weight: 400;
+    }
+    .slide::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 12px;
+      background: var(--grad-bar-v);
+      z-index: 5; pointer-events: none;
+    }
+    .slide.section-divider, .slide#s1 {
+      background: var(--navy); color: var(--white);
+    }
+    .slide.section-divider::before, .slide#s1::before {
+      width: 100%; height: 6px; bottom: auto;
+      background: var(--grad-bar-h);
+    }
+
+    #nav-dots {
+      position: fixed; right: clamp(0.5rem, 1.4vw, 1.4rem); top: 50%;
+      transform: translateY(-50%);
+      display: flex; flex-direction: column;
+      gap: 0.4rem; z-index: 200;
+      max-height: 70vh; padding: 0.5rem 0.3rem;
+    }
+    .nav-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: rgba(17,25,46,0.20);
+      cursor: pointer; transition: all 0.3s ease;
+      border: none; padding: 0; flex-shrink: 0;
+    }
+    .nav-dot.active { background: var(--navy); transform: scale(1.6); }
+    .nav-dot:hover { background: rgba(17,25,46,0.6); }
+
+    #progress-bar {
+      position: fixed; top: 0; left: 0; height: 3px;
+      background: var(--grad-bar-h);
+      z-index: 200; transition: width 0.4s ease;
+    }
+
+    .slide-num {
+      position: absolute;
+      bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      left: 50%; transform: translateX(-50%);
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      color: var(--text-light);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.06em; z-index: 6;
+    }
+    .slide.section-divider .slide-num, .slide#s1 .slide-num {
+      color: rgba(255,255,255,0.40);
+    }
+    .slide::after {
+      content: 'DIJITALLY';
+      position: absolute;
+      bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      left: clamp(1.6rem, 3.4vw, 3.4rem);
+      font-family: var(--font-display);
+      font-size: var(--fs-label);
+      font-weight: 700; letter-spacing: 0.18em;
+      color: var(--text); z-index: 6; pointer-events: none;
+    }
+    .slide.section-divider::after, .slide#s1::after { color: var(--white); }
+    .slide-tail {
+      position: absolute;
+      bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      right: clamp(1.4rem, 3vw, 3rem);
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      color: var(--text-muted); letter-spacing: 0.04em;
+      z-index: 6; pointer-events: none;
+    }
+    .slide.section-divider .slide-tail, .slide#s1 .slide-tail {
+      color: rgba(255,255,255,0.55);
+    }
+
+    .section-tag {
+      position: absolute;
+      top: clamp(0.7rem, 1.4vw, 1.4rem);
+      right: clamp(1.2rem, 2.4vw, 2.8rem);
+      font-size: var(--fs-label);
+      letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--text-muted); font-weight: 600;
+      font-family: var(--font-body);
+    }
+    .section-tag.sem { color: var(--ch-sem); }
+    .section-tag.meta { color: var(--ch-meta); }
+    .section-tag.social { color: var(--ch-social); }
+    .section-tag.action { color: var(--ch-action); }
+
+    .slide-eyebrow {
+      font-family: var(--font-body);
+      font-size: var(--fs-label);
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--ch-meta); font-weight: 600;
+      margin-bottom: 0.45rem;
+    }
+    .slide-eyebrow.sem { color: var(--ch-sem); }
+    .slide-eyebrow.meta { color: var(--ch-meta); }
+    .slide-eyebrow.social { color: var(--ch-social); }
+    .slide-eyebrow.action { color: var(--ch-action); }
+
+    .slide-title {
+      font-family: var(--font-display);
+      font-size: var(--fs-h1);
+      font-weight: 700; line-height: 1.15;
+      color: var(--text); letter-spacing: -0.01em;
+    }
+    .slide.section-divider .slide-title, .slide#s1 .slide-title {
+      color: var(--white);
+    }
+
+    .slide-header { margin-bottom: var(--gap); flex-shrink: 0; }
+    .slide-inner {
+      flex: 1; display: flex; flex-direction: column;
+      padding: var(--pad);
+      padding-left: calc(var(--pad) + 0.6rem);
+      padding-bottom: clamp(2.2rem, 4vw, 4rem);
+      overflow: hidden;
+    }
+    .slide-content {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: center;
+      overflow: hidden; min-height: 0;
+    }
+
+    .anim {
+      opacity: 0; transform: translateY(14px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .slide.visible .anim { opacity: 1; transform: translateY(0); }
+    .d1 { transition-delay: 0.08s !important; }
+    .d2 { transition-delay: 0.16s !important; }
+    .d3 { transition-delay: 0.24s !important; }
+    .d4 { transition-delay: 0.32s !important; }
+    .d5 { transition-delay: 0.40s !important; }
+    .d6 { transition-delay: 0.48s !important; }
+
+    /* COVER */
+    #s1 {
+      background: linear-gradient(140deg, #0d1428 0%, #11192E 50%, #0a1224 100%);
+      justify-content: center; align-items: center; text-align: center;
+    }
+    .cover-eyebrow {
+      font-size: var(--fs-label); letter-spacing: 0.32em;
+      text-transform: uppercase; color: var(--grad-5);
+      font-weight: 600; margin-bottom: clamp(0.5rem, 1.5vw, 1.5rem);
+    }
+    .cover-title {
+      font-family: var(--font-display);
+      font-size: var(--fs-display); font-weight: 700;
+      line-height: 1.04; letter-spacing: -0.015em;
+      color: var(--white); margin-bottom: 0.3em;
+    }
+    .cover-sub {
+      font-family: var(--font-body);
+      font-size: clamp(1rem, 2.4vw, 1.7rem);
+      font-weight: 400; color: rgba(255,255,255,0.78);
+      margin-bottom: clamp(1rem, 2.5vw, 2.5rem);
+      display: flex; align-items: center; justify-content: center;
+      gap: 0.6em;
+    }
+    .cover-sub::before {
+      content: '//'; color: var(--grad-5);
+      font-weight: 700; font-family: var(--font-display);
+    }
+    .cover-divider {
+      width: 80px; height: 2px;
+      background: var(--grad-bar-h);
+      margin: 0 auto clamp(1rem, 2vw, 2rem);
+      border-radius: 1px;
+    }
+    .cover-meta { display: flex; justify-content: center; gap: clamp(1rem, 3vw, 3rem); }
+    .cover-meta-label {
+      font-size: var(--fs-label); letter-spacing: 0.18em;
+      text-transform: uppercase; color: rgba(255,255,255,0.50);
+      margin-bottom: 0.3rem; font-weight: 600;
+    }
+    .cover-meta-value {
+      font-size: var(--fs-small); color: rgba(255,255,255,0.88);
+      font-weight: 500;
+    }
+    .bracket {
+      position: absolute; width: 44px; height: 44px;
+      border-color: rgba(255,255,255,0.35); border-style: solid;
+    }
+    .bracket.tl { top: 1.6rem; left: 1.6rem; border-width: 1px 0 0 1px; }
+    .bracket.br { bottom: 1.6rem; right: 1.6rem; border-width: 0 1px 1px 0; }
+
+    /* SECTION DIVIDERS */
+    .section-divider {
+      background: linear-gradient(135deg, #0d1428 0%, #11192E 55%, #0a1224 100%);
+      justify-content: center; align-items: center; text-align: center;
+    }
+    .sd-num {
+      font-family: var(--font-display);
+      font-size: clamp(4rem, 12vw, 10rem);
+      font-weight: 800;
+      color: rgba(255,255,255,0.06);
+      line-height: 0.9; margin-bottom: 0.2em;
+      letter-spacing: -0.02em;
+    }
+    .sd-eyebrow {
+      font-family: var(--font-body);
+      font-size: var(--fs-label); letter-spacing: 0.32em;
+      text-transform: uppercase; color: var(--grad-5);
+      font-weight: 600; margin-bottom: 0.7rem;
+    }
+    .sd-eyebrow.sem { color: var(--grad-4); }
+    .sd-eyebrow.meta { color: var(--grad-5); }
+    .sd-eyebrow.social { color: var(--grad-2); }
+    .sd-eyebrow.action { color: var(--pos-l); }
+    .sd-title {
+      font-family: var(--font-display);
+      font-size: var(--fs-display); font-weight: 700;
+      line-height: 1.04; margin-bottom: 0.8rem;
+      color: var(--white); letter-spacing: -0.015em;
+    }
+    .sd-sub {
+      font-family: var(--font-body); font-size: var(--fs-body);
+      color: rgba(255,255,255,0.62); max-width: 580px;
+      margin: 0 auto; line-height: 1.6;
+    }
+
+    /* TOC */
+    .toc-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--gap); flex: 1; align-content: center;
+    }
+    .toc-card {
+      background: var(--bg-soft); border: 1px solid var(--line);
+      border-radius: 10px; padding: var(--gap);
+      position: relative; overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .toc-card::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: var(--ch-sem);
+    }
+    .toc-card.meta::before { background: var(--ch-meta); }
+    .toc-card.social::before { background: var(--ch-social); }
+    .toc-card.action::before { background: var(--ch-action); }
+    .toc-num {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 3vw, 2.4rem);
+      font-weight: 700;
+      color: rgba(43,111,224,0.18);
+      line-height: 1; margin-bottom: 0.4rem;
+    }
+    .toc-card.meta .toc-num { color: rgba(93,200,197,0.32); }
+    .toc-card.social .toc-num { color: rgba(194,53,143,0.22); }
+    .toc-card.action .toc-num { color: rgba(27,122,62,0.22); }
+    .toc-title {
+      font-family: var(--font-display); font-size: var(--fs-h3);
+      font-weight: 700; margin-bottom: 0.5rem; color: var(--text);
+    }
+    .toc-list {
+      list-style: none; font-size: var(--fs-small);
+      color: var(--text-muted); line-height: 1.7;
+    }
+    .toc-list li::before { content: '— '; color: var(--text-light); }
+
+    /* DATA TABLE */
+    .dt {
+      width: 100%; border-collapse: collapse;
+      font-size: var(--fs-small); font-family: var(--font-body);
+    }
+    .dt thead tr { border-bottom: 1px solid var(--line); }
+    .dt th {
+      padding: 0.55rem 0.7rem; text-align: right;
+      font-size: var(--fs-label); letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--text-light);
+      font-weight: 500; white-space: nowrap;
+    }
+    .dt th:first-child { text-align: left; }
+    .dt td {
+      padding: 0.5rem 0.7rem; text-align: right;
+      border-bottom: 1px solid var(--line-soft);
+      color: var(--text); white-space: nowrap;
+      font-variant-numeric: tabular-nums; font-weight: 500;
+    }
+    .dt td:first-child {
+      text-align: left; font-weight: 500;
+      max-width: 220px; white-space: normal;
+    }
+    .dt tfoot td {
+      border-bottom: none; border-top: 1px solid var(--line);
+      font-weight: 700; padding-top: 0.65rem;
+    }
+    .dt .pos { color: var(--pos); font-weight: 600; }
+    .dt .neg { color: var(--neg); font-weight: 600; }
+
+    .action-card {
+      background: var(--bg-soft); border-left: 3px solid var(--ch-sem);
+      border-radius: 0 6px 6px 0;
+      padding: 0.6rem var(--gap);
+      font-size: var(--fs-small); color: var(--text);
+      line-height: 1.55;
+    }
+    .action-card.meta { border-left-color: var(--ch-meta); }
+    .action-card.social { border-left-color: var(--ch-social); }
+    .action-card.action { border-left-color: var(--ch-action); }
+    .action-card strong { color: var(--text); font-weight: 700; }
+
+    /* CHART CARDS */
+    .chart-grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: var(--gap);
+      flex: 1;
+      align-items: stretch; min-height: 0;
+    }
+    .chart-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--gap);
+      flex: 1;
+      align-items: stretch; min-height: 0;
+    }
+    .chart-card {
+      background: var(--white); border: 1px solid var(--line);
+      border-radius: 10px; padding: var(--gap);
+      display: flex; flex-direction: column;
+      min-height: 0;
+    }
+    .chart-card .ch-title {
+      font-family: var(--font-display);
+      font-size: var(--fs-h3); font-weight: 700;
+      color: var(--text); margin-bottom: 0.2rem;
+      letter-spacing: -0.005em;
+    }
+    .chart-card .ch-sub {
+      font-size: var(--fs-label); letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--text-light);
+      font-weight: 600; margin-bottom: var(--gap-sm);
+    }
+    .chart-card.sem .ch-title { color: var(--ch-sem); }
+    .chart-card.meta .ch-title { color: var(--ch-meta); }
+    .chart-card.social .ch-title { color: var(--ch-social); }
+    .chart-card .ch-body {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: center; min-height: 0;
+    }
+
+    /* HORIZONTAL BAR CHART */
+    .hbar { display: flex; flex-direction: column; gap: 0.6rem; }
+    .hbar-row { font-size: var(--fs-small); }
+    .hbar-top {
+      display: flex; justify-content: space-between;
+      margin-bottom: 0.25rem;
+    }
+    .hbar-label {
+      font-weight: 600; color: var(--text);
+    }
+    .hbar-value {
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .hbar-track {
+      height: 8px; background: var(--line-soft);
+      border-radius: 4px; overflow: hidden; position: relative;
+    }
+    .hbar-fill {
+      height: 100%; border-radius: 4px;
+      transition: width 1s ease;
+    }
+    .hbar-fill.sem    { background: var(--ch-sem); }
+    .hbar-fill.meta   { background: var(--ch-meta); }
+    .hbar-fill.social { background: var(--ch-social); }
+    .hbar-fill.pos    { background: var(--pos); }
+    .hbar-fill.neg    { background: var(--neg); }
+    .hbar-fill.gradient { background: var(--grad-bar-h); }
+
+    .hbar-row.compact .hbar-label { font-weight: 500; font-size: var(--fs-label); }
+    .hbar-row.compact .hbar-value { font-size: var(--fs-label); }
+    .hbar-row.compact .hbar-track { height: 6px; }
+
+    /* WINNER / LOSER 2-col grid */
+    .wl-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--gap); flex: 1;
+    }
+    .wl-card {
+      background: var(--bg-soft); border-radius: 10px;
+      padding: var(--gap);
+      display: flex; flex-direction: column;
+      position: relative; overflow: hidden;
+      border-left: 4px solid var(--pos);
+    }
+    .wl-card.lose { border-left-color: var(--neg); }
+    .wl-card .wl-title {
+      font-family: var(--font-display); font-weight: 700;
+      font-size: var(--fs-h3); color: var(--text);
+      margin-bottom: 0.4rem;
+    }
+    .wl-card .wl-stat {
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 2.6vw, 2rem); font-weight: 700;
+      color: var(--pos); margin-bottom: 0.3rem;
+      letter-spacing: -0.01em;
+    }
+    .wl-card.lose .wl-stat { color: var(--neg); }
+    .wl-card .wl-list {
+      font-size: var(--fs-small); color: var(--text);
+      line-height: 1.6; list-style: none; flex: 1;
+    }
+    .wl-card .wl-list li {
+      padding: 0.25rem 0;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .wl-card .wl-list li:last-child { border-bottom: none; }
+    .wl-card .wl-list strong { color: var(--text); font-weight: 700; }
+
+    /* DONUT (funnel split) */
+    .funnel-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: var(--gap);
+    }
+    .funnel-card {
+      background: var(--bg-soft); border-radius: 10px;
+      padding: var(--gap);
+      border-top: 4px solid var(--ch-sem);
+      text-align: center;
+    }
+    .funnel-card.mid { border-top-color: var(--ch-meta); }
+    .funnel-card.bot { border-top-color: var(--ch-social); }
+    .funnel-card .fn-stage {
+      font-family: var(--font-body);
+      font-size: var(--fs-label); font-weight: 700;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--ch-sem); margin-bottom: 0.4rem;
+    }
+    .funnel-card.mid .fn-stage { color: var(--ch-meta); }
+    .funnel-card.bot .fn-stage { color: var(--ch-social); }
+    .funnel-card .fn-roas {
+      font-family: var(--font-display);
+      font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+      font-weight: 700; color: var(--text);
+      letter-spacing: -0.01em; margin-bottom: 0.3rem;
+    }
+    .funnel-card .fn-spend {
+      font-size: var(--fs-small); color: var(--text-muted);
+      margin-bottom: 0.6rem;
+    }
+    .funnel-card .fn-camp {
+      font-size: var(--fs-label); color: var(--text-muted);
+      line-height: 1.5; text-align: left;
+      padding: 0.4rem 0; border-top: 1px solid var(--line);
+    }
+    .funnel-card .fn-camp strong { color: var(--text); font-weight: 700; }
+
+    /* KPI strip */
+    .kpi-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: var(--gap-sm); margin-bottom: var(--gap);
+    }
+    .kpi-strip-card {
+      background: var(--bg-soft);
+      border-radius: 8px;
+      padding: 0.7rem var(--gap-sm);
+      border-top: 3px solid var(--ch-sem);
+    }
+    .kpi-strip-card.meta { border-top-color: var(--ch-meta); }
+    .kpi-strip-card.social { border-top-color: var(--ch-social); }
+    .kpi-strip-card .ks-label {
+      font-size: var(--fs-label); letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--text-light);
+      font-weight: 600; margin-bottom: 0.2rem;
+    }
+    .kpi-strip-card .ks-value {
+      font-family: var(--font-display);
+      font-size: clamp(1.1rem, 2vw, 1.6rem);
+      font-weight: 700; color: var(--text);
+      line-height: 1;
+    }
+    .kpi-strip-card .ks-value.pos { color: var(--pos); }
+
+    @media (max-height: 720px) {
+      :root {
+        --pad: clamp(0.9rem, 2.4vw, 2rem);
+        --gap: clamp(0.4rem, 1vw, 0.9rem);
+      }
+    }
+    @media (max-height: 600px) { #nav-dots { display: none; } }
+    @media (max-width: 760px) {
+      .toc-grid, .chart-grid-3, .chart-grid-2,
+      .funnel-grid, .wl-grid { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.15s !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div id="nav-dots"></div>
+<div id="progress-bar" style="width:4.3%"></div>
+
+<!-- ════ 1. COVER ════ -->
+<section class="slide" id="s1">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div style="z-index:2;padding:var(--pad);text-align:center">
+    <div class="cover-eyebrow anim d1">Dijitally × Brady Hotels</div>
+    <h1 class="cover-title anim d2">Performance<br>Report</h1>
+    <div class="cover-sub anim d3">April 2026 — Executive Summary</div>
+    <div class="cover-divider anim d4"></div>
+    <div class="cover-meta anim d5">
+      <div><div class="cover-meta-label">Period</div><div class="cover-meta-value">April 1–30, 2026</div></div>
+      <div><div class="cover-meta-label">Channels</div><div class="cover-meta-value">SEM · Metasearch · Social</div></div>
+      <div><div class="cover-meta-label">Properties</div><div class="cover-meta-value">4 Hotels + Group</div></div>
+    </div>
+  </div>
+  <div class="slide-num">01 / 23</div>
+</section>
+
+<!-- ════ 2. TOC ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Report Structure</div>
+      <h2 class="slide-title anim d2">At a Glance</h2>
+    </div>
+    <div class="slide-content">
+      <div class="toc-grid">
+        <div class="toc-card anim d2">
+          <div class="toc-num">01</div>
+          <div class="toc-title">Overview</div>
+          <ul class="toc-list">
+            <li>Hotel portfolio</li>
+            <li>Per-hotel results</li>
+            <li>Channel mix</li>
+          </ul>
+        </div>
+        <div class="toc-card anim d3">
+          <div class="toc-num">02</div>
+          <div class="toc-title">SEM</div>
+          <ul class="toc-list">
+            <li>Per hotel + Group</li>
+            <li>Performance breakdowns</li>
+            <li>Funnel strategy</li>
+            <li>Action plan</li>
+          </ul>
+        </div>
+        <div class="toc-card meta anim d4">
+          <div class="toc-num">03</div>
+          <div class="toc-title">Metasearch</div>
+          <ul class="toc-list">
+            <li>Per hotel</li>
+            <li>Channel mix</li>
+            <li>CPC action plan</li>
+          </ul>
+        </div>
+        <div class="toc-card social anim d5">
+          <div class="toc-num">04</div>
+          <div class="toc-title">Social</div>
+          <ul class="toc-list">
+            <li>Per hotel + Group</li>
+            <li>Audience &amp; placement</li>
+            <li>Funnel + Membership</li>
+            <li>Action plan</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-num">02 / 23</div>
+</section>
+
+<!-- ════ 3. SECTION DIVIDER OVERVIEW ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow anim d1">Section One</div>
+    <div class="sd-num anim d2">01</div>
+    <div class="sd-title anim d3">Overview</div>
+    <div class="sd-sub anim d4">Portfolio capacity, per-hotel results and channel mix for April 2026.</div>
+  </div>
+  <div class="slide-num">03 / 23</div>
+</section>
+
+<!-- ════ 4. HOTEL PORTFOLIO ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Overview · Portfolio · YTD Jan–Apr 2026</div>
+      <h2 class="slide-title anim d2">Hotel Portfolio &amp; Capacity</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt anim d2">
+        <thead><tr>
+          <th>Hotel</th><th>Type</th><th>Rooms</th><th>ADR</th><th>Est. YTD Revenue<br><span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-light);font-size:0.85em">at full capacity</span></th><th>YTD Marketing Rev</th><th>% Share</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Brady Hotels Central Melbourne</td><td>Hotel</td><td>200</td><td>$210</td><td>$5,040,000</td><td>$238,400</td><td class="pos">4.7%</td></tr>
+          <tr><td>Brady Apt Hotel Hardware Lane</td><td>Apt Hotel</td><td>120</td><td>$310</td><td>$4,464,000</td><td>$218,400</td><td class="pos">4.9%</td></tr>
+          <tr><td>Brady Apt Hotel Flinders Street</td><td>Apt Hotel</td><td>100</td><td>$270</td><td>$3,240,000</td><td>$157,500</td><td class="pos">4.9%</td></tr>
+          <tr><td>Brady Hotels Jones Lane</td><td>Hotel</td><td>180</td><td>$220</td><td>$4,752,000</td><td>$169,200</td><td>3.6%</td></tr>
+        </tbody>
+        <tfoot><tr>
+          <td>Total</td><td>4 properties</td><td>600</td><td>$246 avg</td><td>$17,496,000</td><td>$783,500</td><td>4.5%</td>
+        </tr></tfoot>
+      </table>
+      <div class="action-card anim d4" style="margin-top:var(--gap)">
+        <strong>Marketing penetration: 4.5% blended share</strong> — paid marketing drives ~$783K of an estimated $17.5M YTD revenue ceiling. <strong>Jones Lane</strong> trails at 3.6% — opportunity to scale paid investment.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Overview</div>
+  <div class="slide-num">04 / 23</div>
+</section>
+
+<!-- ════ 5. RESULTS PER HOTEL — APRIL ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Overview · April 2026</div>
+      <h2 class="slide-title anim d2">Results per Hotel</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt anim d2">
+        <thead><tr>
+          <th>Hotel / Group</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>Bookings</th><th>Clicks</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Brady Hotels Central Melbourne</td><td>$2,746</td><td>$58,033</td><td class="pos">21.1×</td><td>67</td><td>2,604</td></tr>
+          <tr><td>Brady Apt Hotel Hardware Lane</td><td>$2,917</td><td>$56,888</td><td class="pos">19.5×</td><td>53</td><td>2,049</td></tr>
+          <tr><td>Brady Apt Hotel Flinders Street</td><td>$2,475</td><td>$39,243</td><td>15.9×</td><td>43</td><td>2,154</td></tr>
+          <tr><td>Brady Hotels Jones Lane</td><td>$2,317</td><td>$38,406</td><td>16.6×</td><td>50</td><td>2,025</td></tr>
+          <tr><td>Brady Group (cross-portfolio)</td><td>$2,907</td><td>$25,989</td><td class="neg">8.9×</td><td>57</td><td>5,505</td></tr>
+        </tbody>
+        <tfoot><tr>
+          <td>Total</td><td>$13,362</td><td>$218,559</td><td>16.4×</td><td>270</td><td>14,337</td>
+        </tr></tfoot>
+      </table>
+      <div class="action-card anim d4" style="margin-top:var(--gap)">
+        <strong>Top revenue + ROAS:</strong> Brady Central (21.1×) + Hardware Lane (19.5×) drive over half of revenue. <strong>Brady Group cross-portfolio</strong> at 8.9× drags blended down — needs reallocation to hotel-specific PMAX.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Overview</div>
+  <div class="slide-num">05 / 23</div>
+</section>
+
+<!-- ════ 6. CHANNEL MIX ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Overview · April 2026</div>
+      <h2 class="slide-title anim d2">Channel Mix</h2>
+    </div>
+    <div class="slide-content">
+      <div class="chart-grid-2">
+        <div class="chart-card anim d2">
+          <div class="ch-sub">Spend Mix</div>
+          <div class="ch-title">$13,881 total</div>
+          <div class="ch-body">
+            <div class="hbar">
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">SEM</span><span class="hbar-value">$7,151 · 51.5%</span></div>
+                <div class="hbar-track"><div class="hbar-fill sem" style="width:51.5%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Social</span><span class="hbar-value">$5,089 · 36.7%</span></div>
+                <div class="hbar-track"><div class="hbar-fill social" style="width:36.7%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Metasearch</span><span class="hbar-value">$1,641 · 11.8%</span></div>
+                <div class="hbar-track"><div class="hbar-fill meta" style="width:11.8%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-card anim d3">
+          <div class="ch-sub">Revenue Mix</div>
+          <div class="ch-title">$244,905 total</div>
+          <div class="ch-body">
+            <div class="hbar">
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">SEM</span><span class="hbar-value">$166,996 · 68.2%</span></div>
+                <div class="hbar-track"><div class="hbar-fill sem" style="width:68.2%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Metasearch</span><span class="hbar-value">$53,623 · 21.9%</span></div>
+                <div class="hbar-track"><div class="hbar-fill meta" style="width:21.9%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Social (att.)</span><span class="hbar-value">$24,286 · 9.9%</span></div>
+                <div class="hbar-track"><div class="hbar-fill social" style="width:9.9%"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="action-card anim d4" style="margin-top:var(--gap)">
+        <strong>Most efficient:</strong> Metasearch at 32.7× ROAS · 22% revenue with 12% spend. <strong>Largest revenue:</strong> SEM at 68.2% revenue share. <strong>Social</strong> spend-heavy at 37% with assists across funnel.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag">Overview</div>
+  <div class="slide-num">06 / 23</div>
+</section>
+
+<!-- ════ 7. SECTION DIVIDER SEM ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow sem anim d1">Section Two · Google Ads</div>
+    <div class="sd-num anim d2">02</div>
+    <div class="sd-title anim d3">SEM</div>
+    <div class="sd-sub anim d4">$7,151 spend · $166,996 revenue · 23.4× ROAS · 4 hotels + Group cross-portfolio.</div>
+  </div>
+  <div class="slide-num">07 / 23</div>
+</section>
+
+<!-- ════ 8. SEM PER HOTEL ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow sem anim d1">SEM · April 2026</div>
+      <h2 class="slide-title anim d2">SEM Per Hotel</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt anim d2">
+        <thead><tr>
+          <th>Hotel / Group</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>Conv.</th><th>Clicks</th><th>CPC</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Brady Hotels Central Melbourne</td><td>$1,489</td><td>$42,917</td><td class="pos">28.8×</td><td>83.2</td><td>1,960</td><td>$0.76</td></tr>
+          <tr><td>Brady Apt Hardware Lane</td><td>$1,422</td><td>$39,803</td><td class="pos">28.0×</td><td>65.5</td><td>1,532</td><td>$0.93</td></tr>
+          <tr><td>Brady Hotels Jones Lane</td><td>$1,164</td><td>$29,947</td><td>25.7×</td><td>80.6</td><td>1,212</td><td>$0.96</td></tr>
+          <tr><td>Brady Apt Flinders Street</td><td>$1,030</td><td>$26,280</td><td>25.5×</td><td>47.8</td><td>1,803</td><td>$0.57</td></tr>
+          <tr><td>Brady Group (cross-portfolio)</td><td>$2,046</td><td>$28,049</td><td class="neg">13.7×</td><td>85.5</td><td>4,495</td><td>$0.46</td></tr>
+        </tbody>
+        <tfoot><tr>
+          <td>Total</td><td>$7,151</td><td>$166,996</td><td>23.4×</td><td>362.6</td><td>11,002</td><td>$0.65</td>
+        </tr></tfoot>
+      </table>
+      <div class="action-card anim d4" style="margin-top:var(--gap)">
+        <strong>Top performers:</strong> Brady Central + Hardware Lane both at 28×+ ROAS — major scale opportunity. <strong>Brady Group at 13.7×</strong> — cross-portfolio Brand search holds, but PMAX + Display Retargeting underperform.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag sem">SEM</div>
+  <div class="slide-num">08 / 23</div>
+</section>
+
+<!-- ════ 9. SEM PERFORMANCE BREAKDOWNS — DEVICE / MARKET / AUDIENCE ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow sem anim d1">SEM · April 2026 · Breakdowns</div>
+      <h2 class="slide-title anim d2">Where Revenue Comes From</h2>
+    </div>
+    <div class="slide-content">
+      <div class="chart-grid-3">
+        <div class="chart-card sem anim d2">
+          <div class="ch-sub">By Device</div>
+          <div class="ch-title">Tablet leads efficiency</div>
+          <div class="ch-body">
+            <div class="hbar">
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Mobile</span><span class="hbar-value">$3,517 · 24.8×</span></div>
+                <div class="hbar-track"><div class="hbar-fill sem" style="width:99%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Desktop</span><span class="hbar-value">$3,408 · 27.1×</span></div>
+                <div class="hbar-track"><div class="hbar-fill sem" style="width:96%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Tablet <span class="pos" style="font-weight:700">★</span></span><span class="hbar-value">$226 · <strong>33.7×</strong></span></div>
+                <div class="hbar-track"><div class="hbar-fill pos" style="width:6.4%"></div></div>
+              </div>
+            </div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.6rem;line-height:1.4">
+              <strong style="color:var(--pos)">Action:</strong> Tablet bid +30% · Desktop +20%
+            </div>
+          </div>
+        </div>
+        <div class="chart-card sem anim d3">
+          <div class="ch-sub">By Market (Top 5)</div>
+          <div class="ch-title">SG / UK / JP under-funded</div>
+          <div class="ch-body">
+            <div class="hbar">
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">🇦🇺 Australia</span><span class="hbar-value">$6,555 · 27.1×</span></div>
+                <div class="hbar-track"><div class="hbar-fill sem" style="width:100%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">🇳🇿 New Zealand <span class="neg">⚠</span></span><span class="hbar-value">$343 · <strong>1.7×</strong></span></div>
+                <div class="hbar-track"><div class="hbar-fill neg" style="width:5.2%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">🇸🇬 Singapore <span class="pos">★</span></span><span class="hbar-value">$63 · <strong>82.5×</strong></span></div>
+                <div class="hbar-track"><div class="hbar-fill pos" style="width:1%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">🇬🇧 UK <span class="pos">★</span></span><span class="hbar-value">$21 · <strong>64.9×</strong></span></div>
+                <div class="hbar-track"><div class="hbar-fill pos" style="width:0.4%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">🇯🇵 Japan <span class="pos">★</span></span><span class="hbar-value">$6 · <strong>308×</strong></span></div>
+                <div class="hbar-track"><div class="hbar-fill pos" style="width:0.1%"></div></div>
+              </div>
+            </div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.6rem;line-height:1.4">
+              <strong style="color:var(--pos)">Action:</strong> Dedicated SG $300 · Geo bid +50% UK/JP
+            </div>
+          </div>
+        </div>
+        <div class="chart-card sem anim d4">
+          <div class="ch-sub">By Audience (top groups)</div>
+          <div class="ch-title">In-market travellers</div>
+          <div class="ch-body" style="font-size:var(--fs-small);color:var(--text-muted);line-height:1.6">
+            <p style="margin-bottom:0.5rem"><strong style="color:var(--text)">Note:</strong> Google Ads doesn't expose age/gender for hotel campaigns at scale. Top observed audiences from search-term &amp; PMAX signals:</p>
+            <ul style="list-style:none;font-size:var(--fs-label);line-height:1.8">
+              <li>📍 <strong style="color:var(--text)">In-market: Hotels Melbourne</strong> — primary demand signal</li>
+              <li>📍 <strong style="color:var(--text)">Affinity: Travel Buffs</strong> — secondary signal</li>
+              <li>📍 <strong style="color:var(--text)">Intent: "brady hotel"</strong> branded — highest intent</li>
+              <li>📍 <strong style="color:var(--text)">Custom: Hardware Lane / Flinders</strong> visitors</li>
+            </ul>
+            <div style="margin-top:0.6rem;font-size:var(--fs-label);color:var(--text-muted);line-height:1.4">
+              <strong style="color:var(--pos)">Action:</strong> Build LAL audiences from CRM members
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag sem">SEM</div>
+  <div class="slide-num">09 / 23</div>
+</section>
+
+<!-- ════ 10. SEM FUNNEL STRATEGY ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow sem anim d1">SEM · Funnel Strategy</div>
+      <h2 class="slide-title anim d2">Campaigns by Funnel Stage</h2>
+    </div>
+    <div class="slide-content">
+      <div class="funnel-grid anim d2">
+        <div class="funnel-card">
+          <div class="fn-stage">Top of Funnel</div>
+          <div class="fn-roas">49.7×</div>
+          <div class="fn-spend">$250 spend · $12.4K revenue · 3.5% of mix</div>
+          <div class="fn-camp">
+            <strong>Brady Group — PMAX (broad)</strong> — awareness reach with 49.7× ROAS at minimal investment. <span style="color:var(--pos);font-weight:600">▲ Scale +100%</span>
+          </div>
+        </div>
+        <div class="funnel-card mid">
+          <div class="fn-stage">Mid Funnel</div>
+          <div class="fn-roas">36.2×</div>
+          <div class="fn-spend">$1,500 spend · $54.3K revenue · 21% of mix</div>
+          <div class="fn-camp">
+            <strong>4× Hotel-PMAX</strong> — Hardware Lane (40.9×), Brady Central (29.8×), Flinders (21.9×), Jones (8.3×). <span style="color:var(--pos);font-weight:600">▲ Scale top 3 +30%</span>
+          </div>
+        </div>
+        <div class="funnel-card bot">
+          <div class="fn-stage">Bottom Funnel</div>
+          <div class="fn-roas">20.9×</div>
+          <div class="fn-spend">$5,401 spend · $112.7K revenue · 75.5% of mix</div>
+          <div class="fn-camp">
+            <strong>Brand Search (5×)</strong> 28× avg ROAS — defend impression share. <strong>Brand RW</strong> + <strong>Display RT</strong> underperform — refresh / pause. <span style="color:var(--text);font-weight:600">→ Hold &amp; refresh</span>
+          </div>
+        </div>
+      </div>
+      <div class="action-card anim d4" style="margin-top:var(--gap)">
+        <strong>Strategic priority:</strong> Top-funnel under-invested at 3.5%. Each $1 added to PMAX broad returns $50 — best efficiency in the entire SEM portfolio. Brand Search dominates volume but is capped by demand.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag sem">SEM</div>
+  <div class="slide-num">10 / 23</div>
+</section>
+
+<!-- ════ 11. SEM ACTION PLAN ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow sem anim d1">SEM · May 2026 Action Plan</div>
+      <h2 class="slide-title anim d2">Winners, Losers &amp; Next Steps</h2>
+    </div>
+    <div class="slide-content">
+      <div class="wl-grid">
+        <div class="wl-card anim d2">
+          <div class="wl-title">▲ Scale (Winners)</div>
+          <div class="wl-stat">+$724 · +$30K rev</div>
+          <ul class="wl-list">
+            <li><strong>Brady Group — PMAX (broad)</strong> +100% ($250 → $500) · 49.7× ROAS</li>
+            <li><strong>Brady Hardware Lane — PMAX</strong> +60% · 40.9× ROAS</li>
+            <li><strong>Brady Hotels Central — PMAX</strong> +40% · 29.8× ROAS</li>
+            <li><strong>Tablet bid</strong> +30% · 33.7× ROAS</li>
+            <li><strong>Desktop bid</strong> +20% · 27.1× ROAS</li>
+            <li><strong>Singapore</strong> dedicated $300 · 82.5× ROAS</li>
+            <li><strong>UK / Japan</strong> geo bid +50% · 64–308× ROAS</li>
+          </ul>
+        </div>
+        <div class="wl-card lose anim d3">
+          <div class="wl-title">▼ Pause / Cut (Losers)</div>
+          <div class="wl-stat">−$291 saved</div>
+          <ul class="wl-list">
+            <li><strong>Brady Group — Display RT</strong> pause · 2.3× ROAS</li>
+            <li><strong>Brady Group — Display RT (All Visitors)</strong> pause · 0× ROAS</li>
+            <li><strong>Brady Hotels Jones — PMAX</strong> rebuild · 8.3× ROAS</li>
+            <li><strong>9 zero-conversion markets</strong> exclude · ID/MY/HK/US/KR/TH/CN/VN/DE</li>
+            <li><strong>Mobile bid</strong> −10% · audit booking-flow UX</li>
+          </ul>
+        </div>
+      </div>
+      <div class="action-card anim d4" style="margin-top:var(--gap)">
+        <strong>Targeting:</strong> Build LAL audiences from CRM Members. <strong>Creative:</strong> Refresh Hardware Lane PMAX (5 short headlines + 4 image sets 1:1, 1.91:1, 4:5 + 1 vertical video). <strong>Budget:</strong> Net +$724 spend → projected +$30K revenue at 41× incremental ROAS.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag sem">SEM</div>
+  <div class="slide-num">11 / 23</div>
+</section>
+
+<!-- ════ 12. SECTION DIVIDER METASEARCH ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow meta anim d1">Section Three · Google · Trivago · Tripadvisor</div>
+    <div class="sd-num anim d2">03</div>
+    <div class="sd-title anim d3">Metasearch</div>
+    <div class="sd-sub anim d4">$1,641 spend · $53,623 revenue · 32.7× ROAS · pure PPC channel.</div>
+  </div>
+  <div class="slide-num">12 / 23</div>
+</section>
+
+<!-- ════ 13. METASEARCH PER HOTEL ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow meta anim d1">Metasearch · April 2026</div>
+      <h2 class="slide-title anim d2">Metasearch Per Hotel</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt anim d2">
+        <thead><tr>
+          <th>Hotel</th><th>Cost</th><th>Revenue</th><th>ROAS</th><th>Bookings</th><th>CR</th><th>AOV</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Brady Apt Hotel Hardware Lane</td><td>$495</td><td>$17,085</td><td>34.5×</td><td>29</td><td>5.83%</td><td>$589</td></tr>
+          <tr><td>Brady Hotels Central Melbourne</td><td>$581</td><td>$15,116</td><td>26.0×</td><td>34</td><td>5.95%</td><td>$445</td></tr>
+          <tr><td>Brady Apt Hotel Flinders Street</td><td>$324</td><td>$12,963</td><td class="pos">40.0×</td><td>23</td><td class="pos">6.55%</td><td>$564</td></tr>
+          <tr><td>Brady Hotels Jones Lane</td><td>$242</td><td>$8,459</td><td>35.0×</td><td>25</td><td class="pos">6.05%</td><td class="neg">$338</td></tr>
+        </tbody>
+        <tfoot><tr>
+          <td>Total</td><td>$1,641</td><td>$53,623</td><td>32.7×</td><td>111</td><td>6.06%</td><td>$483</td>
+        </tr></tfoot>
+      </table>
+      <div class="action-card meta anim d4" style="margin-top:var(--gap)">
+        <strong>Top efficiency:</strong> Flinders Street at 40× / 6.55% CR. <strong>Volume:</strong> Hardware Lane at $17K revenue. <strong>Pricing concern:</strong> Jones Lane AOV $338 trails CBD peers — review rate plans.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag meta">Metasearch</div>
+  <div class="slide-num">13 / 23</div>
+</section>
+
+<!-- ════ 14. METASEARCH BREAKDOWNS ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow meta anim d1">Metasearch · April 2026 · Breakdowns</div>
+      <h2 class="slide-title anim d2">Where Bookings Come From</h2>
+    </div>
+    <div class="slide-content">
+      <div class="chart-grid-2">
+        <div class="chart-card meta anim d2">
+          <div class="ch-sub">By Channel + Link Type</div>
+          <div class="ch-title">Google Hotel Ads dominates</div>
+          <div class="ch-body">
+            <div class="hbar">
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Google · Paid (CPC)</span><span class="hbar-value">$1,628 · $30.2K · 18.6×</span></div>
+                <div class="hbar-track"><div class="hbar-fill meta" style="width:100%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Google · Organic (Free)</span><span class="hbar-value">$0 · $16.4K · ∞</span></div>
+                <div class="hbar-track"><div class="hbar-fill pos" style="width:54%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Trivago (Free)</span><span class="hbar-value">$0 · $6.5K · ∞</span></div>
+                <div class="hbar-track"><div class="hbar-fill pos" style="width:22%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Tripadvisor</span><span class="hbar-value">$12 · $466 · 38.8×</span></div>
+                <div class="hbar-track"><div class="hbar-fill meta" style="width:1.5%"></div></div>
+              </div>
+            </div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.6rem;line-height:1.4">
+              <strong style="color:var(--pos)">Action:</strong> Tripadvisor +$300 budget · scale Google Hotel Ads
+            </div>
+          </div>
+        </div>
+        <div class="chart-card meta anim d3">
+          <div class="ch-sub">By Market (Top 5)</div>
+          <div class="ch-title">SG opportunity</div>
+          <div class="ch-body">
+            <div class="hbar">
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">🇦🇺 Australia (Google)</span><span class="hbar-value">$1,052 · 31×</span></div>
+                <div class="hbar-track"><div class="hbar-fill meta" style="width:100%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">🇸🇬 Singapore <span class="pos">★</span></span><span class="hbar-value">$79 · <strong>96×</strong></span></div>
+                <div class="hbar-track"><div class="hbar-fill pos" style="width:7.5%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">🇦🇺 Australia (Trivago)</span><span class="hbar-value">$0 · ∞</span></div>
+                <div class="hbar-track"><div class="hbar-fill pos" style="width:5%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">🇹🇼 Taiwan</span><span class="hbar-value">$85 · 30×</span></div>
+                <div class="hbar-track"><div class="hbar-fill meta" style="width:8%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">🇰🇷 Korea <span class="neg">⚠</span></span><span class="hbar-value">$107 · <strong>9.5×</strong></span></div>
+                <div class="hbar-track"><div class="hbar-fill neg" style="width:10%"></div></div>
+              </div>
+            </div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.6rem;line-height:1.4">
+              <strong style="color:var(--pos)">Action:</strong> SG aggressive bidding · Korea reduce
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag meta">Metasearch</div>
+  <div class="slide-num">14 / 23</div>
+</section>
+
+<!-- ════ 15. METASEARCH ACTION PLAN ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow meta anim d1">Metasearch · May 2026 Action Plan</div>
+      <h2 class="slide-title anim d2">CPC Bid Adjustments</h2>
+    </div>
+    <div class="slide-content">
+      <div class="wl-grid">
+        <div class="wl-card anim d2">
+          <div class="wl-title">▲ Increase CPC</div>
+          <div class="wl-stat">+$309 · +$8.4K rev</div>
+          <ul class="wl-list">
+            <li><strong>Brady Apt Flinders</strong> CPC +20% ($0.92 → $1.10) · 40× ROAS</li>
+            <li><strong>Brady Hotels Jones Lane</strong> CPC +25% ($0.59 → $0.74) · 35× ROAS</li>
+            <li><strong>Tripadvisor</strong> +$300 budget (currently $12)</li>
+            <li><strong>Singapore market</strong> aggressive push · 96× ROAS</li>
+          </ul>
+        </div>
+        <div class="wl-card lose anim d3">
+          <div class="wl-title">→ Hold / Optimise</div>
+          <div class="wl-stat">No cuts</div>
+          <ul class="wl-list">
+            <li><strong>Brady Apt Hardware Lane</strong> CPC hold · already at competitive bid</li>
+            <li><strong>Brady Hotels Central</strong> CPC hold · volume property monitor parity</li>
+            <li><strong>Korea / US</strong> reduce CPC bid (low ROAS markets)</li>
+            <li><strong>Jones Lane pricing audit</strong> — AOV $338 trails peers; review rate plan mix &amp; min-stay</li>
+          </ul>
+        </div>
+      </div>
+      <div class="action-card meta anim d4" style="margin-top:var(--gap)">
+        <strong>Pure PPC channel</strong> — execution is mechanical: increase bids on proven winners, audit pricing on underperformers. <strong>Net impact:</strong> +$309 spend → projected +$8.4K revenue at 27× incremental ROAS.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag meta">Metasearch</div>
+  <div class="slide-num">15 / 23</div>
+</section>
+
+<!-- ════ 16. SECTION DIVIDER SOCIAL ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow social anim d1">Section Four · Meta Ads · Facebook · Instagram</div>
+    <div class="sd-num anim d2">04</div>
+    <div class="sd-title anim d3">Social</div>
+    <div class="sd-sub anim d4">$5,089 spend · 372K impressions · 5,924 clicks · 4 hotels + Group cross-portfolio.</div>
+  </div>
+  <div class="slide-num">16 / 23</div>
+</section>
+
+<!-- ════ 17. SOCIAL PER HOTEL ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow social anim d1">Social · April 2026</div>
+      <h2 class="slide-title anim d2">Social Per Hotel</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt anim d2">
+        <thead><tr>
+          <th>Hotel / Group</th><th>Spend</th><th>Imp.</th><th>Clicks</th><th>CTR</th><th>CPC</th><th>Campaigns</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Brady Apt Flinders Street</td><td>$1,121</td><td>75,000</td><td>1,241</td><td>1.65%</td><td>$0.90</td><td>3</td></tr>
+          <tr><td>Brady Apt Hardware Lane</td><td>$1,018</td><td>70,537</td><td>1,304</td><td class="pos">1.85%</td><td class="pos">$0.78</td><td>4</td></tr>
+          <tr><td>Brady Hotels Jones Lane</td><td>$911</td><td>64,128</td><td>998</td><td>1.56%</td><td>$0.91</td><td>3</td></tr>
+          <tr><td>Brady Hotels Central Melbourne</td><td>$676</td><td>49,291</td><td>657</td><td class="neg">1.33%</td><td class="neg">$1.03</td><td>3</td></tr>
+          <tr><td>Brady Group (cross-portfolio)</td><td>$1,362</td><td>118,989</td><td>1,719</td><td>1.44%</td><td>$0.79</td><td>5</td></tr>
+        </tbody>
+        <tfoot><tr>
+          <td>Total</td><td>$5,089</td><td>378K</td><td>5,919</td><td>1.57%</td><td>$0.86</td><td>18 camp.</td>
+        </tr></tfoot>
+      </table>
+      <div class="action-card social anim d4" style="margin-top:var(--gap)">
+        <strong>Note:</strong> Promo campaigns (Easter / Autumn Sale) rolled into hotel of attribution; Brand-level promos roll into Brady Group. <strong>Membership Lead campaign</strong> (Brady Group · Leads · Members) included in Group totals — separate from Sales tracking.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag social">Social</div>
+  <div class="slide-num">17 / 23</div>
+</section>
+
+<!-- ════ 18. SOCIAL BREAKDOWNS — AUDIENCE / DEVICE / PLACEMENT ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow social anim d1">Social · April 2026 · Breakdowns</div>
+      <h2 class="slide-title anim d2">Audience, Device &amp; Placement</h2>
+    </div>
+    <div class="slide-content">
+      <div class="chart-grid-3">
+        <div class="chart-card social anim d2">
+          <div class="ch-sub">Audience (Age × Gender)</div>
+          <div class="ch-title">F45–65 sweet spot</div>
+          <div class="ch-body">
+            <div class="hbar">
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">F 45-54 <span class="pos">★</span></span><span class="hbar-value">$825 · 1.83% CTR</span></div>
+                <div class="hbar-track"><div class="hbar-fill social" style="width:100%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">F 55-64 <span class="pos">★</span></span><span class="hbar-value">$764 · <strong>2.07%</strong></span></div>
+                <div class="hbar-track"><div class="hbar-fill social" style="width:93%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">F 35-44</span><span class="hbar-value">$651 · 1.49%</span></div>
+                <div class="hbar-track"><div class="hbar-fill social" style="width:79%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">F 65+ <span class="pos">★</span></span><span class="hbar-value">$439 · <strong>2.69%</strong></span></div>
+                <div class="hbar-track"><div class="hbar-fill pos" style="width:53%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">M 18-24 <span class="neg">⚠</span></span><span class="hbar-value">$139 · 0.78%</span></div>
+                <div class="hbar-track"><div class="hbar-fill neg" style="width:17%"></div></div>
+              </div>
+            </div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.6rem;line-height:1.4">
+              <strong style="color:var(--pos)">Action:</strong> Build F45-64 LAL · F65+ +30% · Exclude M18-24
+            </div>
+          </div>
+        </div>
+        <div class="chart-card social anim d3">
+          <div class="ch-sub">Device Platform</div>
+          <div class="ch-title">96% mobile-app</div>
+          <div class="ch-body">
+            <div class="hbar">
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Mobile App</span><span class="hbar-value">$4,898 · 1.57% CTR</span></div>
+                <div class="hbar-track"><div class="hbar-fill social" style="width:96%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Desktop <span class="neg">⚠</span></span><span class="hbar-value">$194 · 0.66%</span></div>
+                <div class="hbar-track"><div class="hbar-fill neg" style="width:3.8%"></div></div>
+              </div>
+              <div class="hbar-row">
+                <div class="hbar-top"><span class="hbar-label">Mobile Web</span><span class="hbar-value">$42 · 0.78%</span></div>
+                <div class="hbar-track"><div class="hbar-fill neg" style="width:0.8%"></div></div>
+              </div>
+            </div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.6rem;line-height:1.4">
+              <strong style="color:var(--pos)">Action:</strong> Mobile-app exclusive bidding · exclude Desktop
+            </div>
+          </div>
+        </div>
+        <div class="chart-card social anim d4">
+          <div class="ch-sub">Placement (Top)</div>
+          <div class="ch-title">FB Feed dominates</div>
+          <div class="ch-body">
+            <div class="hbar">
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">FB Feed (mobile) <span class="pos">★</span></span><span class="hbar-value">$2,356 · <strong>1.92%</strong></span></div>
+                <div class="hbar-track"><div class="hbar-fill social" style="width:100%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">IG Feed</span><span class="hbar-value">$559 · 1.10%</span></div>
+                <div class="hbar-track"><div class="hbar-fill social" style="width:24%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">IG Stories <span class="neg">⚠</span></span><span class="hbar-value">$514 · 0.58%</span></div>
+                <div class="hbar-track"><div class="hbar-fill neg" style="width:22%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">FB Reels</span><span class="hbar-value">$354 · 0.98%</span></div>
+                <div class="hbar-track"><div class="hbar-fill social" style="width:15%"></div></div>
+              </div>
+              <div class="hbar-row compact">
+                <div class="hbar-top"><span class="hbar-label">Marketplace <span class="neg">⚠</span></span><span class="hbar-value">$96 · 0.06%</span></div>
+                <div class="hbar-track"><div class="hbar-fill neg" style="width:4%"></div></div>
+              </div>
+            </div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.6rem;line-height:1.4">
+              <strong style="color:var(--pos)">Action:</strong> FB Feed +15% · refresh IG Stories · exclude Marketplace
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag social">Social</div>
+  <div class="slide-num">18 / 23</div>
+</section>
+
+<!-- ════ 19. SOCIAL FUNNEL STRATEGY ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow social anim d1">Social · Funnel Strategy</div>
+      <h2 class="slide-title anim d2">Campaigns by Funnel Stage</h2>
+    </div>
+    <div class="slide-content">
+      <div class="funnel-grid anim d2">
+        <div class="funnel-card">
+          <div class="fn-stage">Top of Funnel</div>
+          <div class="fn-roas" style="color:var(--neg)">0.06% CTR</div>
+          <div class="fn-spend">$77 spend · 1.5% of mix</div>
+          <div class="fn-camp">
+            <strong>Brady Group — Awareness Daily</strong> — critically weak engagement. <span style="color:var(--neg);font-weight:600">▼ Pause &amp; rebuild creative</span>
+          </div>
+        </div>
+        <div class="funnel-card mid">
+          <div class="fn-stage">Mid Funnel</div>
+          <div class="fn-roas">1.55% CTR</div>
+          <div class="fn-spend">$373 spend · 7.3% of mix</div>
+          <div class="fn-camp">
+            <strong>Hotel Traffic (4×) + Brady Group Leads/Members</strong> — efficient but under-invested. <span style="color:var(--pos);font-weight:600">▲ Scale Membership +30%</span>
+          </div>
+        </div>
+        <div class="funnel-card bot">
+          <div class="fn-stage">Bottom Funnel</div>
+          <div class="fn-roas">1.88% CTR</div>
+          <div class="fn-spend">$4,639 spend · 91.2% of mix</div>
+          <div class="fn-camp">
+            <strong>Brady Group Sales Daily (3.37%)</strong> · 4× Hotel Sales (1.6–2.2%) · 5× Promos (mostly weak). <span style="color:var(--pos);font-weight:600">▲ Scale top 5 +20%</span>
+          </div>
+        </div>
+      </div>
+      <div class="action-card social anim d4" style="margin-top:var(--gap)">
+        <strong>Heavily bottom-funnel weighted</strong> (91% direct response). Membership Lead campaign ($277) is the only true mid-funnel lever — see slide 20 for details. Top-funnel needs creative reset before re-investing.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag social">Social</div>
+  <div class="slide-num">19 / 23</div>
+</section>
+
+<!-- ════ 20. MEMBERSHIP CAMPAIGN ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow social anim d1">Social · Brady Group · Lead Generation</div>
+      <h2 class="slide-title anim d2">Membership Campaign</h2>
+    </div>
+    <div class="slide-content">
+      <div class="kpi-strip anim d2">
+        <div class="kpi-strip-card social"><div class="ks-label">Spend</div><div class="ks-value">$277</div></div>
+        <div class="kpi-strip-card social"><div class="ks-label">Impressions</div><div class="ks-value">10,999</div></div>
+        <div class="kpi-strip-card social"><div class="ks-label">Clicks</div><div class="ks-value">172</div></div>
+        <div class="kpi-strip-card social"><div class="ks-label">CTR</div><div class="ks-value">1.56%</div></div>
+        <div class="kpi-strip-card social"><div class="ks-label">CPC</div><div class="ks-value">$1.61</div></div>
+        <div class="kpi-strip-card social"><div class="ks-label">Est. Leads</div><div class="ks-value pos">22–34</div></div>
+        <div class="kpi-strip-card social"><div class="ks-label">Est. CPL</div><div class="ks-value pos">$8–13</div></div>
+      </div>
+      <div class="chart-grid-2">
+        <div class="chart-card social anim d3">
+          <div class="ch-sub">Why it's tracked differently</div>
+          <div class="ch-title">Leads, not Bookings</div>
+          <div class="ch-body" style="font-size:var(--fs-small);color:var(--text);line-height:1.55">
+            Membership campaigns optimise for <strong>Lead form submissions</strong> (Member sign-up) — not booking conversions. Facebook reports these as <strong>Leads</strong>, not Purchases. Direct ROAS isn't applicable; success is measured in <strong>CPL + downstream LTV</strong>.
+            <div style="margin-top:0.5rem;color:var(--text-muted);font-size:var(--fs-label);line-height:1.5">Target: Member booking value 1.4–1.8× non-member.</div>
+          </div>
+        </div>
+        <div class="chart-card social anim d4">
+          <div class="ch-sub">May 2026 Plan</div>
+          <div class="ch-title">+30% budget · IG Reels test</div>
+          <div class="ch-body" style="font-size:var(--fs-small);color:var(--text);line-height:1.6">
+            <ul style="list-style:none;padding-left:0">
+              <li><strong>Budget:</strong> $277 → $360 · target 28–45 leads</li>
+              <li><strong>Audience:</strong> F35–64 Melbourne · LAL past visitors</li>
+              <li><strong>Hook:</strong> "Member-only rates" + welcome credit</li>
+              <li><strong>Creative:</strong> FB/IG Feed 1:1 + Reels 9:16 (10s)</li>
+              <li><strong>Form:</strong> Native Meta Lead Form (3 fields)</li>
+              <li><strong>Nurture:</strong> Welcome → 7-day flow → monthly</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag social">Social</div>
+  <div class="slide-num">20 / 23</div>
+</section>
+
+<!-- ════ 21. SOCIAL ACTION PLAN ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow social anim d1">Social · May 2026 Action Plan</div>
+      <h2 class="slide-title anim d2">Winners, Losers &amp; Next Steps</h2>
+    </div>
+    <div class="slide-content">
+      <div class="wl-grid">
+        <div class="wl-card anim d2">
+          <div class="wl-title">▲ Scale (Winners)</div>
+          <div class="wl-stat">+$1,059 · +$8K att.</div>
+          <ul class="wl-list">
+            <li><strong>Brady Group — Sales Daily</strong> +25% · 3.37% CTR (top performer)</li>
+            <li><strong>Brady Hardware — Sales</strong> +20% · 2.21% CTR</li>
+            <li><strong>F45–64 audience</strong> build LAL 1% &amp; 3% · +25% bid</li>
+            <li><strong>F65+ audience</strong> +30% · 2.69% CTR (highest)</li>
+            <li><strong>FB Feed (mobile)</strong> +15% bid mod · 1.92% CTR</li>
+            <li><strong>NZ market test</strong> $200 ABO for Sojourn properties</li>
+            <li><strong>Membership campaign</strong> +30% · launch IG Reels variant</li>
+          </ul>
+        </div>
+        <div class="wl-card lose anim d3">
+          <div class="wl-title">▼ Pause / Cut (Losers)</div>
+          <div class="wl-stat">−$864 saved</div>
+          <ul class="wl-list">
+            <li><strong>4× Diji Autumn Sale promos</strong> pause · 0.34–0.43% CTR</li>
+            <li><strong>Brady Group — Awareness Daily</strong> pause · 0.06% CTR</li>
+            <li><strong>FB Marketplace</strong> placement exclude · 0.06% CTR</li>
+            <li><strong>Male 18-24 audience</strong> exclude · 0.78% CTR</li>
+            <li><strong>IG Stories + Reels</strong> bid −30% · refresh 9:16 vertical creative</li>
+            <li><strong>Desktop placement</strong> exclude where possible</li>
+          </ul>
+        </div>
+      </div>
+      <div class="action-card social anim d4" style="margin-top:var(--gap)">
+        <strong>Targeting:</strong> Build CRM-based LAL audiences (members + past bookers). <strong>Creative production (May):</strong> 5 image variants per Sales campaign + 3 video variants 9:16 for Reels — refresh top performer every 2 weeks. <strong>Net:</strong> +$661 net spend → +$11K incremental att. revenue.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag social">Social</div>
+  <div class="slide-num">21 / 23</div>
+</section>
+
+<!-- ════ 22. SECTION DIVIDER ACTION PLAN ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow action anim d1">Section Five · Combined Strategy</div>
+    <div class="sd-num anim d2">05</div>
+    <div class="sd-title anim d3">What We Do Next</div>
+    <div class="sd-sub anim d4">Cross-channel May 2026 budget moves and execution priorities.</div>
+  </div>
+  <div class="slide-num">22 / 23</div>
+</section>
+
+<!-- ════ 23. CLOSING — TOP 5 PRIORITIES ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow action anim d1">May 2026 · Cross-Channel Summary</div>
+      <h2 class="slide-title anim d2">Top 5 Priorities</h2>
+    </div>
+    <div class="slide-content">
+      <div style="display:flex;flex-direction:column;gap:var(--gap-sm);flex:1;justify-content:center">
+        <div class="action-card anim d2">
+          <strong>① SEM:</strong> Pause 9 zero-conv markets + 2 Display RT campaigns ($575 saved). Scale PMAX Central + Hardware +25–60%. Launch dedicated Singapore. <span style="color:var(--pos);font-weight:600">Projected +$30K rev</span>
+        </div>
+        <div class="action-card meta anim d3">
+          <strong>② Metasearch:</strong> Apply CPC plan — Flinders +20%, Jones +25%, Hardware/Central hold. Test Tripadvisor +$300. <span style="color:var(--pos);font-weight:600">Projected +$8.4K rev</span>
+        </div>
+        <div class="action-card social anim d4">
+          <strong>③ Social:</strong> Pause 4 Autumn promos + Awareness Daily + Marketplace ($864 saved). Build F45-64 LAL + 3 fresh creatives on Group Sales Daily. <span style="color:var(--pos);font-weight:600">Projected +$11K att.</span>
+        </div>
+        <div class="action-card action anim d5">
+          <strong>④ Pricing audit:</strong> Brady Jones Lane rate plan review (AOV $338 trails peers). Test +5–8% weekend rates on Hardware Lane.
+        </div>
+        <div class="action-card action anim d6">
+          <strong>⑤ Internationalisation:</strong> Singapore SEM + Metasearch dedicated push (96–82× ROAS). NZ Social $200 test for Sojourn. UK/JP geo bid +50% on AU campaigns.
+        </div>
+      </div>
+      <div class="anim d6" style="margin-top:var(--gap);padding-top:var(--gap);border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end">
+        <div>
+          <div style="font-size:var(--fs-label);letter-spacing:0.22em;text-transform:uppercase;color:var(--text-light)">Prepared by</div>
+          <div style="font-size:var(--fs-body);color:var(--text);font-weight:600">Dijitally Agency</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:var(--fs-label);letter-spacing:0.22em;text-transform:uppercase;color:var(--text-light)">Report Date</div>
+          <div style="font-size:var(--fs-body);color:var(--text);font-weight:600">28 April 2026</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag action">Action Plan</div>
+  <div class="slide-num">23 / 23</div>
+</section>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl = document.getElementById('nav-dots');
+  const progressEl = document.getElementById('progress-bar');
+  const total = slides.length;
+  let current = 0;
+
+  slides.forEach((_, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    btn.setAttribute('aria-label', 'Slide ' + (i + 1));
+    btn.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(btn);
+  });
+
+  slides.forEach((slide) => {
+    if (!slide.querySelector('.slide-tail')) {
+      const tail = document.createElement('div');
+      tail.className = 'slide-tail';
+      tail.textContent = 'Dijitally x Brady Hotels';
+      slide.appendChild(tail);
+    }
+  });
+
+  function goTo(idx) {
+    current = Math.max(0, Math.min(idx, total - 1));
+    slides[current].scrollIntoView({ behavior: 'smooth' });
+    sync();
+  }
+  function sync() {
+    document.querySelectorAll('.nav-dot').forEach((d, i) =>
+      d.classList.toggle('active', i === current));
+    progressEl.style.width = ((current + 1) / total * 100) + '%';
+  }
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio >= 0.4) {
+        const i = slides.indexOf(e.target);
+        current = i;
+        sync();
+        e.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.4 });
+  slides.forEach(s => io.observe(s));
+
+  document.addEventListener('keydown', e => {
+    const map = { ArrowDown: 1, ArrowRight: 1, ' ': 1, PageDown: 1, ArrowUp: -1, ArrowLeft: -1, PageUp: -1 };
+    if (e.key in map) { e.preventDefault(); goTo(current + map[e.key]); }
+    else if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    else if (e.key === 'End')  { e.preventDefault(); goTo(total - 1); }
+  });
+
+  let ty = 0, tx = 0;
+  document.addEventListener('touchstart', e => {
+    ty = e.touches[0].clientY; tx = e.touches[0].clientX;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dy = ty - e.changedTouches[0].clientY;
+    const dx = tx - e.changedTouches[0].clientX;
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50)
+      goTo(current + (dy > 0 ? 1 : -1));
+  }, { passive: true });
+
+  slides[0].classList.add('visible');
+})();
+</script>
+</body>
+</html>

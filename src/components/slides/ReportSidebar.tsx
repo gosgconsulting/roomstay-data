@@ -13,7 +13,7 @@ import {
   BookmarkPlus,
   Trash2,
   UserCog,
-  FileText,
+  GalleryHorizontalEnd,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ interface ReportSidebarProps {
   onDataSources: () => void;
   onDimensions: () => void;
   onTags: () => void;
-  onReports: () => void;
+  onSlides: () => void;
   onUsers: () => void;
   reportName?: string;
   /** View selector (above Reports) */
@@ -67,7 +67,7 @@ export function ReportSidebar({
   onDataSources,
   onDimensions,
   onTags,
-  onReports,
+  onSlides,
   onUsers,
   reportName,
   selectedViewId,
@@ -218,11 +218,11 @@ export function ReportSidebar({
                 Tags
               </button>
               <button
-                onClick={onReports}
+                onClick={onSlides}
                 className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-left"
               >
-                <FileText className="h-4 w-4" />
-                Reports
+                <GalleryHorizontalEnd className="h-4 w-4" />
+                Slides
               </button>
               <button
                 onClick={onUsers}
