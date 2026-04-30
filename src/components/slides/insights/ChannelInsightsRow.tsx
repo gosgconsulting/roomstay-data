@@ -143,7 +143,7 @@ export function ChannelInsightsRow({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <BreakdownByDimensionCard
           title={`By ${(funnel.dimensionLabel || "funnel").toLowerCase()}`}
           icon={<Filter className="h-3.5 w-3.5 text-muted-foreground" />}

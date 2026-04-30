@@ -3557,10 +3557,6 @@ export default function SlideViewPage() {
               KPI_CARDS={KPI_CARDS}
               comparisonTotals={comparisonTotals}
               comparisonType={comparisonType}
-              pivotData={effectivePivotData}
-              customDateRange={customDateRange}
-              filterValues={filterValues}
-              configuredDimensionNames={configuredDimensionNames}
             />
           </TabsContent>
 

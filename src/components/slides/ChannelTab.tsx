@@ -217,18 +217,16 @@ export function ChannelTab({
           </Card>
 
           {/* Insight breakdowns: Funnel / Audience / Device / Top Market or Placement */}
-          {(channel === "sem" || channel === "social") && (
-            <ChannelInsightsRow
-              scope={channel}
-              pivotData={pivotDataProp ?? (slideReport?.pivot_data ?? null)}
-              selectedYear={selectedYear}
-              selectedMonth={selectedMonth}
-              customDateRange={customDateRange}
-              filterValues={filterValues}
-              configuredDimensionNames={configuredDimensionNames}
-              metric="bookings"
-            />
-          )}
+          <ChannelInsightsRow
+            scope={channel}
+            pivotData={pivotDataProp ?? (slideReport?.pivot_data ?? null)}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            customDateRange={customDateRange}
+            filterValues={filterValues}
+            configuredDimensionNames={configuredDimensionNames}
+            metric="bookings"
+          />
 
           {/* Unified Breakdown Table */}
           <Card>

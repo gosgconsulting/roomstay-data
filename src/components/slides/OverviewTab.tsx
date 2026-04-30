@@ -7,7 +7,6 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Settings2, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { calculateDerivedMetrics, calculatePercentChange, formatNumber } from "@/lib/slideViewHelpers";
-import { ChannelInsightsRow } from "@/components/slides/insights/ChannelInsightsRow";
 import { cn } from "@/lib/utils";
 import type { ChartGranularity, ChartMetric } from "@/types/slideView";
 import { CHART_METRIC_OPTIONS, formatChartMetricValue, getChartMetricLabel } from "@/lib/chartMetric";
@@ -48,11 +47,6 @@ interface OverviewTabProps {
   }>;
   comparisonTotals?: Record<string, any> | null;
   comparisonType?: string;
-  /** Used by ChannelInsightsRow to read raw rows + dimensionMap for Funnel/Audience/Device/Country breakdowns. */
-  pivotData?: SlideReportPivotData | null;
-  customDateRange?: import("react-day-picker").DateRange | undefined;
-  filterValues?: Record<string, Record<string, string[]>>;
-  configuredDimensionNames?: Record<string, string>;
 }
 
 
@@ -83,10 +77,6 @@ export function OverviewTab({
   KPI_CARDS,
   comparisonTotals,
   comparisonType,
-  pivotData,
-  customDateRange,
-  filterValues,
-  configuredDimensionNames,
 }: OverviewTabProps) {
   // Merge comparison data into chart data by index position.
   // Comparison period has different date labels (e.g. "Feb 2" vs "Mar 2"),
@@ -258,20 +248,6 @@ export function OverviewTab({
           </CardContent>
         </Card>
         </div>
-      )}
-
-      {/* Combined breakdowns across SEM + Metasearch + Social */}
-      {!isLoading && pivotData && (
-        <ChannelInsightsRow
-          scope="overview"
-          pivotData={pivotData}
-          selectedYear={selectedYear}
-          selectedMonth={selectedMonth}
-          customDateRange={customDateRange}
-          filterValues={filterValues ?? {}}
-          configuredDimensionNames={configuredDimensionNames}
-          metric="bookings"
-        />
       )}
 
       {/* Channel Performance Table */}
