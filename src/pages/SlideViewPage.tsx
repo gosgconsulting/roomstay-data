@@ -170,8 +170,10 @@ function buildDefaultSlideReportDateRange(): SlideReportDateRange {
 // social: Meta Ads hierarchy (Account → Campaign → Ad Group)
 const CHANNEL_DIMENSION_NAMES: Record<string, string[]> = {
   metasearch: ['Hotel', 'Channel', 'Device', 'Link Type', 'Market'],
-  sem: ['Account', 'Campaign', 'Ad Group'],
-  social: ['Account', 'Campaign', 'Ad Group'],
+  // Windsor.ai / Google Ads breakdowns supported on SEM
+  sem: ['Account', 'Campaign', 'Ad Group', 'Device', 'Audience', 'Country', 'Market', 'Funnel', 'Funnel Stage', 'Network'],
+  // Windsor.ai / Meta Ads breakdowns supported on Social
+  social: ['Account', 'Campaign', 'Ad Group', 'Device', 'Audience', 'Country', 'Market', 'Placement', 'Publisher Platform', 'Funnel', 'Funnel Stage', 'Objective', 'Age', 'Gender'],
 };
 
 export default function SlideViewPage() {
@@ -3555,6 +3557,10 @@ export default function SlideViewPage() {
               KPI_CARDS={KPI_CARDS}
               comparisonTotals={comparisonTotals}
               comparisonType={comparisonType}
+              pivotData={effectivePivotData}
+              customDateRange={customDateRange}
+              filterValues={filterValues}
+              configuredDimensionNames={configuredDimensionNames}
             />
           </TabsContent>
 

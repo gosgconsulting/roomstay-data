@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { SlideReport, SlideReportPivotData } from "@/types/slideReports";
 import { UnifiedBreakdownTable } from "@/components/slides/BreakdownTableSection";
+import { ChannelInsightsRow } from "@/components/slides/insights/ChannelInsightsRow";
 import { MoreHorizontal } from "lucide-react";
 import type { ChartGranularity, ChartMetric } from "@/types/slideView";
 import { CHART_METRIC_OPTIONS, formatChartMetricValue, getChartMetricLabel } from "@/lib/chartMetric";
@@ -214,6 +215,20 @@ export function ChannelTab({
               </div>
             </CardContent>
           </Card>
+
+          {/* Insight breakdowns: Funnel / Audience / Device / Top Market or Placement */}
+          {(channel === "sem" || channel === "social") && (
+            <ChannelInsightsRow
+              scope={channel}
+              pivotData={pivotDataProp ?? (slideReport?.pivot_data ?? null)}
+              selectedYear={selectedYear}
+              selectedMonth={selectedMonth}
+              customDateRange={customDateRange}
+              filterValues={filterValues}
+              configuredDimensionNames={configuredDimensionNames}
+              metric="bookings"
+            />
+          )}
 
           {/* Unified Breakdown Table */}
           <Card>
