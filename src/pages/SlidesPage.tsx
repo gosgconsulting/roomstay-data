@@ -8,6 +8,23 @@ import { useUserAccount } from "@/hooks/useUserAccount";
 // Static slide deck registry — extend this array to add more decks
 const SLIDE_DECKS = [
   {
+    id: "brady-wip-april-2026",
+    title: "Brady Hotels — WiP Snapshot",
+    subtitle: "April 2026 vs YoY · Working Document",
+    description: "14-slide working document. Apr 2026 vs Apr 2025 (and MoM where YoY isn't possible) for SEM · Metasearch · Social. Per-channel KPI snapshot, monthly trend lines, SEM campaign + device breakdowns, Metasearch by hotel/channel/market/device, Social by campaign + audience, plus a concrete 30-day Pause / Scale / Test action plan with exact campaign names. Headline finding: SEM revenue −55.7% YoY on stable spend — flagged for tracking-vs-real investigation.",
+    period: "April 2026",
+    client: "Brady Hotels — WiP",
+    channel: "SEM · Metasearch · Social",
+    slides: 14,
+    kpis: [
+      { label: "SEM ROAS", value: "26.0×" },
+      { label: "Meta ROAS", value: "36.8×" },
+      { label: "Social ROAS", value: "18.7×" },
+    ],
+    src: "/slides/brady-wip-april-2026.html",
+    accentColor: "#f5a623",
+  },
+  {
     id: "brady-creative-refresh-april-2026",
     title: "Brady — Creative Refresh Before/After",
     subtitle: "April 2026 · Saver Rate Theme Launch · CTR Analysis",
@@ -45,11 +62,11 @@ const SLIDE_DECKS = [
     id: "brady-april-2026-hybrid",
     title: "Brady Hotels × Dijitally — Combined Report",
     subtitle: "Hybrid Performance Report — April 2026",
-    description: "33-slide combined report. Per-channel structure: per-hotel table (5 rows: 4 hotels + Group), 1 chart slide for breakdowns (device/market/audience or audience/device/placement), 1 funnel strategy slide, detailed action-plan table by hotel-funnel, YTD vs FY 2025 trend, asset/creative production specs, and detailed May–Dec forecast with event calendar. Best of both worlds — graphs for breakdowns, detail for action plans and forecasts.",
+    description: "35-slide combined report (v2). Real Brady CBD room counts (554 total). Restructured SEM/Social funnels (Display→top, Brand+PMAX→bottom, Group+broad→mid). Combined dual-axis YTD charts. Channel Mix with Revenue/ROAS/CoS KPI cards. Membership campaign with confirmed OUTCOME_LEADS objective. Cost of Sale (CoS) columns. Asset performance Apr 2026 creative refresh study. Full Year Forecast Jan–Dec (Cost/Revenue/Agency/ROI/CoS) + per-hotel × channel revenue matrix.",
     period: "April 2026",
     client: "Brady Hotels",
     channel: "SEM · Metasearch · Social",
-    slides: 33,
+    slides: 35,
     kpis: [
       { label: "Spend", value: "$13,881" },
       { label: "Revenue", value: "$244,905" },

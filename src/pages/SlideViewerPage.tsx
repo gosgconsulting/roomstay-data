@@ -11,6 +11,7 @@ const DECK_SRCS: Record<string, string> = {
   "brady-april-2026-hybrid": "/slides/brady-april-2026-hybrid.html",
   "brady-elizabeth-launch": "/slides/brady-elizabeth-launch.html",
   "brady-creative-refresh-april-2026": "/slides/brady-creative-refresh-april-2026.html",
+  "brady-wip-april-2026": "/slides/brady-wip-april-2026.html",
 };
 
 export default function SlideViewerPage() {

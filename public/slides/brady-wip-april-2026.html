@@ -1,0 +1,2475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Brady Hotels — WiP Snapshot April 2026 vs YoY</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow-x: hidden; }
+    html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+
+    :root {
+      --bg:         #07101e;
+      --bg2:        #0d1b2e;
+      --bg-card:    rgba(255,255,255,0.04);
+      --amber:      #f5a623;
+      --amber-l:    #ffc466;
+      --amber-d:    rgba(245,166,35,0.15);
+      --amber-line: rgba(245,166,35,0.28);
+      --gold:       #d4a843;
+      --gold-l:     #f0cb6a;
+      --gold-d:     rgba(212,168,67,0.15);
+      --gold-line:  rgba(212,168,67,0.28);
+      --blue:       #7cb9e8;
+      --green:      #98d4a3;
+      --red:        #e8786b;
+      --mint:       #7dd3a0;
+      --warn:       #f5a623;
+
+      --fs-display: clamp(1.9rem, 5.2vw, 4rem);
+      --fs-h1:      clamp(1.5rem, 3.6vw, 2.6rem);
+      --fs-h2:      clamp(1.1rem, 2.5vw, 1.8rem);
+      --fs-h3:      clamp(0.9rem, 1.7vw, 1.2rem);
+      --fs-body:    clamp(0.72rem, 1.25vw, 0.92rem);
+      --fs-small:   clamp(0.62rem, 0.95vw, 0.74rem);
+      --fs-tiny:    clamp(0.55rem, 0.8vw, 0.66rem);
+      --fs-label:   clamp(0.56rem, 0.82vw, 0.68rem);
+
+      --pad:        clamp(1.4rem, 3.6vw, 3.6rem);
+      --gap:        clamp(0.6rem, 1.5vw, 1.5rem);
+      --gap-sm:     clamp(0.3rem, 0.8vw, 0.8rem);
+    }
+
+    .slide {
+      width: 100vw; height: 100vh; height: 100dvh;
+      overflow: hidden; scroll-snap-align: start;
+      display: flex; flex-direction: column; position: relative;
+      background: var(--bg); color: #ffffff;
+      font-family: 'Inter', -apple-system, sans-serif;
+    }
+
+    /* WiP banner — visible on every slide */
+    .wip-stamp {
+      position: absolute;
+      top: clamp(0.7rem, 1.4vw, 1.4rem);
+      left: clamp(1rem, 2vw, 2rem);
+      z-index: 50;
+      font-size: var(--fs-tiny);
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      font-weight: 600;
+      padding: 0.25rem 0.55rem;
+      color: var(--amber);
+      border: 1px solid var(--amber-line);
+      background: rgba(245,166,35,0.06);
+      border-radius: 3px;
+    }
+    .wip-stamp::before {
+      content: "● ";
+      color: var(--amber);
+    }
+
+    /* Nav */
+    #nav-dots {
+      position: fixed; right: clamp(0.8rem, 2vw, 2rem); top: 50%;
+      transform: translateY(-50%);
+      display: flex; flex-direction: column; gap: 0.45rem; z-index: 200;
+    }
+    .nav-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(255,255,255,0.2);
+      cursor: pointer; transition: all 0.3s ease; border: none; padding: 0;
+    }
+    .nav-dot.active { background: var(--amber); transform: scale(1.6); }
+    .nav-dot:hover { background: rgba(255,255,255,0.7); }
+
+    #progress-bar {
+      position: fixed; top: 0; left: 0; height: 2px;
+      background: linear-gradient(90deg, var(--amber), var(--amber-l));
+      z-index: 200; transition: width 0.5s ease; pointer-events: none;
+    }
+
+    .slide-num {
+      position: absolute; bottom: clamp(0.7rem, 1.4vw, 1.4rem);
+      right: clamp(1rem, 2.2vw, 2.5rem);
+      font-size: var(--fs-label); color: rgba(255,255,255,0.22);
+      letter-spacing: 0.18em; font-weight: 400;
+    }
+
+    .slide-eyebrow {
+      font-size: var(--fs-label); letter-spacing: 0.3em;
+      text-transform: uppercase; color: var(--amber);
+      font-weight: 500; margin-bottom: 0.4rem;
+    }
+    .slide-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: var(--fs-h1); font-weight: 700; line-height: 1.15;
+    }
+    .slide-header { margin-bottom: var(--gap); }
+    .slide-inner {
+      flex: 1; display: flex; flex-direction: column;
+      padding: var(--pad); padding-top: clamp(2.2rem, 4vw, 3.5rem);
+      overflow: hidden;
+    }
+    .slide-content {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: center; overflow: hidden;
+    }
+
+    /* Animations */
+    .anim {
+      opacity: 0; transform: translateY(15px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .slide.visible .anim { opacity: 1; transform: translateY(0); }
+    .d1 { transition-delay: 0.10s !important; }
+    .d2 { transition-delay: 0.20s !important; }
+    .d3 { transition-delay: 0.32s !important; }
+    .d4 { transition-delay: 0.44s !important; }
+    .d5 { transition-delay: 0.56s !important; }
+    .d6 { transition-delay: 0.68s !important; }
+
+    /* Cover */
+    #s1 {
+      background: linear-gradient(140deg, #040c18 0%, #0b1728 55%, #050e1a 100%);
+      justify-content: center; align-items: center; text-align: center;
+    }
+    .cover-eyebrow {
+      font-size: var(--fs-label); letter-spacing: 0.4em;
+      text-transform: uppercase; color: var(--amber);
+      font-weight: 500; margin-bottom: clamp(0.6rem, 1.6vw, 1.6rem);
+    }
+    .cover-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: var(--fs-display); font-weight: 700;
+      line-height: 1.08; margin-bottom: 0.2em;
+    }
+    .cover-sub {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(1rem, 2.6vw, 1.9rem); font-weight: 400;
+      font-style: italic; color: var(--amber-l);
+      margin-bottom: clamp(1rem, 2.5vw, 2.5rem);
+    }
+    .cover-divider {
+      width: 64px; height: 1px; background: var(--amber);
+      margin: 0 auto clamp(1rem, 2.2vw, 2.2rem);
+    }
+    .cover-meta {
+      display: flex; justify-content: center; gap: clamp(1.2rem, 3.5vw, 3.5rem);
+    }
+    .cover-meta-label {
+      font-size: var(--fs-label); letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(255,255,255,0.4);
+      margin-bottom: 0.3rem;
+    }
+    .cover-meta-value {
+      font-size: var(--fs-small); color: rgba(255,255,255,0.75); font-weight: 500;
+    }
+    .bracket {
+      position: absolute; width: 48px; height: 48px;
+      border-color: var(--amber-line); border-style: solid;
+    }
+    .bracket.tl { top:1.6rem; left:1.6rem; border-width: 1px 0 0 1px; }
+    .bracket.br { bottom:1.6rem; right:1.6rem; border-width: 0 1px 1px 0; }
+
+    .glow {
+      position: absolute; border-radius: 50%;
+      pointer-events: none; filter: blur(70px);
+    }
+
+    /* KPI cards */
+    .channel-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: var(--gap);
+      margin-bottom: var(--gap);
+    }
+    .ch-block {
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 7px;
+      padding: clamp(0.6rem, 1.3vw, 1.3rem);
+      position: relative;
+    }
+    .ch-block::before {
+      content: ''; position: absolute; top:0; left:0; right:0; height:2px;
+      border-radius: 7px 7px 0 0;
+    }
+    .ch-block.sem::before { background: linear-gradient(90deg, var(--gold), var(--gold-l)); }
+    .ch-block.meta::before { background: linear-gradient(90deg, var(--blue), #9dd3f5); }
+    .ch-block.social::before { background: linear-gradient(90deg, var(--mint), #b1e7c0); }
+
+    .ch-block-title {
+      font-size: var(--fs-label); letter-spacing: 0.28em;
+      text-transform: uppercase; color: rgba(255,255,255,0.55);
+      margin-bottom: 0.45rem; font-weight: 600;
+    }
+    .ch-block.sem .ch-block-title { color: var(--gold); }
+    .ch-block.meta .ch-block-title { color: var(--blue); }
+    .ch-block.social .ch-block-title { color: var(--mint); }
+
+    .ch-kpi {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.4rem 0.7rem;
+    }
+    .ch-kpi-cell { padding: 0.2rem 0; }
+    .ch-kpi-label {
+      font-size: var(--fs-tiny); letter-spacing: 0.08em;
+      text-transform: uppercase; color: rgba(255,255,255,0.4);
+      margin-bottom: 0.1rem;
+    }
+    .ch-kpi-val {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(0.95rem, 1.7vw, 1.3rem);
+      font-weight: 600; color: #fff; line-height: 1.05;
+    }
+    .ch-kpi-yoy {
+      font-size: var(--fs-tiny); margin-top: 0.12rem;
+    }
+    .up   { color: var(--mint); }
+    .down { color: var(--red); }
+    .flat { color: rgba(255,255,255,0.55); }
+
+    /* Tables */
+    .perf-table {
+      width: 100%; border-collapse: collapse; font-size: var(--fs-body);
+    }
+    .perf-table thead tr { border-bottom: 1px solid var(--amber-line); }
+    .perf-table th {
+      padding: 0.45rem 0.6rem; text-align: right;
+      font-size: var(--fs-label); letter-spacing: 0.1em;
+      text-transform: uppercase; color: rgba(255,255,255,0.42);
+      font-weight: 500;
+    }
+    .perf-table th:first-child { text-align: left; }
+    .perf-table td {
+      padding: 0.5rem 0.6rem; text-align: right;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: rgba(255,255,255,0.78);
+      font-variant-numeric: tabular-nums;
+    }
+    .perf-table td:first-child {
+      text-align: left; color: #fff; font-weight: 500;
+    }
+    .perf-table tfoot td {
+      border-bottom: none; border-top: 1px solid var(--amber-line);
+      font-weight: 600; padding-top: 0.6rem;
+    }
+    .compact-table td, .compact-table th { padding: 0.36rem 0.55rem; }
+
+    .roas-good { color: var(--mint); font-weight: 600; }
+    .roas-mid  { color: var(--amber-l); font-weight: 600; }
+    .roas-bad  { color: var(--red); font-weight: 600; }
+
+    .tag {
+      display: inline-block; font-size: var(--fs-tiny);
+      padding: 0.1rem 0.4rem; border-radius: 3px;
+      font-weight: 500; vertical-align: middle;
+      margin-left: 0.35rem;
+    }
+    .tag-scale { background: rgba(125,211,160,0.14); color: var(--mint); }
+    .tag-pause { background: rgba(232,120,107,0.14); color: var(--red); }
+    .tag-watch { background: rgba(245,166,35,0.14); color: var(--amber); }
+    .tag-test  { background: rgba(124,185,232,0.14); color: var(--blue); }
+
+    .note-box {
+      margin-top: var(--gap-sm);
+      padding: 0.6rem var(--gap);
+      background: rgba(245,166,35,0.04);
+      border-left: 2px solid var(--amber);
+      border-radius: 0 5px 5px 0;
+      font-size: var(--fs-small);
+      line-height: 1.55;
+      color: rgba(255,255,255,0.78);
+    }
+
+    .two-col-eq {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: var(--gap); flex: 1; overflow: hidden;
+    }
+
+    /* Action plan card grid */
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--gap-sm);
+      flex: 1;
+      align-content: stretch;
+    }
+    .action-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-left: 3px solid var(--amber);
+      border-radius: 5px;
+      padding: clamp(0.5rem, 1.1vw, 1rem) clamp(0.6rem, 1.3vw, 1.2rem);
+      display: flex; flex-direction: column; gap: 0.2rem;
+    }
+    .action-card.pause { border-left-color: var(--red); }
+    .action-card.scale { border-left-color: var(--mint); }
+    .action-card.test  { border-left-color: var(--blue); }
+    .action-card.watch { border-left-color: var(--amber); }
+    .action-head {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-size: var(--fs-label); letter-spacing: 0.18em;
+      text-transform: uppercase; font-weight: 600;
+    }
+    .action-head .channel-tag {
+      font-size: var(--fs-tiny); padding: 0.06rem 0.4rem;
+      background: rgba(255,255,255,0.07); border-radius: 3px;
+      letter-spacing: 0.12em;
+    }
+    .action-card.pause .action-head { color: var(--red); }
+    .action-card.scale .action-head { color: var(--mint); }
+    .action-card.test  .action-head { color: var(--blue); }
+    .action-card.watch .action-head { color: var(--amber); }
+    .action-title {
+      font-size: var(--fs-body); font-weight: 600; color: #fff;
+      line-height: 1.3;
+    }
+    .action-desc {
+      font-size: var(--fs-tiny); color: rgba(255,255,255,0.6);
+      line-height: 1.5;
+    }
+
+    /* Channel split bar */
+    .split-bar {
+      display: flex; height: 18px; border-radius: 4px;
+      overflow: hidden; background: rgba(255,255,255,0.07);
+    }
+    .split-seg { height: 100%; }
+    .split-seg.sem    { background: linear-gradient(90deg, var(--gold), var(--gold-l)); }
+    .split-seg.meta   { background: linear-gradient(90deg, var(--blue), #9dd3f5); }
+    .split-seg.social { background: linear-gradient(90deg, var(--mint), #b1e7c0); }
+
+    .legend-row {
+      display: flex; gap: 1.4rem; margin-top: 0.55rem;
+      font-size: var(--fs-small); flex-wrap: wrap;
+    }
+    .legend-row .lr-item {
+      display: flex; align-items: center; gap: 0.4rem;
+      color: rgba(255,255,255,0.78);
+    }
+    .legend-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+    .legend-dot.sem    { background: var(--gold); }
+    .legend-dot.meta   { background: var(--blue); }
+    .legend-dot.social { background: var(--mint); }
+
+    .summary-line {
+      font-size: var(--fs-body);
+      color: rgba(255,255,255,0.65);
+      line-height: 1.55;
+      margin-bottom: var(--gap-sm);
+    }
+    .summary-line strong { color: #fff; font-weight: 600; }
+    .summary-line .hi-good { color: var(--mint); font-weight: 600; }
+    .summary-line .hi-bad  { color: var(--red); font-weight: 600; }
+    .summary-line .hi-warn { color: var(--amber); font-weight: 600; }
+
+    .footer-row {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: var(--gap); padding-top: var(--gap-sm);
+      border-top: 1px solid var(--amber-line);
+    }
+    .footer-label {
+      font-size: var(--fs-label); letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(255,255,255,0.38);
+    }
+    .footer-value {
+      font-size: var(--fs-body); color: rgba(255,255,255,0.72); font-weight: 500;
+    }
+
+    @media (max-height: 680px) {
+      :root {
+        --pad: clamp(0.9rem, 2.6vw, 2.2rem);
+        --gap: clamp(0.4rem, 1.1vw, 0.9rem);
+      }
+    }
+    @media (max-height: 580px) {
+      #nav-dots { display: none; }
+    }
+    @media (max-width: 760px) {
+      .channel-row { grid-template-columns: 1fr; }
+      .action-grid { grid-template-columns: 1fr; }
+      .two-col-eq { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition-duration: 0.15s !important; }
+    }
+
+    /* PDF */
+    body.pdf-mode { overflow: visible !important; height: auto !important; scroll-snap-type: none !important; }
+    body.pdf-mode .slide {
+      width: 1280px !important; height: 720px !important;
+      min-height: 720px !important; max-height: 720px !important;
+      scroll-snap-align: none !important;
+    }
+    body.pdf-mode #nav-dots, body.pdf-mode #progress-bar { display: none !important; }
+    body.pdf-mode .slide .anim {
+      opacity: 1 !important; transform: none !important; transition: none !important;
+    }
+    .pdf-overlay {
+      position: fixed; inset: 0; background: rgba(17,25,46,0.97);
+      z-index: 99999; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; color: #fff;
+      font-family: 'Inter', sans-serif;
+    }
+    .pdf-overlay .pdf-title { font-size: 1.8rem; font-weight: 700; margin-bottom: 1rem; }
+    .pdf-overlay .pdf-progress { font-size: 0.9rem; color: rgba(255,255,255,0.65); margin-bottom: 1rem; }
+    .pdf-overlay .pdf-bar { width: 280px; height: 3px; background: rgba(255,255,255,0.12); border-radius: 3px; overflow: hidden; }
+    .pdf-overlay .pdf-bar-fill {
+      height: 100%; background: linear-gradient(90deg, var(--amber), var(--amber-l));
+      transition: width 0.3s ease;
+    }
+
+    @page { size: 13.333in 7.5in; margin: 0; }
+    @media print {
+      html { scroll-snap-type: none !important; scroll-behavior: auto !important; }
+      html, body { height: auto !important; overflow: visible !important; background: #fff; }
+      #nav-dots, #progress-bar { display: none !important; }
+      .slide {
+        width: 13.333in !important; height: 7.5in !important;
+        min-height: 7.5in !important; max-height: 7.5in !important;
+        overflow: hidden !important;
+        page-break-after: always !important; page-break-inside: avoid !important;
+        break-after: page !important; break-inside: avoid !important;
+        scroll-snap-align: none !important;
+        -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+      }
+      .slide:last-child { page-break-after: auto !important; break-after: auto !important; }
+      .slide .anim { opacity: 1 !important; transform: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="nav-dots"></div>
+<div id="progress-bar" style="width:7.14%"></div>
+
+<!-- ════════════════════════════════════════
+     SLIDE 1 · COVER
+════════════════════════════════════════ -->
+<section class="slide" id="s1">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div class="glow" style="top:-90px;left:-70px;width:360px;height:360px;background:radial-gradient(circle, rgba(245,166,35,0.13), transparent 70%);"></div>
+  <div class="glow" style="bottom:-90px;right:-70px;width:360px;height:360px;background:radial-gradient(circle, rgba(124,185,232,0.08), transparent 70%);"></div>
+
+  <div style="z-index:2;padding:var(--pad);text-align:center;">
+    <div class="cover-eyebrow anim d1">● Working Document — Draft</div>
+    <h1 class="cover-title anim d2">Brady Hotels<br>WiP Snapshot</h1>
+    <div class="cover-sub anim d3">April 2026 vs YoY</div>
+    <div class="cover-divider anim d4"></div>
+    <div class="cover-meta anim d5">
+      <div>
+        <div class="cover-meta-label">Period</div>
+        <div class="cover-meta-value">Apr 1–30, 2026 vs Apr 2025</div>
+      </div>
+      <div>
+        <div class="cover-meta-label">Channels</div>
+        <div class="cover-meta-value">SEM · Metasearch · Social</div>
+      </div>
+      <div>
+        <div class="cover-meta-label">Currency</div>
+        <div class="cover-meta-value">AUD ($A)</div>
+      </div>
+      <div>
+        <div class="cover-meta-label">Sources</div>
+        <div class="cover-meta-value">Windsor.ai · Supabase</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">01 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 2 · EXECUTIVE SNAPSHOT
+════════════════════════════════════════ -->
+<section class="slide" id="s2">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="top:-60px;right:-60px;width:320px;height:320px;background:radial-gradient(circle, rgba(245,166,35,0.07), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Channel Snapshot · Apr 2026 vs Apr 2025</div>
+      <h2 class="slide-title anim d2">Executive Summary</h2>
+    </div>
+
+    <div class="slide-content">
+      <div class="channel-row">
+        <!-- SEM -->
+        <div class="ch-block sem anim d2">
+          <div class="ch-block-title">SEM · Google Ads</div>
+          <div class="ch-kpi">
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">Spend</div>
+              <div class="ch-kpi-val">$7,235</div>
+              <div class="ch-kpi-yoy down">▼ 9.1% YoY ($7,961)</div>
+            </div>
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">Revenue</div>
+              <div class="ch-kpi-val">$188K</div>
+              <div class="ch-kpi-yoy down">▼ 55.7% YoY ($425K)</div>
+            </div>
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">ROAS</div>
+              <div class="ch-kpi-val">26.0×</div>
+              <div class="ch-kpi-yoy down">▼ from 53.4×</div>
+            </div>
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">Bookings</div>
+              <div class="ch-kpi-val">372</div>
+              <div class="ch-kpi-yoy down">▼ 54.7% YoY (820)</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metasearch -->
+        <div class="ch-block meta anim d3">
+          <div class="ch-block-title">Metasearch</div>
+          <div class="ch-kpi">
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">Spend (Brady)</div>
+              <div class="ch-kpi-val">$1,750</div>
+              <div class="ch-kpi-yoy flat">N/A · launched Jul '25</div>
+            </div>
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">Revenue (Brady)</div>
+              <div class="ch-kpi-val">$64.5K</div>
+              <div class="ch-kpi-yoy flat">N/A · launched Jul '25</div>
+            </div>
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">ROAS</div>
+              <div class="ch-kpi-val">36.8×</div>
+              <div class="ch-kpi-yoy up">▲ from 9.1× (Jul '25)</div>
+            </div>
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">Bookings</div>
+              <div class="ch-kpi-val">123</div>
+              <div class="ch-kpi-yoy flat">163 incl. portfolio</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Social -->
+        <div class="ch-block social anim d4">
+          <div class="ch-block-title">Social · Meta Ads</div>
+          <div class="ch-kpi">
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">Spend</div>
+              <div class="ch-kpi-val">$5,265</div>
+              <div class="ch-kpi-yoy flat">N/A · launched Jun '25</div>
+            </div>
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">Revenue</div>
+              <div class="ch-kpi-val">$98.3K</div>
+              <div class="ch-kpi-yoy down">▼ 19.7% MoM ($122K Mar)</div>
+            </div>
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">ROAS</div>
+              <div class="ch-kpi-val">18.7×</div>
+              <div class="ch-kpi-yoy down">▼ from 21.8× (Mar '26)</div>
+            </div>
+            <div class="ch-kpi-cell">
+              <div class="ch-kpi-label">Bookings</div>
+              <div class="ch-kpi-val">191</div>
+              <div class="ch-kpi-yoy flat">+ 946 leads</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="note-box anim d5">
+        <strong style="color:var(--amber);">⚠ Headline:</strong>
+        SEM revenue collapsed <strong style="color:var(--red);">−55.7% YoY</strong> on stable spend (ROAS 53× → 26×). Cause likely the
+        <strong>Ryval → Diji handover & campaign restructure</strong> (Sep '25). Metasearch + Social are <strong style="color:var(--mint);">net‑new</strong>
+        post‑handover and partly compensating: combined Apr '26 metasearch+social revenue = <strong>$163K</strong>. Total Apr '26 paid revenue
+        ~<strong>$351K vs $425K</strong> prior year (−17%).
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">02 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 3 · MONTHLY SPEND & REVENUE TREND
+════════════════════════════════════════ -->
+<section class="slide" id="s3">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="bottom:-80px;left:-60px;width:300px;height:300px;background:radial-gradient(circle, rgba(212,168,67,0.06), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Trend · Last 12 Months</div>
+      <h2 class="slide-title anim d2">Spend &amp; Revenue by Channel</h2>
+    </div>
+
+    <div class="slide-content">
+      <div class="two-col-eq" style="grid-template-columns: 1fr 1fr; gap: var(--gap);">
+        <!-- Spend chart -->
+        <div class="anim d3">
+          <div style="font-size:var(--fs-label);letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:0.4rem;">SPEND ($A) · MAY '25 → APR '26</div>
+          <svg viewBox="0 0 480 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;max-height:38vh;">
+            <!-- Y axis grid -->
+            <line x1="32" y1="20" x2="32" y2="180" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+            <line x1="32" y1="180" x2="468" y2="180" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+            <line x1="32" y1="140" x2="468" y2="140" stroke="rgba(255,255,255,0.04)" stroke-dasharray="4,4"/>
+            <line x1="32" y1="100" x2="468" y2="100" stroke="rgba(255,255,255,0.04)" stroke-dasharray="4,4"/>
+            <line x1="32" y1="60"  x2="468" y2="60"  stroke="rgba(255,255,255,0.04)" stroke-dasharray="4,4"/>
+            <line x1="32" y1="20"  x2="468" y2="20"  stroke="rgba(255,255,255,0.04)" stroke-dasharray="4,4"/>
+            <text x="28" y="183" text-anchor="end" fill="rgba(255,255,255,0.32)" font-size="9" font-family="Inter">0</text>
+            <text x="28" y="143" text-anchor="end" fill="rgba(255,255,255,0.32)" font-size="9" font-family="Inter">2.5K</text>
+            <text x="28" y="103" text-anchor="end" fill="rgba(255,255,255,0.32)" font-size="9" font-family="Inter">5K</text>
+            <text x="28" y="63"  text-anchor="end" fill="rgba(255,255,255,0.32)" font-size="9" font-family="Inter">7.5K</text>
+            <text x="28" y="23"  text-anchor="end" fill="rgba(255,255,255,0.32)" font-size="9" font-family="Inter">10K</text>
+
+            <!-- 12 months (May 2025 - Apr 2026): no May-Jun-Jul SEM data shown in supabase (May had data, Jun-Jul had no data) -->
+            <!-- Months x-pos: 32 + (i * 39.6), max=468 -->
+            <!-- SEM: May 7966, Jun 0, Jul 0, Aug 7236, Sep 8877, Oct 8397, Nov 8068, Dec 8209, Jan 9214, Feb 8173, Mar 8774, Apr 7235 -->
+            <!-- scale: y = 180 - (val/10000)*160 -->
+            <!-- May 7966 → 180-127=53 ; Aug 7236→64 ; Sep 8877→38 ; Oct 8397→46 ; Nov 8068→51 ; Dec 8209→49 ; Jan 9214→32 ; Feb 8173→49 ; Mar 8774→40 ; Apr 7235→64 -->
+            <!-- skip Jun, Jul (no data) - draw line with break -->
+            <polyline points="32,53 150.8,64 190.4,38 230,46 269.6,51 309.2,49 348.8,32 388.4,49 428,40 467.6,64"
+              fill="none" stroke="#d4a843" stroke-width="2.2"/>
+            <circle cx="32"    cy="53" r="2.5" fill="#d4a843"/>
+            <circle cx="150.8" cy="64" r="2.5" fill="#d4a843"/>
+            <circle cx="190.4" cy="38" r="2.5" fill="#d4a843"/>
+            <circle cx="230"   cy="46" r="2.5" fill="#d4a843"/>
+            <circle cx="269.6" cy="51" r="2.5" fill="#d4a843"/>
+            <circle cx="309.2" cy="49" r="2.5" fill="#d4a843"/>
+            <circle cx="348.8" cy="32" r="2.5" fill="#d4a843"/>
+            <circle cx="388.4" cy="49" r="2.5" fill="#d4a843"/>
+            <circle cx="428"   cy="40" r="2.5" fill="#d4a843"/>
+            <circle cx="467.6" cy="64" r="2.5" fill="#d4a843"/>
+
+            <!-- Metasearch (Brady): Jul 7057,Aug 8794,Sep 7422,Oct 2705,Nov 2516,Dec 2730,Jan 2652,Feb 1663,Mar 1487,Apr 1750 -->
+            <!-- May,Jun = none -->
+            <!-- y: 7057→67, 8794→39, 7422→61, 2705→137, 2516→140, 2730→136, 2652→138, 1663→153, 1487→156, 1750→152 -->
+            <polyline points="111.6,67 151.2,39 190.8,61 230.4,137 270,140 309.6,136 349.2,138 388.8,153 428.4,156 468,152"
+              fill="none" stroke="#7cb9e8" stroke-width="2.2"/>
+            <circle cx="111.6" cy="67"  r="2.5" fill="#7cb9e8"/>
+            <circle cx="151.2" cy="39"  r="2.5" fill="#7cb9e8"/>
+            <circle cx="190.8" cy="61"  r="2.5" fill="#7cb9e8"/>
+            <circle cx="230.4" cy="137" r="2.5" fill="#7cb9e8"/>
+            <circle cx="270"   cy="140" r="2.5" fill="#7cb9e8"/>
+            <circle cx="309.6" cy="136" r="2.5" fill="#7cb9e8"/>
+            <circle cx="349.2" cy="138" r="2.5" fill="#7cb9e8"/>
+            <circle cx="388.8" cy="153" r="2.5" fill="#7cb9e8"/>
+            <circle cx="428.4" cy="156" r="2.5" fill="#7cb9e8"/>
+            <circle cx="468"   cy="152" r="2.5" fill="#7cb9e8"/>
+
+            <!-- Social: May 0(no),Jun 2742,Jul 4061,Aug 3476,Sep 4500,Oct 4599,Nov 4331,Dec 4337,Jan 5122,Feb 3090,Mar 5621,Apr 5265 -->
+            <!-- y: 2742→136, 4061→115, 3476→124, 4500→108, 4599→106, 4331→111, 4337→111, 5122→98, 3090→131, 5621→90, 5265→96 -->
+            <polyline points="71.6,136 111.2,115 150.8,124 190.4,108 230,106 269.6,111 309.2,111 348.8,98 388.4,131 428,90 467.6,96"
+              fill="none" stroke="#7dd3a0" stroke-width="2.2"/>
+            <circle cx="71.6"  cy="136" r="2.5" fill="#7dd3a0"/>
+            <circle cx="111.2" cy="115" r="2.5" fill="#7dd3a0"/>
+            <circle cx="150.8" cy="124" r="2.5" fill="#7dd3a0"/>
+            <circle cx="190.4" cy="108" r="2.5" fill="#7dd3a0"/>
+            <circle cx="230"   cy="106" r="2.5" fill="#7dd3a0"/>
+            <circle cx="269.6" cy="111" r="2.5" fill="#7dd3a0"/>
+            <circle cx="309.2" cy="111" r="2.5" fill="#7dd3a0"/>
+            <circle cx="348.8" cy="98"  r="2.5" fill="#7dd3a0"/>
+            <circle cx="388.4" cy="131" r="2.5" fill="#7dd3a0"/>
+            <circle cx="428"   cy="90"  r="2.5" fill="#7dd3a0"/>
+            <circle cx="467.6" cy="96"  r="2.5" fill="#7dd3a0"/>
+
+            <!-- X axis labels -->
+            <text x="32"    y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">May</text>
+            <text x="71.6"  y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Jun</text>
+            <text x="111.2" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Jul</text>
+            <text x="150.8" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Aug</text>
+            <text x="190.4" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Sep</text>
+            <text x="230"   y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Oct</text>
+            <text x="269.6" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Nov</text>
+            <text x="309.2" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Dec</text>
+            <text x="348.8" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Jan</text>
+            <text x="388.4" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Feb</text>
+            <text x="428"   y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Mar</text>
+            <text x="467.6" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Apr</text>
+            <text x="32"    y="216" text-anchor="middle" fill="rgba(255,255,255,0.28)" font-size="8" font-family="Inter">'25</text>
+            <text x="467.6" y="216" text-anchor="middle" fill="rgba(255,255,255,0.28)" font-size="8" font-family="Inter">'26</text>
+          </svg>
+        </div>
+
+        <!-- Revenue chart -->
+        <div class="anim d4">
+          <div style="font-size:var(--fs-label);letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.5);margin-bottom:0.4rem;">REVENUE ($A) · MAY '25 → APR '26</div>
+          <svg viewBox="0 0 480 220" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;max-height:38vh;">
+            <line x1="32" y1="20" x2="32" y2="180" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+            <line x1="32" y1="180" x2="468" y2="180" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+            <line x1="32" y1="140" x2="468" y2="140" stroke="rgba(255,255,255,0.04)" stroke-dasharray="4,4"/>
+            <line x1="32" y1="100" x2="468" y2="100" stroke="rgba(255,255,255,0.04)" stroke-dasharray="4,4"/>
+            <line x1="32" y1="60"  x2="468" y2="60"  stroke="rgba(255,255,255,0.04)" stroke-dasharray="4,4"/>
+            <line x1="32" y1="20"  x2="468" y2="20"  stroke="rgba(255,255,255,0.04)" stroke-dasharray="4,4"/>
+            <text x="28" y="183" text-anchor="end" fill="rgba(255,255,255,0.32)" font-size="9" font-family="Inter">0</text>
+            <text x="28" y="143" text-anchor="end" fill="rgba(255,255,255,0.32)" font-size="9" font-family="Inter">125K</text>
+            <text x="28" y="103" text-anchor="end" fill="rgba(255,255,255,0.32)" font-size="9" font-family="Inter">250K</text>
+            <text x="28" y="63"  text-anchor="end" fill="rgba(255,255,255,0.32)" font-size="9" font-family="Inter">375K</text>
+            <text x="28" y="23"  text-anchor="end" fill="rgba(255,255,255,0.32)" font-size="9" font-family="Inter">500K</text>
+
+            <!-- SEM rev: May 438K,Jun 0,Jul 0,Aug 84,Sep 292,Oct 203,Nov 278,Dec 165,Jan 263,Feb 204,Mar 291,Apr 188 -->
+            <!-- scale 500K: y = 180 - (v/500000)*160 -->
+            <!-- May 438K→40, Aug 84K→153, Sep 292K→86, Oct 203→115, Nov 278→91, Dec 165→127, Jan 263→96, Feb 204→115, Mar 291→87, Apr 188→120 -->
+            <polyline points="32,40 150.8,153 190.4,86 230,115 269.6,91 309.2,127 348.8,96 388.4,115 428,87 467.6,120"
+              fill="none" stroke="#d4a843" stroke-width="2.2"/>
+            <circle cx="32"    cy="40"  r="2.5" fill="#d4a843"/>
+            <circle cx="150.8" cy="153" r="2.5" fill="#d4a843"/>
+            <circle cx="190.4" cy="86"  r="2.5" fill="#d4a843"/>
+            <circle cx="230"   cy="115" r="2.5" fill="#d4a843"/>
+            <circle cx="269.6" cy="91"  r="2.5" fill="#d4a843"/>
+            <circle cx="309.2" cy="127" r="2.5" fill="#d4a843"/>
+            <circle cx="348.8" cy="96"  r="2.5" fill="#d4a843"/>
+            <circle cx="388.4" cy="115" r="2.5" fill="#d4a843"/>
+            <circle cx="428"   cy="87"  r="2.5" fill="#d4a843"/>
+            <circle cx="467.6" cy="120" r="2.5" fill="#d4a843"/>
+
+            <!-- Meta rev: Jul 64,Aug 61,Sep 65,Oct 63,Nov 63,Dec 35,Jan 51,Feb 55,Mar 67,Apr 64 -->
+            <!-- y: 64→160, 61→161, 65→159, 63→160, 35→169, 51→164, 55→162, 67→159, 64→160 -->
+            <polyline points="111.6,160 151.2,161 190.8,159 230.4,160 270,160 309.6,169 349.2,164 388.8,162 428.4,159 468,160"
+              fill="none" stroke="#7cb9e8" stroke-width="2.2"/>
+            <circle cx="111.6" cy="160" r="2.5" fill="#7cb9e8"/>
+            <circle cx="151.2" cy="161" r="2.5" fill="#7cb9e8"/>
+            <circle cx="190.8" cy="159" r="2.5" fill="#7cb9e8"/>
+            <circle cx="230.4" cy="160" r="2.5" fill="#7cb9e8"/>
+            <circle cx="270"   cy="160" r="2.5" fill="#7cb9e8"/>
+            <circle cx="309.6" cy="169" r="2.5" fill="#7cb9e8"/>
+            <circle cx="349.2" cy="164" r="2.5" fill="#7cb9e8"/>
+            <circle cx="388.8" cy="162" r="2.5" fill="#7cb9e8"/>
+            <circle cx="428.4" cy="159" r="2.5" fill="#7cb9e8"/>
+            <circle cx="468"   cy="160" r="2.5" fill="#7cb9e8"/>
+
+            <!-- Social rev: Jun 0,Jul 9,Aug 51,Sep 47,Oct 60,Nov 108,Dec 88,Jan 90,Feb 92,Mar 122,Apr 98 -->
+            <!-- y: 9→177, 51→164, 47→165, 60→161, 108→145, 88→152, 90→151, 92→151, 122→141, 98→149 -->
+            <polyline points="71.6,180 111.2,177 150.8,164 190.4,165 230,161 269.6,145 309.2,152 348.8,151 388.4,151 428,141 467.6,149"
+              fill="none" stroke="#7dd3a0" stroke-width="2.2"/>
+            <circle cx="71.6"  cy="180" r="2.5" fill="#7dd3a0"/>
+            <circle cx="111.2" cy="177" r="2.5" fill="#7dd3a0"/>
+            <circle cx="150.8" cy="164" r="2.5" fill="#7dd3a0"/>
+            <circle cx="190.4" cy="165" r="2.5" fill="#7dd3a0"/>
+            <circle cx="230"   cy="161" r="2.5" fill="#7dd3a0"/>
+            <circle cx="269.6" cy="145" r="2.5" fill="#7dd3a0"/>
+            <circle cx="309.2" cy="152" r="2.5" fill="#7dd3a0"/>
+            <circle cx="348.8" cy="151" r="2.5" fill="#7dd3a0"/>
+            <circle cx="388.4" cy="151" r="2.5" fill="#7dd3a0"/>
+            <circle cx="428"   cy="141" r="2.5" fill="#7dd3a0"/>
+            <circle cx="467.6" cy="149" r="2.5" fill="#7dd3a0"/>
+
+            <text x="32"    y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">May</text>
+            <text x="71.6"  y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Jun</text>
+            <text x="111.2" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Jul</text>
+            <text x="150.8" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Aug</text>
+            <text x="190.4" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Sep</text>
+            <text x="230"   y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Oct</text>
+            <text x="269.6" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Nov</text>
+            <text x="309.2" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Dec</text>
+            <text x="348.8" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Jan</text>
+            <text x="388.4" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Feb</text>
+            <text x="428"   y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Mar</text>
+            <text x="467.6" y="200" text-anchor="middle" fill="rgba(255,255,255,0.4)" font-size="9" font-family="Inter">Apr</text>
+          </svg>
+        </div>
+      </div>
+
+      <div class="legend-row anim d5" style="justify-content:center;margin-top:var(--gap-sm);">
+        <div class="lr-item"><span class="legend-dot sem"></span>SEM (Google Ads)</div>
+        <div class="lr-item"><span class="legend-dot meta"></span>Metasearch (Brady-only)</div>
+        <div class="lr-item"><span class="legend-dot social"></span>Social (Meta Ads)</div>
+      </div>
+
+      <div class="note-box anim d6">
+        SEM revenue peaked in <strong>May '25 ($438K)</strong> just before the agency handover. Aug '25 was a near-zero outlier. New baseline ranges
+        <strong>$165–290K/month</strong> on stable spend. Metasearch reached scale by Oct '25 with cost cut <strong>~70%</strong> while revenue
+        held flat — the textbook efficiency story. Social trending up steadily; Apr dip needs MoM context.
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">03 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 4 · SEM YoY DEEP DIVE
+════════════════════════════════════════ -->
+<section class="slide" id="s4">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="top:-55px;left:-55px;width:280px;height:280px;background:radial-gradient(circle, rgba(212,168,67,0.06), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--gold);">SEM · Apr 2026 vs Apr 2025</div>
+      <h2 class="slide-title anim d2">Headline: Revenue Halved on Stable Spend</h2>
+    </div>
+
+    <div class="slide-content">
+      <table class="perf-table anim d3" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Apr 2026</th>
+            <th>Apr 2025</th>
+            <th>Δ Abs</th>
+            <th>Δ %</th>
+            <th>YTD '26</th>
+            <th>YTD '25</th>
+            <th>Δ %</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Spend</td>
+            <td>$7,235</td>
+            <td>$7,961</td>
+            <td>−$726</td>
+            <td class="up">−9.1%</td>
+            <td>$33,396</td>
+            <td>$31,779</td>
+            <td class="flat">+5.1%</td>
+          </tr>
+          <tr>
+            <td>Impressions</td>
+            <td>583,221</td>
+            <td>794,773</td>
+            <td>−211,552</td>
+            <td class="down">−26.6%</td>
+            <td>2.38M</td>
+            <td>3.73M</td>
+            <td class="down">−36.3%</td>
+          </tr>
+          <tr>
+            <td>Clicks</td>
+            <td>11,153</td>
+            <td>9,099</td>
+            <td>+2,054</td>
+            <td class="up">+22.6%</td>
+            <td>48,689</td>
+            <td>36,530</td>
+            <td class="up">+33.3%</td>
+          </tr>
+          <tr>
+            <td>CTR</td>
+            <td>1.91%</td>
+            <td>1.14%</td>
+            <td>+0.77pp</td>
+            <td class="up">+67.0%</td>
+            <td>2.05%</td>
+            <td>0.98%</td>
+            <td class="up">+109%</td>
+          </tr>
+          <tr>
+            <td>CPC</td>
+            <td>$0.65</td>
+            <td>$0.88</td>
+            <td>−$0.23</td>
+            <td class="up">−25.9%</td>
+            <td>$0.69</td>
+            <td>$0.87</td>
+            <td class="up">−21.2%</td>
+          </tr>
+          <tr style="border-top:1px solid var(--amber-line);">
+            <td><strong>Revenue</strong></td>
+            <td><strong>$188,147</strong></td>
+            <td>$424,805</td>
+            <td>−$236,658</td>
+            <td class="down"><strong>−55.7%</strong></td>
+            <td>$946,287</td>
+            <td>$1,912,788</td>
+            <td class="down"><strong>−50.5%</strong></td>
+          </tr>
+          <tr>
+            <td>Bookings</td>
+            <td>372</td>
+            <td>820</td>
+            <td>−448</td>
+            <td class="down">−54.7%</td>
+            <td>1,852</td>
+            <td>3,290</td>
+            <td class="down">−43.7%</td>
+          </tr>
+          <tr style="border-top:1px solid rgba(255,255,255,0.06);">
+            <td><strong>ROAS</strong></td>
+            <td><strong>26.0×</strong></td>
+            <td>53.4×</td>
+            <td>−27.4×</td>
+            <td class="down"><strong>−51.3%</strong></td>
+            <td>28.3×</td>
+            <td>60.2×</td>
+            <td class="down"><strong>−53.0%</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note-box anim d4">
+        <strong style="color:var(--amber);">⚠ Investigation needed:</strong>
+        Engagement metrics improved sharply (CTR +67%, CPC −26%) but revenue/booking attribution dropped roughly in‑line with the
+        <strong>Sep '25 agency handover</strong> (Ryval → Diji). 2025 campaigns were "Ryval x Brady — PMAX/Brand"; 2026 campaigns are
+        "Brady Group | Search | Brand". <strong>Hypotheses to validate:</strong> (1) conversion tracking gap during handover, (2) attribution
+        window shorter on new accounts, (3) shift to lead-gen creative away from direct-booking. Action: cross-check booking system revenue
+        for Apr '26 vs Apr '25 to isolate tracking vs. real loss.
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">04 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 5 · SEM CAMPAIGNS APR 2026
+════════════════════════════════════════ -->
+<section class="slide" id="s5">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="bottom:-60px;right:-60px;width:280px;height:280px;background:radial-gradient(circle, rgba(212,168,67,0.05), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--gold);">SEM · Campaign Breakdown · Apr 2026</div>
+      <h2 class="slide-title anim d2">Where the Spend Went</h2>
+    </div>
+
+    <div class="slide-content">
+      <table class="perf-table compact-table anim d3" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Campaign</th>
+            <th>Spend</th>
+            <th>Imp.</th>
+            <th>Clicks</th>
+            <th>CTR</th>
+            <th>CPC</th>
+            <th>Revenue</th>
+            <th>ROAS</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Brady Apt Hardware Lane | Search | Brand</td>
+            <td>$1,104</td>
+            <td>2,463</td>
+            <td>643</td>
+            <td>26.1%</td>
+            <td>$1.72</td>
+            <td>$25,884</td>
+            <td class="roas-good">23.4×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr>
+            <td>Brady Hotels Jones Lane | Search | Brand</td>
+            <td>$989</td>
+            <td>2,533</td>
+            <td>609</td>
+            <td>24.0%</td>
+            <td>$1.62</td>
+            <td>$28,309</td>
+            <td class="roas-good">28.6×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr>
+            <td>Brady Group | Search | Brand</td>
+            <td>$912</td>
+            <td>3,078</td>
+            <td>927</td>
+            <td>30.1%</td>
+            <td>$0.98</td>
+            <td>$26,280</td>
+            <td class="roas-good">28.8×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr>
+            <td>Brady Hotels Central Melbourne | Search | Brand</td>
+            <td>$826</td>
+            <td>2,306</td>
+            <td>551</td>
+            <td>23.9%</td>
+            <td>$1.50</td>
+            <td>$22,938</td>
+            <td class="roas-good">27.8×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr>
+            <td>Brady Apt Flinders Street | Search | Brand</td>
+            <td>$750</td>
+            <td>1,879</td>
+            <td>474</td>
+            <td>25.2%</td>
+            <td>$1.58</td>
+            <td>$21,270</td>
+            <td class="roas-good">28.4×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr>
+            <td>Brady Hotels Central Melbourne | Performance Max</td>
+            <td>$676</td>
+            <td>90,245</td>
+            <td>1,438</td>
+            <td>1.59%</td>
+            <td>$0.47</td>
+            <td>$19,979</td>
+            <td class="roas-good">29.6×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr>
+            <td>Brady Group | Search | Brand | RW</td>
+            <td>$601</td>
+            <td>3,280</td>
+            <td>699</td>
+            <td>21.3%</td>
+            <td>$0.86</td>
+            <td>$9,492</td>
+            <td class="roas-mid">15.8×</td>
+            <td><span class="tag tag-watch">WATCH</span></td>
+          </tr>
+          <tr>
+            <td>Brady Apt Hardware Lane | Performance Max</td>
+            <td>$342</td>
+            <td>71,747</td>
+            <td>923</td>
+            <td>1.29%</td>
+            <td>$0.37</td>
+            <td>$15,146</td>
+            <td class="roas-good">44.3×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr>
+            <td>Brady Apt Flinders Street | Performance Max</td>
+            <td>$292</td>
+            <td>93,779</td>
+            <td>1,348</td>
+            <td>1.44%</td>
+            <td>$0.22</td>
+            <td>$7,049</td>
+            <td class="roas-mid">24.1×</td>
+            <td><span class="tag tag-watch">WATCH</span></td>
+          </tr>
+          <tr>
+            <td>Brady Group | Performance Max</td>
+            <td>$254</td>
+            <td>205,352</td>
+            <td>2,313</td>
+            <td>1.13%</td>
+            <td>$0.11</td>
+            <td>$9,836</td>
+            <td class="roas-good">38.7×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr>
+            <td>Brady Hotels Jones Lane | Performance Max</td>
+            <td>$197</td>
+            <td>57,577</td>
+            <td>630</td>
+            <td>1.09%</td>
+            <td>$0.31</td>
+            <td>$1,638</td>
+            <td class="roas-mid">8.3×</td>
+            <td><span class="tag tag-test">TEST</span></td>
+          </tr>
+          <tr style="background:rgba(232,120,107,0.05);">
+            <td>Brady Group | Display | Retargeting — All Visitors</td>
+            <td>$149</td>
+            <td>32,643</td>
+            <td>428</td>
+            <td>1.31%</td>
+            <td>$0.35</td>
+            <td>$0</td>
+            <td class="roas-bad">0.0×</td>
+            <td><span class="tag tag-pause">PAUSE</span></td>
+          </tr>
+          <tr style="background:rgba(232,120,107,0.05);">
+            <td>Brady Group | Display | Retargeting</td>
+            <td>$142</td>
+            <td>16,339</td>
+            <td>170</td>
+            <td>1.04%</td>
+            <td>$0.84</td>
+            <td>$326</td>
+            <td class="roas-bad">2.3×</td>
+            <td><span class="tag tag-pause">PAUSE</span></td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><strong>Top 13 (96% of spend)</strong></td>
+            <td><strong>$7,234</strong></td>
+            <td>583,221</td>
+            <td>11,153</td>
+            <td>1.91%</td>
+            <td>$0.65</td>
+            <td><strong>$188,147</strong></td>
+            <td class="roas-good"><strong>26.0×</strong></td>
+            <td>—</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="note-box anim d4">
+        <strong style="color:var(--red);">PAUSE</strong> recommendation: <strong>Brady Group | Display | Retargeting</strong> +
+        <strong>Brady Group | Display | Retargeting — All Website Visitors</strong> together burned <strong>$291</strong> for $326 revenue (1.1× ROAS).
+        Reallocate to PMAX Group/Hardware (38–44× ROAS).
+        <strong style="color:var(--blue);">TEST</strong>: <strong>Brady Hotels Jones Lane | Performance Max</strong> at 8.3× ROAS — likely creative/feed issue.
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">05 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 6 · SEM DEVICE BREAKDOWN
+════════════════════════════════════════ -->
+<section class="slide" id="s6">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="top:-50px;right:-50px;width:260px;height:260px;background:radial-gradient(circle, rgba(212,168,67,0.05), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--gold);">SEM · Device · Apr 2026 · Brady Hotels Group acct</div>
+      <h2 class="slide-title anim d2">Mobile Drives Volume — Desktop Drives ROAS</h2>
+    </div>
+
+    <div class="slide-content">
+      <table class="perf-table anim d3" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Device</th>
+            <th>Spend</th>
+            <th>% Spend</th>
+            <th>Impressions</th>
+            <th>Clicks</th>
+            <th>CTR</th>
+            <th>CPC</th>
+            <th>Conv.</th>
+            <th>Revenue</th>
+            <th>ROAS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Desktop</td>
+            <td>$3,587</td>
+            <td>48.0%</td>
+            <td>228,052</td>
+            <td>2,813</td>
+            <td>1.23%</td>
+            <td>$1.27</td>
+            <td>201</td>
+            <td>$103,563</td>
+            <td class="roas-good">28.9×</td>
+          </tr>
+          <tr>
+            <td>Mobile</td>
+            <td>$3,653</td>
+            <td>48.9%</td>
+            <td>353,386</td>
+            <td>8,317</td>
+            <td>2.35%</td>
+            <td>$0.44</td>
+            <td>176</td>
+            <td>$86,935</td>
+            <td class="roas-mid">23.8×</td>
+          </tr>
+          <tr>
+            <td>Tablet</td>
+            <td>$229</td>
+            <td>3.1%</td>
+            <td>21,127</td>
+            <td>381</td>
+            <td>1.80%</td>
+            <td>$0.60</td>
+            <td>14</td>
+            <td>$7,599</td>
+            <td class="roas-good">33.2×</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><strong>Total</strong></td>
+            <td><strong>$7,468</strong></td>
+            <td>100%</td>
+            <td>602,565</td>
+            <td>11,511</td>
+            <td>1.91%</td>
+            <td>$0.65</td>
+            <td>391</td>
+            <td><strong>$198,098</strong></td>
+            <td class="roas-good"><strong>26.5×</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="two-col-eq" style="margin-top:var(--gap-sm);">
+        <div class="ch-block sem anim d4">
+          <div class="ch-block-title">Insight</div>
+          <div style="font-size:var(--fs-small);line-height:1.55;color:rgba(255,255,255,0.78);">
+            <strong style="color:var(--mint);">Desktop</strong> generates 19% more revenue than Mobile from <strong>nearly identical spend</strong>
+            (28.9× vs 23.8× ROAS). Mobile has 1.9× the click volume but lower booking‑conversion rate — typical research‑heavy traffic.
+            Tablet is small but most efficient (33.2×) — leave un‑capped.
+          </div>
+        </div>
+        <div class="ch-block sem anim d5">
+          <div class="ch-block-title">Recommendation</div>
+          <div style="font-size:var(--fs-small);line-height:1.55;color:rgba(255,255,255,0.78);">
+            Apply <strong style="color:var(--amber);">+15% bid modifier</strong> on Desktop across the 5 per-hotel
+            <strong>Brady · Search · Brand</strong> campaigns + <strong>Brady Group · Performance Max</strong>. Cap Mobile at 0% (no negative);
+            re-evaluate after 14 days using <em>Conversions > Conversion Value / Spend</em> by device segment.
+          </div>
+        </div>
+      </div>
+
+      <div class="note-box anim d6" style="margin-top:var(--gap-sm);">
+        Source: Windsor.ai → Google Ads → Brady Hotels Group (531-412-3392). Excludes the older "Brady Hotels" account (255-378-2654, $0 spend Apr '26). Tablet/Connected‑TV combined into TABLET row above.
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">06 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 7 · METASEARCH BY HOTEL
+════════════════════════════════════════ -->
+<section class="slide" id="s7">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="bottom:-60px;left:-60px;width:280px;height:280px;background:radial-gradient(circle, rgba(124,185,232,0.07), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--blue);">Metasearch · Per Hotel · Apr 2026</div>
+      <h2 class="slide-title anim d2">Hotel-Level Performance</h2>
+    </div>
+
+    <div class="slide-content">
+      <table class="perf-table anim d3" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Hotel</th>
+            <th>Spend</th>
+            <th>Impressions</th>
+            <th>Clicks</th>
+            <th>CTR</th>
+            <th>CPC</th>
+            <th>Bookings</th>
+            <th>Revenue</th>
+            <th>ROAS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Brady Hotels Central Melbourne</td>
+            <td>$626</td>
+            <td>14,542</td>
+            <td>613</td>
+            <td>4.21%</td>
+            <td>$1.02</td>
+            <td>35</td>
+            <td>$18,116</td>
+            <td class="roas-good">28.9×</td>
+          </tr>
+          <tr style="background:rgba(125,211,160,0.04);">
+            <td>Wildlife Retreat <span style="color:rgba(255,255,255,0.4);font-size:var(--fs-tiny);">(non-Brady)</span></td>
+            <td>$515</td>
+            <td>12,045</td>
+            <td>718</td>
+            <td>5.96%</td>
+            <td>$0.72</td>
+            <td>20</td>
+            <td>$22,760</td>
+            <td class="roas-good">44.2×</td>
+          </tr>
+          <tr>
+            <td>Brady Apartment Hotel Hardware Lane</td>
+            <td>$507</td>
+            <td>13,776</td>
+            <td>536</td>
+            <td>3.89%</td>
+            <td>$0.95</td>
+            <td>32</td>
+            <td>$20,381</td>
+            <td class="roas-good">40.2×</td>
+          </tr>
+          <tr>
+            <td>Brady Apartment Hotel Flinders Street</td>
+            <td>$338</td>
+            <td>4,495</td>
+            <td>390</td>
+            <td>8.68%</td>
+            <td>$0.87</td>
+            <td>27</td>
+            <td>$15,898</td>
+            <td class="roas-good">47.0×</td>
+          </tr>
+          <tr>
+            <td>Brady Hotels Jones Lane</td>
+            <td>$279</td>
+            <td>9,507</td>
+            <td>450</td>
+            <td>4.73%</td>
+            <td>$0.62</td>
+            <td>29</td>
+            <td>$10,082</td>
+            <td class="roas-good">36.2×</td>
+          </tr>
+          <tr style="background:rgba(125,211,160,0.04);">
+            <td>Daydream Island Resort <span style="color:rgba(255,255,255,0.4);font-size:var(--fs-tiny);">(non-Brady)</span></td>
+            <td>$175</td>
+            <td>11,608</td>
+            <td>505</td>
+            <td>4.35%</td>
+            <td>$0.35</td>
+            <td>11</td>
+            <td>$14,061</td>
+            <td class="roas-good">80.4×</td>
+          </tr>
+          <tr style="background:rgba(125,211,160,0.04);">
+            <td>Sojourn Apartment — Ghuznee <span style="color:rgba(255,255,255,0.4);font-size:var(--fs-tiny);">(non-Brady)</span></td>
+            <td>$60</td>
+            <td>6,810</td>
+            <td>178</td>
+            <td>2.61%</td>
+            <td>$0.34</td>
+            <td>5</td>
+            <td>$2,288</td>
+            <td class="roas-good">38.4×</td>
+          </tr>
+          <tr style="background:rgba(125,211,160,0.04);">
+            <td>Sojourn Apartment — Riddiford <span style="color:rgba(255,255,255,0.4);font-size:var(--fs-tiny);">(non-Brady)</span></td>
+            <td>$32</td>
+            <td>5,476</td>
+            <td>86</td>
+            <td>1.57%</td>
+            <td>$0.37</td>
+            <td>4</td>
+            <td>$953</td>
+            <td class="roas-good">29.7×</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><strong>Brady portfolio (4 properties)</strong></td>
+            <td><strong>$1,750</strong></td>
+            <td>42,320</td>
+            <td>1,989</td>
+            <td>4.70%</td>
+            <td>$0.88</td>
+            <td>123</td>
+            <td><strong>$64,477</strong></td>
+            <td class="roas-good"><strong>36.8×</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="note-box anim d4">
+        <strong>Flinders Street</strong> stands out: <strong>8.68% CTR</strong> on the smallest impression base — strong listing relevance.
+        <strong>Jones Lane</strong> CPC ($0.62) is 32% below the Brady avg ($0.91) — there is bid headroom to capture more share.
+        <strong>Hardware Lane</strong> ROAS (40×) on solid scale should absorb additional budget first.
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">07 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 8 · METASEARCH BY CHANNEL & MARKET
+════════════════════════════════════════ -->
+<section class="slide" id="s8">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="top:-50px;right:-50px;width:260px;height:260px;background:radial-gradient(circle, rgba(124,185,232,0.06), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--blue);">Metasearch · Channel + Market · Apr 2026 · All hotels</div>
+      <h2 class="slide-title anim d2">Where Spend Is Working</h2>
+    </div>
+
+    <div class="slide-content">
+      <div class="two-col-eq">
+        <!-- Channel side -->
+        <div class="anim d3" style="display:flex;flex-direction:column;gap:var(--gap-sm);">
+          <div style="font-size:var(--fs-label);letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.5);">CHANNEL</div>
+          <table class="perf-table compact-table">
+            <thead>
+              <tr>
+                <th>Channel</th>
+                <th>Spend</th>
+                <th>Clicks</th>
+                <th>CTR</th>
+                <th>Rev</th>
+                <th>ROAS</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Google Hotel Ads</td>
+                <td>$2,499</td>
+                <td>2,985</td>
+                <td>7.26%</td>
+                <td>$91,580</td>
+                <td class="roas-good">36.7×</td>
+              </tr>
+              <tr>
+                <td>Trivago <span class="tag tag-watch">CPA</span></td>
+                <td>$0</td>
+                <td>450</td>
+                <td>1.58%</td>
+                <td>$11,302</td>
+                <td class="roas-good">∞</td>
+              </tr>
+              <tr>
+                <td>Tripadvisor</td>
+                <td>$32</td>
+                <td>41</td>
+                <td>0.48%</td>
+                <td>$1,656</td>
+                <td class="roas-good">51.1×</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td><strong>Total</strong></td>
+                <td><strong>$2,531</strong></td>
+                <td>3,476</td>
+                <td>4.44%</td>
+                <td><strong>$104,539</strong></td>
+                <td class="roas-good"><strong>41.3×</strong></td>
+              </tr>
+            </tfoot>
+          </table>
+          <div style="font-size:var(--fs-tiny);color:rgba(255,255,255,0.55);line-height:1.5;">
+            Trivago runs on CPA — no upfront spend, $11.3K booked revenue is incremental.
+            Tripadvisor delivers high ROAS but tiny scale — test 2× budget.
+          </div>
+        </div>
+
+        <!-- Market side -->
+        <div class="anim d4" style="display:flex;flex-direction:column;gap:var(--gap-sm);">
+          <div style="font-size:var(--fs-label);letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.5);">TOP 8 MARKETS · ALL CHANNELS</div>
+          <table class="perf-table compact-table">
+            <thead>
+              <tr>
+                <th>Market</th>
+                <th>Spend</th>
+                <th>Clicks</th>
+                <th>Rev</th>
+                <th>ROAS</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Australia (Google + Trivago)</td>
+                <td>$1,132</td>
+                <td>1,300</td>
+                <td>$45,361</td>
+                <td class="roas-good">40.1×</td>
+              </tr>
+              <tr style="background:rgba(125,211,160,0.04);">
+                <td>Singapore (Google) <span class="tag tag-scale">SCALE</span></td>
+                <td>$82</td>
+                <td>55</td>
+                <td>$7,602</td>
+                <td class="roas-good">92.2×</td>
+              </tr>
+              <tr>
+                <td>Taiwan (Google)</td>
+                <td>$97</td>
+                <td>89</td>
+                <td>$4,024</td>
+                <td class="roas-good">41.6×</td>
+              </tr>
+              <tr style="background:rgba(232,120,107,0.04);">
+                <td>South Korea (Google)</td>
+                <td>$107</td>
+                <td>60</td>
+                <td>$1,012</td>
+                <td class="roas-mid">9.5×</td>
+              </tr>
+              <tr style="background:rgba(232,120,107,0.04);">
+                <td>USA (Google)</td>
+                <td>$71</td>
+                <td>30</td>
+                <td>$440</td>
+                <td class="roas-bad">6.2×</td>
+              </tr>
+              <tr style="background:rgba(232,120,107,0.04);">
+                <td>New Zealand (Google)</td>
+                <td>$45</td>
+                <td>56</td>
+                <td>$151</td>
+                <td class="roas-bad">3.4×</td>
+              </tr>
+              <tr style="background:rgba(232,120,107,0.04);">
+                <td>Japan (Google) <span class="tag tag-pause">PAUSE</span></td>
+                <td>$44</td>
+                <td>32</td>
+                <td>$0</td>
+                <td class="roas-bad">0.0×</td>
+              </tr>
+              <tr style="background:rgba(232,120,107,0.04);">
+                <td>Indonesia (Google) <span class="tag tag-pause">PAUSE</span></td>
+                <td>$35</td>
+                <td>28</td>
+                <td>$0</td>
+                <td class="roas-bad">0.0×</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="note-box anim d5">
+        <strong style="color:var(--mint);">SCALE</strong> Singapore (92.2× ROAS) — only $82 spend. Lift cap to $300/mo to harvest.
+        <strong style="color:var(--red);">PAUSE</strong> Japan + Indonesia (0× ROAS, $79 wasted), reassess Korea/US/NZ in 30 days.
+        AU/SG/TW = 91% of revenue but only 50% of spend.
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">08 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 9 · METASEARCH BY DEVICE
+════════════════════════════════════════ -->
+<section class="slide" id="s9">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="bottom:-50px;right:-50px;width:260px;height:260px;background:radial-gradient(circle, rgba(124,185,232,0.05), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--blue);">Metasearch · Device · Apr 2026 · Brady-only</div>
+      <h2 class="slide-title anim d2">Device Mix &amp; Efficiency</h2>
+    </div>
+
+    <div class="slide-content">
+      <table class="perf-table anim d3" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Channel / Device</th>
+            <th>Spend</th>
+            <th>Impressions</th>
+            <th>Clicks</th>
+            <th>CTR</th>
+            <th>CPC</th>
+            <th>Bookings</th>
+            <th>Revenue</th>
+            <th>ROAS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Google · Desktop</td>
+            <td>$1,011</td>
+            <td>9,365</td>
+            <td>818</td>
+            <td>8.74%</td>
+            <td>$1.24</td>
+            <td>73</td>
+            <td>$36,295</td>
+            <td class="roas-good">35.9×</td>
+          </tr>
+          <tr>
+            <td>Google · Mobile</td>
+            <td>$699</td>
+            <td>12,717</td>
+            <td>812</td>
+            <td>6.39%</td>
+            <td>$0.86</td>
+            <td>33</td>
+            <td>$18,883</td>
+            <td class="roas-mid">27.0×</td>
+          </tr>
+          <tr>
+            <td>Google · Tablet</td>
+            <td>$27</td>
+            <td>383</td>
+            <td>26</td>
+            <td>6.79%</td>
+            <td>$1.04</td>
+            <td>2</td>
+            <td>$629</td>
+            <td class="roas-mid">23.7×</td>
+          </tr>
+          <tr>
+            <td>Tripadvisor · Desktop</td>
+            <td>$8</td>
+            <td>1,521</td>
+            <td>7</td>
+            <td>0.46%</td>
+            <td>$1.14</td>
+            <td>1</td>
+            <td>$466</td>
+            <td class="roas-good">58.9×</td>
+          </tr>
+          <tr style="background:rgba(232,120,107,0.04);">
+            <td>Tripadvisor · Mobile <span class="tag tag-pause">PAUSE</span></td>
+            <td>$5</td>
+            <td>2,109</td>
+            <td>4</td>
+            <td>0.19%</td>
+            <td>$1.25</td>
+            <td>0</td>
+            <td>$0</td>
+            <td class="roas-bad">0.0×</td>
+          </tr>
+          <tr>
+            <td>Trivago · Desktop+Mobile (CPA)</td>
+            <td>$0</td>
+            <td>16,225</td>
+            <td>322</td>
+            <td>1.99%</td>
+            <td>$0.00</td>
+            <td>14</td>
+            <td>$8,204</td>
+            <td class="roas-good">∞</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><strong>Brady total</strong></td>
+            <td><strong>$1,750</strong></td>
+            <td>42,320</td>
+            <td>1,989</td>
+            <td>4.70%</td>
+            <td>$0.88</td>
+            <td>123</td>
+            <td><strong>$64,477</strong></td>
+            <td class="roas-good"><strong>36.8×</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="two-col-eq" style="margin-top:var(--gap-sm);">
+        <div class="ch-block meta anim d4">
+          <div class="ch-block-title">Insight</div>
+          <div style="font-size:var(--fs-small);line-height:1.55;color:rgba(255,255,255,0.78);">
+            Google Desktop is the workhorse — <strong>56% of revenue</strong> from <strong>43% of clicks</strong>. Mobile reach is high but
+            booking‑rate is half of desktop's (4.0% vs 8.9% clicks→bookings).
+            Tripadvisor Mobile ROAS = 0 — not a placement issue, it's the conversion path.
+          </div>
+        </div>
+        <div class="ch-block meta anim d5">
+          <div class="ch-block-title">Recommendation</div>
+          <div style="font-size:var(--fs-small);line-height:1.55;color:rgba(255,255,255,0.78);">
+            <strong>Google Hotel Ads · Brady Apt Flinders Street</strong> + <strong>Brady Hardware Lane</strong>: lift desktop max-CPC by
+            <strong>+25%</strong> for the next 14 days (current $1.24 → up to $1.55) — high-CTR campaigns can absorb more spend without ROAS
+            tanking. Disable Tripadvisor Mobile placement until conv tracking is verified.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">09 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 10 · SOCIAL OVERVIEW
+════════════════════════════════════════ -->
+<section class="slide" id="s10">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="top:-55px;left:-55px;width:280px;height:280px;background:radial-gradient(circle, rgba(125,211,160,0.07), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--mint);">Social · Meta Ads · Apr 2026 vs MoM</div>
+      <h2 class="slide-title anim d2">Social Snapshot &amp; MoM Trend</h2>
+    </div>
+
+    <div class="slide-content">
+      <table class="perf-table anim d3" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Apr '26</th>
+            <th>Mar '26</th>
+            <th>Δ MoM</th>
+            <th>Feb '26</th>
+            <th>Jan '26</th>
+            <th>Avg Q4 '25</th>
+            <th>Δ vs Q4</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Spend</td>
+            <td>$5,265</td>
+            <td>$5,621</td>
+            <td class="up">−6.3%</td>
+            <td>$3,090</td>
+            <td>$5,122</td>
+            <td>$4,422</td>
+            <td class="up">+19.1%</td>
+          </tr>
+          <tr>
+            <td>Impressions</td>
+            <td>389,966</td>
+            <td>523,996</td>
+            <td class="down">−25.6%</td>
+            <td>325,647</td>
+            <td>590,802</td>
+            <td>532,727</td>
+            <td class="down">−26.8%</td>
+          </tr>
+          <tr>
+            <td>Clicks</td>
+            <td>4,819</td>
+            <td>5,455</td>
+            <td class="down">−11.7%</td>
+            <td>2,988</td>
+            <td>4,236</td>
+            <td>3,741</td>
+            <td class="up">+28.8%</td>
+          </tr>
+          <tr>
+            <td>CTR</td>
+            <td>1.24%</td>
+            <td>1.04%</td>
+            <td class="up">+19.2%</td>
+            <td>0.92%</td>
+            <td>0.72%</td>
+            <td>0.70%</td>
+            <td class="up">+76.4%</td>
+          </tr>
+          <tr>
+            <td>CPC</td>
+            <td>$1.09</td>
+            <td>$1.03</td>
+            <td class="down">+5.8%</td>
+            <td>$1.03</td>
+            <td>$1.21</td>
+            <td>$1.18</td>
+            <td class="up">−7.6%</td>
+          </tr>
+          <tr style="border-top:1px solid var(--amber-line);">
+            <td><strong>Revenue</strong></td>
+            <td><strong>$98,327</strong></td>
+            <td>$122,479</td>
+            <td class="down">−19.7%</td>
+            <td>$91,534</td>
+            <td>$89,526</td>
+            <td>$84,968</td>
+            <td class="up">+15.7%</td>
+          </tr>
+          <tr>
+            <td>Bookings</td>
+            <td>191</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>Leads</td>
+            <td>946</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+            <td>—</td>
+          </tr>
+          <tr style="border-top:1px solid rgba(255,255,255,0.06);">
+            <td><strong>ROAS</strong></td>
+            <td><strong>18.7×</strong></td>
+            <td>21.8×</td>
+            <td class="down">−14.4%</td>
+            <td>29.6×</td>
+            <td>17.5×</td>
+            <td>21.4×</td>
+            <td class="down">−13.0%</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note-box anim d4">
+        <strong style="color:var(--amber);">Watch:</strong>
+        Apr revenue dipped <strong>−19.7% MoM</strong> after a strong March ($122K). CTR is actually up — engagement isn't the issue.
+        Likely driver: <strong>Mar Easter campaigns paused</strong>, residual delivery spillover into early April from "Diji | Brady |
+        March 2026 | Easter / Easter Holidays …" set. Net of the wind‑down, Apr is on trend.
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">10 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 11 · SOCIAL CAMPAIGNS
+════════════════════════════════════════ -->
+<section class="slide" id="s11">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="bottom:-55px;right:-55px;width:260px;height:260px;background:radial-gradient(circle, rgba(125,211,160,0.06), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--mint);">Social · Campaign · Apr 2026 (Top 14)</div>
+      <h2 class="slide-title anim d2">Campaign-Level Performance</h2>
+    </div>
+
+    <div class="slide-content">
+      <table class="perf-table compact-table anim d3" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Campaign</th>
+            <th>Spend</th>
+            <th>Imp.</th>
+            <th>Clicks</th>
+            <th>CTR</th>
+            <th>CPC</th>
+            <th>Rev</th>
+            <th>ROAS</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Brady Apt Flinders Street | Sales</td>
+            <td>$991</td>
+            <td>60,514</td>
+            <td>933</td>
+            <td>1.54%</td>
+            <td>$1.06</td>
+            <td>$16,382</td>
+            <td class="roas-good">16.5×</td>
+            <td><span class="tag tag-watch">WATCH</span></td>
+          </tr>
+          <tr>
+            <td>Brady Group | Sales | Daily</td>
+            <td>$835</td>
+            <td>43,536</td>
+            <td>1,163</td>
+            <td>2.67%</td>
+            <td>$0.72</td>
+            <td>$20,042</td>
+            <td class="roas-good">24.0×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr>
+            <td>Brady Hotels Jones Lane | Sales</td>
+            <td>$787</td>
+            <td>51,030</td>
+            <td>796</td>
+            <td>1.56%</td>
+            <td>$0.99</td>
+            <td>$18,618</td>
+            <td class="roas-good">23.6×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr>
+            <td>Brady Apt Hardware Lane | Sales</td>
+            <td>$785</td>
+            <td>48,204</td>
+            <td>749</td>
+            <td>1.55%</td>
+            <td>$1.05</td>
+            <td>$14,885</td>
+            <td class="roas-good">19.0×</td>
+            <td><span class="tag tag-scale">SCALE</span></td>
+          </tr>
+          <tr style="background:rgba(232,120,107,0.04);">
+            <td>Brady Hotels Central Melbourne | Sales</td>
+            <td>$534</td>
+            <td>35,021</td>
+            <td>366</td>
+            <td>1.05%</td>
+            <td>$1.46</td>
+            <td>$5,825</td>
+            <td class="roas-mid">10.9×</td>
+            <td><span class="tag tag-test">TEST</span></td>
+          </tr>
+          <tr style="background:rgba(232,120,107,0.04);">
+            <td>Brady Group | Leads | Members</td>
+            <td>$285</td>
+            <td>11,390</td>
+            <td>97</td>
+            <td>0.85%</td>
+            <td>$2.94</td>
+            <td>$292</td>
+            <td class="roas-bad">1.0×</td>
+            <td><span class="tag tag-watch">REVIEW</span></td>
+          </tr>
+          <tr style="background:rgba(232,120,107,0.04);">
+            <td>Diji | Mar '26 | Autumn Sale / FLINDERS ST | Sales</td>
+            <td>$139</td>
+            <td>10,693</td>
+            <td>29</td>
+            <td>0.27%</td>
+            <td>$4.78</td>
+            <td>$1,609</td>
+            <td class="roas-mid">11.6×</td>
+            <td><span class="tag tag-pause">PAUSE</span></td>
+          </tr>
+          <tr>
+            <td>Diji | Mar '26 | Autumn Sale / JONES LANE | Sales</td>
+            <td>$139</td>
+            <td>10,254</td>
+            <td>35</td>
+            <td>0.34%</td>
+            <td>$3.98</td>
+            <td>$5,240</td>
+            <td class="roas-good">37.7×</td>
+            <td><span class="tag tag-watch">WIND‑DOWN</span></td>
+          </tr>
+          <tr style="background:rgba(232,120,107,0.04);">
+            <td>Diji | Mar '26 | Autumn Sale / BRAND | Sales</td>
+            <td>$138</td>
+            <td>10,298</td>
+            <td>48</td>
+            <td>0.47%</td>
+            <td>$2.88</td>
+            <td>$2,155</td>
+            <td class="roas-mid">15.6×</td>
+            <td><span class="tag tag-pause">PAUSE</span></td>
+          </tr>
+          <tr>
+            <td>Diji | Mar '26 | Autumn Sale / HARDWARE LANE | Sales</td>
+            <td>$138</td>
+            <td>11,064</td>
+            <td>46</td>
+            <td>0.42%</td>
+            <td>$2.99</td>
+            <td>$4,577</td>
+            <td class="roas-good">33.3×</td>
+            <td><span class="tag tag-watch">WIND‑DOWN</span></td>
+          </tr>
+          <tr style="background:rgba(232,120,107,0.04);">
+            <td>Diji | Mar '26 | Autumn Sale / CENTRAL MEL | Sales</td>
+            <td>$137</td>
+            <td>10,716</td>
+            <td>41</td>
+            <td>0.38%</td>
+            <td>$3.34</td>
+            <td>$1,687</td>
+            <td class="roas-mid">12.3×</td>
+            <td><span class="tag tag-pause">PAUSE</span></td>
+          </tr>
+          <tr>
+            <td>Diji | Mar '26 | Easter / Easter Holidays HARDWARE | Sales</td>
+            <td>$108</td>
+            <td>6,126</td>
+            <td>101</td>
+            <td>1.65%</td>
+            <td>$1.07</td>
+            <td>$3,372</td>
+            <td class="roas-good">31.3×</td>
+            <td><span class="tag tag-test">RE‑RUN</span></td>
+          </tr>
+          <tr style="background:rgba(232,120,107,0.04);">
+            <td>Brady Group | Awareness | Daily</td>
+            <td>$79</td>
+            <td>53,454</td>
+            <td>31</td>
+            <td>0.06%</td>
+            <td>$2.56</td>
+            <td>$0</td>
+            <td class="roas-bad">0.0×</td>
+            <td><span class="tag tag-watch">REVIEW</span></td>
+          </tr>
+          <tr>
+            <td>Diji | Mar '26 | Easter / Easter Holidays BRAND | Sales</td>
+            <td>$73</td>
+            <td>4,295</td>
+            <td>51</td>
+            <td>1.19%</td>
+            <td>$1.44</td>
+            <td>$3,644</td>
+            <td class="roas-good">49.7×</td>
+            <td><span class="tag tag-test">RE‑RUN</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note-box anim d4">
+        <strong style="color:var(--red);">PAUSE</strong> 3 underperforming Autumn Sale variants (FLINDERS / BRAND / CENTRAL MEL) — CTR &lt; 0.5%, CPC &gt; $2.85, &lt;15× ROAS.
+        <strong style="color:var(--mint);">SCALE</strong> the 3 Daily Sales per‑hotel campaigns at <strong>20–25× ROAS</strong>.
+        <strong style="color:var(--blue);">RE‑RUN</strong> the Easter Sale variants for Hardware + BRAND (31× and 50× ROAS) — best creatives of Mar.
+        <strong style="color:var(--amber);">REVIEW</strong> Members lead-gen ($285 / 30 leads = $9.50 CPL — high vs benchmark $4–6).
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">11 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 12 · SOCIAL AUDIENCE
+════════════════════════════════════════ -->
+<section class="slide" id="s12">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="top:-50px;right:-50px;width:260px;height:260px;background:radial-gradient(circle, rgba(125,211,160,0.06), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1" style="color:var(--mint);">Social · Audience · Apr 2026 (Brady Hotels 2025 ad acct via Windsor)</div>
+      <h2 class="slide-title anim d2">Audience Performance</h2>
+    </div>
+
+    <div class="slide-content">
+      <table class="perf-table anim d3" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Audience type</th>
+            <th>Adsets</th>
+            <th>Spend</th>
+            <th>% Spend</th>
+            <th>Impressions</th>
+            <th>Clicks</th>
+            <th>Avg CTR</th>
+            <th>Avg CPC</th>
+            <th>Median ROAS</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Retarget</td>
+            <td>13</td>
+            <td>$2,128</td>
+            <td>40.4%</td>
+            <td>116,164</td>
+            <td>2,727</td>
+            <td>2.35%</td>
+            <td>$0.78</td>
+            <td class="roas-good">21.5×</td>
+          </tr>
+          <tr>
+            <td>Lookalike (core)</td>
+            <td>13</td>
+            <td>$1,389</td>
+            <td>26.4%</td>
+            <td>87,225</td>
+            <td>1,288</td>
+            <td>1.48%</td>
+            <td>$1.08</td>
+            <td class="roas-good">24.1×</td>
+          </tr>
+          <tr>
+            <td>Broad — Frequent Travelers</td>
+            <td>7</td>
+            <td>$551</td>
+            <td>10.5%</td>
+            <td>34,684</td>
+            <td>691</td>
+            <td>1.99%</td>
+            <td>$0.80</td>
+            <td class="roas-good">25.3×</td>
+          </tr>
+          <tr>
+            <td>Broad</td>
+            <td>4</td>
+            <td>$1,038</td>
+            <td>19.7%</td>
+            <td>69,220</td>
+            <td>1,209</td>
+            <td>1.75%</td>
+            <td>$0.86</td>
+            <td class="roas-good">17.6×</td>
+          </tr>
+          <tr style="background:rgba(232,120,107,0.04);">
+            <td>Lookalike — Visitors / Bookers / Group <span class="tag tag-watch">REVIEW</span></td>
+            <td>8</td>
+            <td>$84</td>
+            <td>1.6%</td>
+            <td>20,398</td>
+            <td>313</td>
+            <td>1.53%</td>
+            <td>$0.27</td>
+            <td class="roas-bad">0×</td>
+          </tr>
+          <tr>
+            <td>Conversion</td>
+            <td>1</td>
+            <td>$145</td>
+            <td>2.8%</td>
+            <td>6,041</td>
+            <td>100</td>
+            <td>1.66%</td>
+            <td>$1.45</td>
+            <td class="flat">N/A</td>
+          </tr>
+          <tr>
+            <td>More Than A Room</td>
+            <td>1</td>
+            <td>$115</td>
+            <td>2.2%</td>
+            <td>7,399</td>
+            <td>106</td>
+            <td>1.43%</td>
+            <td>$1.08</td>
+            <td class="roas-good">32.1×</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td><strong>Brady Hotels 2025 acct (Apr '26)</strong></td>
+            <td>47</td>
+            <td><strong>$5,450</strong></td>
+            <td>100%</td>
+            <td>341,131</td>
+            <td>6,434</td>
+            <td>1.89%</td>
+            <td>$0.85</td>
+            <td class="roas-good"><strong>~22×</strong></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="note-box anim d4">
+        <strong style="color:var(--mint);">Broad — Frequent Travelers</strong> punches above its weight: 1.99% CTR, 25.3× median ROAS at only 11% spend.
+        Move <strong>+$300/mo from Broad (untargeted)</strong> into this segment.
+        <strong style="color:var(--red);">Lookalike — Visitors / Bookers / Group</strong> spent $84 with $0 attributed revenue — these
+        small Lookalike sets are <strong>too narrow to deliver bookings</strong> in 1 month — either consolidate into 1 Broad LAL or kill.
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">12 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 13 · OPTIMIZATION ACTION PLAN
+════════════════════════════════════════ -->
+<section class="slide" id="s13">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="glow" style="bottom:-50px;left:-50px;width:280px;height:280px;background:radial-gradient(circle, rgba(245,166,35,0.07), transparent 70%);"></div>
+
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow anim d1">Optimization Action Plan · Next 30 Days</div>
+      <h2 class="slide-title anim d2">What to Do Now</h2>
+    </div>
+
+    <div class="slide-content">
+      <div class="action-grid">
+        <div class="action-card pause anim d2">
+          <div class="action-head">
+            <span>Pause</span>
+            <span class="channel-tag">SEM</span>
+            <span style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:var(--fs-tiny);">~$291 / month saved</span>
+          </div>
+          <div class="action-title">Display Retargeting (Group-level)</div>
+          <div class="action-desc">
+            "Brady Group | Display | Retargeting" + "…— All Website Visitors". $291 spend → $326 rev (1.1× ROAS).
+            Pause both, replace with Meta retargeting (Brady Hotels 2025 ad acct → Retarget set: 21.5× ROAS).
+          </div>
+        </div>
+
+        <div class="action-card pause anim d2">
+          <div class="action-head">
+            <span>Pause</span>
+            <span class="channel-tag">Meta GS</span>
+            <span style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:var(--fs-tiny);">~$79 / month saved</span>
+          </div>
+          <div class="action-title">Metasearch JP + ID + Tripadvisor Mobile</div>
+          <div class="action-desc">
+            $44 (Japan) + $35 (Indonesia) + $5 (Tripadvisor Mobile) = 0× ROAS. Disable country &amp; mobile placements; reassess after
+            site language/payment fix.
+          </div>
+        </div>
+
+        <div class="action-card pause anim d3">
+          <div class="action-head">
+            <span>Pause</span>
+            <span class="channel-tag">Social</span>
+            <span style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:var(--fs-tiny);">~$414 / month saved</span>
+          </div>
+          <div class="action-title">3× Autumn Sale Variants (CTR &lt; 0.5%)</div>
+          <div class="action-desc">
+            "Diji | Brady | March 2026 | Autumn Sale / FLINDERS / BRAND / CENTRAL MEL". Creative fatigue — CTR 0.27–0.47%, CPC &gt; $2.85.
+            Wind‑down by week 2.
+          </div>
+        </div>
+
+        <div class="action-card scale anim d3">
+          <div class="action-head">
+            <span>Scale</span>
+            <span class="channel-tag">SEM</span>
+            <span style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:var(--fs-tiny);">+$1,200 deploy</span>
+          </div>
+          <div class="action-title">PMAX Group + Hardware Lane</div>
+          <div class="action-desc">
+            "Brady Group | Performance Max" (38.7× ROAS) + "Brady Apt Hardware Lane | Performance Max" (44.3×). Lift daily budgets
+            +30% heading into May/June peak.
+          </div>
+        </div>
+
+        <div class="action-card scale anim d4">
+          <div class="action-head">
+            <span>Scale</span>
+            <span class="channel-tag">Meta GS</span>
+            <span style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:var(--fs-tiny);">+$220 deploy</span>
+          </div>
+          <div class="action-title">Singapore Market (Google Hotel Ads)</div>
+          <div class="action-desc">
+            92.2× ROAS at $82 spend → only 8 bookings. Lift Singapore market cap from $82 → $300 across all 4 Brady hotels and
+            re-evaluate share of impressions.
+          </div>
+        </div>
+
+        <div class="action-card scale anim d4">
+          <div class="action-head">
+            <span>Scale</span>
+            <span class="channel-tag">Social</span>
+            <span style="margin-left:auto;color:rgba(255,255,255,0.4);font-size:var(--fs-tiny);">+$300 / mo</span>
+          </div>
+          <div class="action-title">Broad — Frequent Travelers</div>
+          <div class="action-desc">
+            25.3× median ROAS at only 10.5% of spend. Move budget from generic Broad into the Frequent Travelers segment across the 5
+            per-hotel "Sales" campaigns.
+          </div>
+        </div>
+
+        <div class="action-card test anim d5">
+          <div class="action-head">
+            <span>Test</span>
+            <span class="channel-tag">SEM</span>
+          </div>
+          <div class="action-title">Desktop +15% bid mod, 5× per-hotel Brand Search</div>
+          <div class="action-desc">
+            Desktop ROAS 28.9× vs Mobile 23.8× on same spend. 14-day test on "Brady Apt Hardware Lane | Search | Brand",
+            "Brady Hotels Jones Lane | Search | Brand", "Brady Group | Search | Brand", "Brady Hotels Central Mel | Search | Brand",
+            "Brady Apt Flinders Street | Search | Brand".
+          </div>
+        </div>
+
+        <div class="action-card test anim d5">
+          <div class="action-head">
+            <span>Test</span>
+            <span class="channel-tag">Social</span>
+          </div>
+          <div class="action-title">New creative for Central Melbourne | Sales</div>
+          <div class="action-desc">
+            CTR 1.05% vs Brady Sales avg 1.95% — creative-driven gap, not audience. Brief 3 new variants
+            (UGC pool/dining + room features) to test against current set.
+          </div>
+        </div>
+
+        <div class="action-card watch anim d6" style="grid-column: span 2;">
+          <div class="action-head">
+            <span>Watch / Investigate</span>
+            <span class="channel-tag">SEM · Critical</span>
+          </div>
+          <div class="action-title">SEM Revenue −55.7% YoY — Tracking vs Real Loss?</div>
+          <div class="action-desc">
+            Apr '26 SEM revenue $188K vs Apr '25 $425K, on stable spend ($7.2K vs $8.0K) and improving CTR. Cross-check Brady's
+            booking PMS revenue for Apr '26 vs Apr '25 against attributed Google Ads revenue. If PMS confirms loss, drill into
+            (1) conversion tag persistence post-handover, (2) attribution window default change, (3) loss of "Ryval x Brady — DSA"
+            broad-match coverage that 2026 structure didn't replace. Owner: Diji + Brady analytics. Target: complete by week 2.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">13 / 14</div>
+</section>
+
+<!-- ════════════════════════════════════════
+     SLIDE 14 · CLOSING / WiP NEXT STEPS
+════════════════════════════════════════ -->
+<section class="slide" id="s14">
+  <div class="wip-stamp">WiP · Draft</div>
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div class="glow" style="top:-90px;right:-90px;width:380px;height:380px;background:radial-gradient(circle, rgba(245,166,35,0.12), transparent 70%);"></div>
+
+  <div class="slide-inner" style="justify-content:center;">
+    <div style="max-width:880px;margin:0 auto;">
+      <div class="slide-eyebrow anim d1" style="text-align:center;">Working Document — Next Steps</div>
+      <h2 class="slide-title anim d2" style="text-align:center;font-size:var(--fs-display);">Open Questions &amp; Owners</h2>
+
+      <div style="margin-top:var(--gap);display:flex;flex-direction:column;gap:var(--gap-sm);">
+        <div class="anim d3" style="display:flex;gap:var(--gap-sm);align-items:flex-start;padding:var(--gap-sm) var(--gap);border-left:2px solid var(--amber);background:rgba(245,166,35,0.04);">
+          <div style="font-family:'Playfair Display',serif;font-size:1.6rem;color:var(--amber-d);font-weight:700;line-height:1;width:2rem;flex-shrink:0;">01</div>
+          <div>
+            <div style="font-weight:600;font-size:var(--fs-h3);margin-bottom:0.2rem;">Validate SEM revenue drop</div>
+            <div style="font-size:var(--fs-small);color:rgba(255,255,255,0.6);line-height:1.55;">
+              Compare PMS revenue (Brady booking system) vs Google Ads attributed revenue for Apr 2025 + Apr 2026 to isolate
+              tracking loss vs real performance. <strong>Owner: Diji × Brady Analytics</strong> · <strong>Due: 2026-05-07</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="anim d4" style="display:flex;gap:var(--gap-sm);align-items:flex-start;padding:var(--gap-sm) var(--gap);border-left:2px solid var(--blue);background:rgba(124,185,232,0.04);">
+          <div style="font-family:'Playfair Display',serif;font-size:1.6rem;color:rgba(124,185,232,0.4);font-weight:700;line-height:1;width:2rem;flex-shrink:0;">02</div>
+          <div>
+            <div style="font-weight:600;font-size:var(--fs-h3);margin-bottom:0.2rem;">Layer in PMS booking data per hotel</div>
+            <div style="font-size:var(--fs-small);color:rgba(255,255,255,0.6);line-height:1.55;">
+              Extend this report with the Booking report data source (sync currently manual) — adds Channel(Attributed) +
+              direct vs OTA split per hotel. <strong>Owner: Diji</strong> · <strong>Due: next sync window</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="anim d5" style="display:flex;gap:var(--gap-sm);align-items:flex-start;padding:var(--gap-sm) var(--gap);border-left:2px solid var(--mint);background:rgba(125,211,160,0.04);">
+          <div style="font-family:'Playfair Display',serif;font-size:1.6rem;color:rgba(125,211,160,0.4);font-weight:700;line-height:1;width:2rem;flex-shrink:0;">03</div>
+          <div>
+            <div style="font-weight:600;font-size:var(--fs-h3);margin-bottom:0.2rem;">Implement action plan items 1–8</div>
+            <div style="font-size:var(--fs-small);color:rgba(255,255,255,0.6);line-height:1.55;">
+              Pause $784 of low-performing spend (SEM Display + Meta JP/ID + 3 Autumn Sale variants);
+              redeploy ~$1,720 into PMAX Group/Hardware, Singapore Metasearch, Frequent Travelers segment.
+              <strong>Owner: Diji Media</strong> · <strong>Due: 2026-05-14</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-row anim d6" style="margin-top:var(--gap);">
+        <div>
+          <div class="footer-label">Prepared By</div>
+          <div class="footer-value">Dijitally Agency · WiP Draft</div>
+        </div>
+        <div style="text-align:center;">
+          <div class="footer-label">Status</div>
+          <div class="footer-value" style="color:var(--amber);">● Working Document</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="footer-label">Snapshot Date</div>
+          <div class="footer-value">2026-04-30</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="slide-num">14 / 14</div>
+</section>
+
+<!-- jsPDF + html2canvas for #pdf hash -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+(function () {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl = document.getElementById('nav-dots');
+  const progressEl = document.getElementById('progress-bar');
+  const total = slides.length;
+  let current = 0;
+
+  slides.forEach((_, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    btn.setAttribute('aria-label', 'Slide ' + (i + 1));
+    btn.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(btn);
+  });
+
+  function goTo(idx) {
+    current = Math.max(0, Math.min(idx, total - 1));
+    slides[current].scrollIntoView({ behavior: 'smooth' });
+    sync();
+  }
+
+  function sync() {
+    document.querySelectorAll('.nav-dot').forEach((d, i) =>
+      d.classList.toggle('active', i === current));
+    progressEl.style.width = ((current + 1) / total * 100) + '%';
+  }
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio >= 0.45) {
+        const i = slides.indexOf(e.target);
+        current = i;
+        sync();
+        e.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.45 });
+  slides.forEach(s => io.observe(s));
+
+  document.addEventListener('keydown', e => {
+    const map = {
+      ArrowDown: 1, ArrowRight: 1, ' ': 1, PageDown: 1,
+      ArrowUp: -1, ArrowLeft: -1, PageUp: -1
+    };
+    if (e.key in map) { e.preventDefault(); goTo(current + map[e.key]); }
+    else if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    else if (e.key === 'End')  { e.preventDefault(); goTo(total - 1); }
+  });
+
+  let ty = 0, tx = 0;
+  document.addEventListener('touchstart', e => {
+    ty = e.touches[0].clientY; tx = e.touches[0].clientX;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dy = ty - e.changedTouches[0].clientY;
+    const dx = tx - e.changedTouches[0].clientX;
+    if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 50)
+      goTo(current + (dy > 0 ? 1 : -1));
+  }, { passive: true });
+
+  slides[0].classList.add('visible');
+
+  // PDF generation on #pdf or #print
+  if (window.location.hash === '#pdf' || window.location.hash === '#print') {
+    var generatePDF = async function () {
+      document.querySelectorAll('.slide').forEach(function (s) { s.classList.add('visible'); });
+      document.body.classList.add('pdf-mode');
+
+      var overlay = document.createElement('div');
+      overlay.className = 'pdf-overlay';
+      overlay.innerHTML =
+        '<div class="pdf-title">Generating PDF…</div>' +
+        '<div class="pdf-progress" id="__pdfProgress">Preparing slides…</div>' +
+        '<div class="pdf-bar"><div class="pdf-bar-fill" id="__pdfBar" style="width:0%"></div></div>';
+      document.body.appendChild(overlay);
+
+      try { await document.fonts.ready; } catch (e) {}
+      await new Promise(function (r) { setTimeout(r, 500); });
+
+      var slideEls = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var t = slideEls.length;
+
+      var titleText = (document.title || 'slides')
+        .replace(/×/g, 'x').replace(/[—–]/g, '-').replace(/[·•]/g, '-')
+        .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+      var filename = (titleText || 'slides') + '.pdf';
+
+      var jsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+      var pdf = new jsPDF({
+        orientation: 'landscape', unit: 'pt', format: [960, 540], compress: true
+      });
+
+      for (var i = 0; i < t; i++) {
+        var slide = slideEls[i];
+        var prog = document.getElementById('__pdfProgress');
+        var bar = document.getElementById('__pdfBar');
+        if (prog) prog.textContent = 'Rendering slide ' + (i + 1) + ' of ' + t + '…';
+        if (bar) bar.style.width = (((i) / t) * 100) + '%';
+
+        var canvas = await html2canvas(slide, {
+          scale: 2, useCORS: true, backgroundColor: '#FFFFFF',
+          width: 1280, height: 720,
+          windowWidth: 1280, windowHeight: 720,
+          logging: false
+        });
+        var imgData = canvas.toDataURL('image/jpeg', 0.92);
+        if (i > 0) pdf.addPage([960, 540], 'landscape');
+        pdf.addImage(imgData, 'JPEG', 0, 0, 960, 540, undefined, 'FAST');
+      }
+
+      var bar2 = document.getElementById('__pdfBar');
+      var prog2 = document.getElementById('__pdfProgress');
+      if (bar2) bar2.style.width = '100%';
+      if (prog2) prog2.textContent = 'Saving PDF…';
+
+      pdf.save(filename);
+      setTimeout(function () { try { window.close(); } catch (e) {} }, 1200);
+    };
+
+    if (document.readyState === 'complete') { generatePDF(); }
+    else { window.addEventListener('load', generatePDF); }
+  }
+})();
+</script>
+</body>
+</html>
