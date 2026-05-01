@@ -168,7 +168,7 @@ function buildDefaultSlideReportDateRange(): SlideReportDateRange {
 const CHANNEL_DIMENSION_NAMES: Record<string, string[]> = {
   metasearch: ['Hotel', 'Channel', 'Device', 'Link Type', 'Market'],
   // Windsor.ai / Google Ads breakdowns supported on SEM
-  sem: ['Account', 'Campaign', 'Ad Group', 'Keyword', 'Device', 'Audience', 'Country', 'Market', 'Funnel', 'Funnel Stage', 'Network'],
+  sem: ['Account', 'Campaign', 'Ad Group', 'Device', 'Audience', 'Country', 'Market', 'Funnel', 'Funnel Stage', 'Network'],
   // Windsor.ai / Meta Ads breakdowns supported on Social
   social: ['Account', 'Campaign', 'Ad Group', 'Device', 'Audience', 'Country', 'Market', 'Placement', 'Publisher Platform', 'Funnel', 'Funnel Stage', 'Objective', 'Age', 'Gender'],
 };
