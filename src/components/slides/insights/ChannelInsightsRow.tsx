@@ -1,6 +1,5 @@
-import { useMemo } from "react";
-import { Globe, Smartphone, Users, Filter, Layers, Layout } from "lucide-react";
-import { BreakdownByDimensionCard } from "./BreakdownByDimensionCard";
+import { useMemo, useState } from "react";
+import { Globe, Smartphone, Users, Layout, Layers } from "lucide-react";
 import { DonutBreakdownCard } from "./DonutBreakdownCard";
 import {
   getChannelInsightBuckets,
@@ -22,23 +21,18 @@ interface Props {
   customDateRange?: import("react-day-picker").DateRange | undefined;
   filterValues: Record<string, Record<string, string[]>>;
   configuredDimensionNames?: Record<string, string>;
-  /** Metric to summarize across all cards. Defaults to bookings, falls back to clicks. */
+  /** Metric used by non-metasearch cards. Defaults to bookings. */
   metric?: InsightMetricKey;
 }
 
-/**
- * Candidate dimension names per insight (case-insensitive). The first match in the
- * channel's dimensionMap wins. Including common Windsor.ai / Google Ads / Meta Ads
- * variants so the row lights up as soon as the new sync populates these dimensions.
- */
-const FUNNEL_NAMES = [
-  "Funnel",
-  "Funnel Stage",
-  "Funnel Step",
-  "Objective",
-  "Campaign Objective",
-  "Campaign Type",
-  "Stage",
+const CHANNEL_NAMES = [
+  "Channel",
+  "Source",
+  "Partner",
+  "Platform",
+  "Network",
+  "Publisher",
+  "Metasearch Partner",
 ];
 const AUDIENCE_NAMES = [
   "Audience",
@@ -65,6 +59,35 @@ const PLACEMENT_NAMES = [
   "Position",
 ];
 
+const KPI_OPTIONS: { value: InsightMetricKey; label: string }[] = [
+  { value: "revenue", label: "Revenue" },
+  { value: "cost", label: "Cost" },
+  { value: "bookings", label: "Bookings" },
+  { value: "clicks", label: "Clicks" },
+  { value: "impressions", label: "Impressions" },
+];
+
+function KpiSelect({
+  value,
+  onChange,
+}: {
+  value: InsightMetricKey;
+  onChange: (m: InsightMetricKey) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as InsightMetricKey)}
+      onClick={(e) => e.stopPropagation()}
+      className="shrink-0 text-[10px] rounded border border-border bg-background text-muted-foreground px-1.5 py-0.5 cursor-pointer hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+    >
+      {KPI_OPTIONS.map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
+  );
+}
+
 export function ChannelInsightsRow({
   scope,
   pivotData,
@@ -87,16 +110,15 @@ export function ChannelInsightsRow({
     return buildMultiMonthDateRange(selectedYear || "all", selectedMonth || "all");
   }, [customDateRange, selectedYear, selectedMonth]);
 
-  // Determine which channels feed each scope.
   const channels: Channel[] = scope === "overview" ? ["metasearch", "sem", "social"] : [scope];
 
-  function bucketsFor(candidates: string[]) {
+  function bucketsForWithMetric(candidates: string[], m: InsightMetricKey) {
     if (scope === "overview") {
       return getOverviewInsightBuckets(
         pivotData as any,
         channels,
         candidates,
-        metric,
+        m,
         filterValues,
         dateRange,
         configuredDimensionNames,
@@ -107,80 +129,132 @@ export function ChannelInsightsRow({
       channelData as any,
       scope,
       candidates,
-      metric,
+      m,
       filterValues,
       dateRange,
       configuredDimensionNames,
     );
   }
 
-  // The fourth card differs per scope: SEM = Top Market, Social = Placements,
-  // Metasearch = Top Market, Overview = Top Market.
-  const showPlacements = scope === "social";
+  // Per-card KPI state for metasearch (always called to satisfy Rules of Hooks).
+  const [chMetric, setChMetric] = useState<InsightMetricKey>("revenue");
+  const [devMetric, setDevMetric] = useState<InsightMetricKey>("revenue");
+  const [mktMetric, setMktMetric] = useState<InsightMetricKey>("revenue");
 
-  const funnel = useMemo(() => bucketsFor(FUNNEL_NAMES), [scope, pivotData, dateRange, filterValues, metric]);
-  const audience = useMemo(() => bucketsFor(AUDIENCE_NAMES), [scope, pivotData, dateRange, filterValues, metric]);
-  const device = useMemo(() => bucketsFor(DEVICE_NAMES), [scope, pivotData, dateRange, filterValues, metric]);
-  const fourth = useMemo(
-    () => bucketsFor(showPlacements ? PLACEMENT_NAMES : MARKET_NAMES),
-    [scope, pivotData, dateRange, filterValues, metric, showPlacements],
-  );
+  const isMetasearch = scope === "metasearch";
+  const isSocial = scope === "social";
 
-  const heading = scope === "overview"
-    ? "Performance breakdowns"
-    : scope === "sem"
-      ? "SEM breakdowns"
-      : scope === "social"
-        ? "Social breakdowns"
-        : "Metasearch breakdowns";
+  // ── Metasearch per-card buckets ──────────────────────────────────────────────
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const metaCh  = useMemo(() => bucketsForWithMetric(CHANNEL_NAMES, chMetric),  [scope, pivotData, dateRange, filterValues, chMetric]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const metaDev = useMemo(() => bucketsForWithMetric(DEVICE_NAMES, devMetric),  [scope, pivotData, dateRange, filterValues, devMetric]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const metaMkt = useMemo(() => bucketsForWithMetric(MARKET_NAMES, mktMetric),  [scope, pivotData, dateRange, filterValues, mktMetric]);
+
+  // ── Shared-metric buckets (SEM / Social / Overview) ─────────────────────────
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const device    = useMemo(() => bucketsForWithMetric(DEVICE_NAMES, metric),     [scope, pivotData, dateRange, filterValues, metric]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const audience  = useMemo(() => bucketsForWithMetric(AUDIENCE_NAMES, metric),   [scope, pivotData, dateRange, filterValues, metric]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const market    = useMemo(() => bucketsForWithMetric(MARKET_NAMES, metric),     [scope, pivotData, dateRange, filterValues, metric]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const placement = useMemo(() => bucketsForWithMetric(PLACEMENT_NAMES, metric),  [scope, pivotData, dateRange, filterValues, metric]);
+
+  const heading =
+    scope === "overview" ? "Performance breakdowns" :
+    scope === "sem"      ? "SEM breakdowns" :
+    scope === "social"   ? "Social breakdowns" :
+                           "Metasearch breakdowns";
 
   return (
     <section className="space-y-3">
       <div className="flex items-baseline justify-between">
         <h3 className="text-sm font-medium text-foreground">{heading}</h3>
-        <span className="text-[11px] text-muted-foreground">
-          By {(funnel.dimensionLabel || "Funnel").toLowerCase()} · {(audience.dimensionLabel || "Audience").toLowerCase()} · {(device.dimensionLabel || "Device").toLowerCase()} · {(fourth.dimensionLabel || (showPlacements ? "Placement" : "Market")).toLowerCase()}
-        </span>
+        {isMetasearch ? (
+          <span className="text-[11px] text-muted-foreground">
+            By {(metaCh.dimensionLabel || "channel").toLowerCase()} · {(metaDev.dimensionLabel || "device").toLowerCase()} · {(metaMkt.dimensionLabel || "market").toLowerCase()}
+          </span>
+        ) : isSocial ? (
+          <span className="text-[11px] text-muted-foreground">
+            By {(device.dimensionLabel || "device").toLowerCase()} · {(placement.dimensionLabel || "placement").toLowerCase()} · {(audience.dimensionLabel || "audience").toLowerCase()}
+          </span>
+        ) : (
+          <span className="text-[11px] text-muted-foreground">
+            By {(device.dimensionLabel || "device").toLowerCase()} · {(market.dimensionLabel || "market").toLowerCase()} · {(audience.dimensionLabel || "audience").toLowerCase()}
+          </span>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <BreakdownByDimensionCard
-          title={`By ${(funnel.dimensionLabel || "funnel").toLowerCase()}`}
-          icon={<Filter className="h-3.5 w-3.5 text-muted-foreground" />}
-          buckets={funnel.buckets}
-          metric={metric}
-          barColor="hsl(255 70% 65%)"
-        />
-        <BreakdownByDimensionCard
-          title={`By ${(audience.dimensionLabel || "audience").toLowerCase()}`}
-          icon={<Users className="h-3.5 w-3.5 text-muted-foreground" />}
-          buckets={audience.buckets}
-          metric={metric}
-          barColor="hsl(178 50% 45%)"
-        />
-        <DonutBreakdownCard
-          title={`By ${(device.dimensionLabel || "device").toLowerCase()}`}
-          icon={<Smartphone className="h-3.5 w-3.5 text-muted-foreground" />}
-          buckets={device.buckets}
-          metric={metric}
-        />
-        {showPlacements ? (
-          <BreakdownByDimensionCard
-            title={`By ${(fourth.dimensionLabel || "placement").toLowerCase()}`}
-            icon={<Layout className="h-3.5 w-3.5 text-muted-foreground" />}
-            buckets={fourth.buckets}
-            metric={metric}
-            barColor="hsl(38 90% 55%)"
-          />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {isMetasearch ? (
+          <>
+            <DonutBreakdownCard
+              title={`By ${(metaCh.dimensionLabel || "channel").toLowerCase()}`}
+              icon={<Layers className="h-3.5 w-3.5 text-muted-foreground" />}
+              buckets={metaCh.buckets}
+              metric={chMetric}
+              headerAction={<KpiSelect value={chMetric} onChange={setChMetric} />}
+            />
+            <DonutBreakdownCard
+              title={`By ${(metaDev.dimensionLabel || "device").toLowerCase()}`}
+              icon={<Smartphone className="h-3.5 w-3.5 text-muted-foreground" />}
+              buckets={metaDev.buckets}
+              metric={devMetric}
+              headerAction={<KpiSelect value={devMetric} onChange={setDevMetric} />}
+            />
+            <DonutBreakdownCard
+              title={`By ${(metaMkt.dimensionLabel || "market").toLowerCase()}`}
+              icon={<Globe className="h-3.5 w-3.5 text-muted-foreground" />}
+              buckets={metaMkt.buckets}
+              metric={mktMetric}
+              headerAction={<KpiSelect value={mktMetric} onChange={setMktMetric} />}
+            />
+          </>
+        ) : isSocial ? (
+          <>
+            <DonutBreakdownCard
+              title={`By ${(device.dimensionLabel || "device").toLowerCase()}`}
+              icon={<Smartphone className="h-3.5 w-3.5 text-muted-foreground" />}
+              buckets={device.buckets}
+              metric={metric}
+            />
+            <DonutBreakdownCard
+              title={`By ${(placement.dimensionLabel || "placement").toLowerCase()}`}
+              icon={<Layout className="h-3.5 w-3.5 text-muted-foreground" />}
+              buckets={placement.buckets}
+              metric={metric}
+            />
+            <DonutBreakdownCard
+              title={`By ${(audience.dimensionLabel || "audience").toLowerCase()}`}
+              icon={<Users className="h-3.5 w-3.5 text-muted-foreground" />}
+              buckets={audience.buckets}
+              metric={metric}
+            />
+          </>
         ) : (
-          <BreakdownByDimensionCard
-            title={`By ${(fourth.dimensionLabel || "country").toLowerCase()}`}
-            icon={<Globe className="h-3.5 w-3.5 text-muted-foreground" />}
-            buckets={fourth.buckets}
-            metric={metric}
-            showCountryBadge
-            barColor="hsl(178 50% 45%)"
-          />
+          /* SEM and Overview: Device · Market · Audience */
+          <>
+            <DonutBreakdownCard
+              title={`By ${(device.dimensionLabel || "device").toLowerCase()}`}
+              icon={<Smartphone className="h-3.5 w-3.5 text-muted-foreground" />}
+              buckets={device.buckets}
+              metric={metric}
+            />
+            <DonutBreakdownCard
+              title={`By ${(market.dimensionLabel || "market").toLowerCase()}`}
+              icon={<Globe className="h-3.5 w-3.5 text-muted-foreground" />}
+              buckets={market.buckets}
+              metric={metric}
+            />
+            <DonutBreakdownCard
+              title={`By ${(audience.dimensionLabel || "audience").toLowerCase()}`}
+              icon={<Users className="h-3.5 w-3.5 text-muted-foreground" />}
+              buckets={audience.buckets}
+              metric={metric}
+            />
+          </>
         )}
       </div>
     </section>

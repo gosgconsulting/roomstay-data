@@ -20,6 +20,8 @@ interface Props {
   emptyHint?: string;
   /** Bar tint color (CSS color). Defaults to teal. */
   barColor?: string;
+  /** Optional element rendered at the trailing end of the card header (e.g. a KPI selector). */
+  headerAction?: React.ReactNode;
 }
 
 export function BreakdownByDimensionCard({
@@ -30,15 +32,19 @@ export function BreakdownByDimensionCard({
   showCountryBadge,
   emptyHint = "Not available yet — data will populate once the new sync runs.",
   barColor = "hsl(178 50% 45%)",
+  headerAction,
 }: Props) {
   const max = buckets.reduce((m, b) => Math.max(m, b.value), 0);
 
   return (
     <Card className="h-full">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
-          {icon}
-          {title}
+        <CardTitle className="flex items-center justify-between gap-2 text-sm font-medium text-foreground">
+          <span className="flex items-center gap-2 min-w-0">
+            {icon}
+            <span className="truncate">{title}</span>
+          </span>
+          {headerAction}
         </CardTitle>
       </CardHeader>
       <CardContent>

@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Filter, Share2, RefreshCw, Loader2, ChevronDown, X, RotateCcw, Lock } from "lucide-react";
+import { Filter, Share2, ChevronDown, X, RotateCcw, Lock } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { slideSelectionToDateRange, deriveSlideDatePreset, derivePresetFromDateRange } from "@/lib/monthUtils";
 import { DateRangeFilter } from "@/components/filters";
@@ -275,9 +275,6 @@ interface FiltersRowProps {
   /** Callback to reset all active filter selections across all channels */
   onResetAllFilters?: () => void;
   onShare: () => void;
-  onRefreshData: () => void;
-  isRefreshInProgress: boolean;
-  showRefreshButton: boolean;
   /**
    * Array of dimension IDs that are locked (read-only) for viewers in shared reports.
    * 
@@ -316,9 +313,6 @@ export function FiltersRow({
   onClearFilter,
   onResetAllFilters,
   onShare,
-  onRefreshData,
-  isRefreshInProgress,
-  showRefreshButton,
   lockedDimensionIds = [],
   allowDataFilterChanges = false,
   isRestrictedUser = false,
@@ -463,22 +457,6 @@ export function FiltersRow({
           >
             <Share2 className="h-3.5 w-3.5" />
             Share
-          </Button>
-        )}
-        {!isReadOnlyMode && !isRestrictedUser && showRefreshButton && (
-          <Button
-            variant="default"
-            size="sm"
-            className="h-8 gap-1.5 bg-primary hover:bg-primary/90"
-            onClick={onRefreshData}
-            disabled={isRefreshInProgress}
-          >
-            {isRefreshInProgress ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            Refresh Data
           </Button>
         )}
       </div>

@@ -12,6 +12,7 @@ interface Props {
   buckets: InsightBucket[];
   metric: InsightMetricKey;
   emptyHint?: string;
+  headerAction?: React.ReactNode;
 }
 
 const PALETTE = [
@@ -31,6 +32,7 @@ export function DonutBreakdownCard({
   buckets,
   metric,
   emptyHint = "Not available yet — data will populate once the new sync runs.",
+  headerAction,
 }: Props) {
   const data = buckets.map((b, i) => ({
     name: b.label,
@@ -42,9 +44,12 @@ export function DonutBreakdownCard({
   return (
     <Card className="h-full">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm font-medium text-foreground">
-          {icon}
-          {title}
+        <CardTitle className="flex items-center justify-between gap-2 text-sm font-medium text-foreground">
+          <span className="flex items-center gap-2 min-w-0">
+            {icon}
+            <span className="truncate">{title}</span>
+          </span>
+          {headerAction}
         </CardTitle>
       </CardHeader>
       <CardContent>

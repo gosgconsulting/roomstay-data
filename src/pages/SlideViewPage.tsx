@@ -5,11 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database, Check, Share2, BookmarkPlus, Trash2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Eye, MousePointer, DollarSign, Percent, TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Settings2, ChevronLeft, ChevronRight, X, Sparkles, Search, Loader2, Database, Check, Share2, Trash2 } from "lucide-react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart, Line } from "recharts";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { SaveViewDialog } from "@/components/slides/SaveViewDialog";
-import { SaveOrUpdateViewDialog } from "@/components/slides/SaveOrUpdateViewDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -69,7 +67,6 @@ import type { AccountReportIds } from "@/lib/accountReportIds";
 import { runRefreshWorkflow } from "@/lib/refreshWorkflow";
 import {
   calculateDerivedMetrics,
-  computePerformanceModelCommissionSplit,
   getFilteredPivotRowsForChannel,
   hasActiveFilters,
   hasActiveFiltersForChannel,
@@ -171,7 +168,7 @@ function buildDefaultSlideReportDateRange(): SlideReportDateRange {
 const CHANNEL_DIMENSION_NAMES: Record<string, string[]> = {
   metasearch: ['Hotel', 'Channel', 'Device', 'Link Type', 'Market'],
   // Windsor.ai / Google Ads breakdowns supported on SEM
-  sem: ['Account', 'Campaign', 'Ad Group', 'Device', 'Audience', 'Country', 'Market', 'Funnel', 'Funnel Stage', 'Network'],
+  sem: ['Account', 'Campaign', 'Ad Group', 'Keyword', 'Device', 'Audience', 'Country', 'Market', 'Funnel', 'Funnel Stage', 'Network'],
   // Windsor.ai / Meta Ads breakdowns supported on Social
   social: ['Account', 'Campaign', 'Ad Group', 'Device', 'Audience', 'Country', 'Market', 'Placement', 'Publisher Platform', 'Funnel', 'Funnel Stage', 'Objective', 'Age', 'Gender'],
 };
@@ -378,8 +375,6 @@ export default function SlideViewPage() {
   // filterValues, customDateRange, comparisonType are now owned by useDataStudioFilters (below).
   // filterDimensionValues is derived from rawDataRows inside useDataStudioFilters.
   const filterDimensionValues: Record<string, Record<string, string[]>> = { metasearch: {}, sem: {}, social: {} };
-  const [isSaveViewDialogOpen, setIsSaveViewDialogOpen] = useState(false);
-  const [isSaveOrUpdateViewDialogOpen, setIsSaveOrUpdateViewDialogOpen] = useState(false);
   const isApplyingViewRef = useRef(false); // Track when we're applying a view to avoid triggering "Unsaved"
   const [isReadOnlyMode, setIsReadOnlyMode] = useState(false); // Read-only mode when viewing shared view
   const [isEditSourceOpen, setIsEditSourceOpen] = useState(false);
@@ -2663,109 +2658,6 @@ export default function SlideViewPage() {
     return allViews.filter(v => v.id !== null && allowedViewIds.includes(v.id));
   }, [views, allowedViewIds]);
 
-  // Get available main dimensions for view saving (Account for SEM/Social, Hotel for Metasearch)
-  const availableMainDimensions = useMemo(() => {
-    const dims: Array<{ id: string; name: string; channel: string }> = [];
-    
-    // For each active channel, find the primary dimension
-    const channelPrimaryDims: Record<string, string> = {
-      metasearch: 'Hotel',
-      sem: 'Account',
-      social: 'Account',
-    };
-
-    for (const [channel, primaryDimName] of Object.entries(channelPrimaryDims)) {
-      const channelDims = breakdownDimensions[channel] || [];
-      const primaryDim = channelDims.find(d => d.name.toLowerCase() === primaryDimName.toLowerCase());
-      if (primaryDim) {
-        dims.push({
-          id: primaryDim.id,
-          name: primaryDim.name,
-          channel: channel.charAt(0).toUpperCase() + channel.slice(1),
-        });
-      }
-    }
-
-    return dims;
-  }, [breakdownDimensions]);
-
-  // Infer default main dimension based on active tab/filters
-  const defaultMainDimensionId = useMemo(() => {
-    if (selectedTab === 'metasearch' || selectedTab === 'sem' || selectedTab === 'social') {
-      const channelDims = breakdownDimensions[selectedTab] || [];
-      const primaryName = selectedTab === 'metasearch' ? 'Hotel' : 'Account';
-      const primaryDim = channelDims.find(d => d.name.toLowerCase() === primaryName.toLowerCase());
-      return primaryDim?.id;
-    }
-    // Default to first available if on overview or other tab
-    return availableMainDimensions[0]?.id;
-  }, [selectedTab, breakdownDimensions, availableMainDimensions]);
-
-  // Save current filter configuration as a view
-  const handleSaveView = useCallback(async (viewName: string, mainDimensionId?: string, mainDimensionName?: string) => {
-    if (!slideReportId || !slideReport || !user) {
-      toast({
-        title: "Error",
-        description: "No report selected. Please configure your report first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      await createView.mutateAsync({
-        slide_report_id: slideReportId,
-        account_id: accountId || null,
-        user_id: user.id,
-        name: viewName,
-        selected_year: selectedYear,
-        selected_month: selectedMonth,
-        comparison_type: comparisonType as any,
-        price_check_chart_time_range: priceCheckChartTimeRange,
-        filter_values: { ...filterValues }, // Deep copy to avoid mutations
-        filter_configs: { ...filterConfigs }, // Save current pill config with this view
-      } as any);
-
-      // The view will be automatically refetched by the query
-      // We'll select it after the query refetches
-      queryClient.invalidateQueries({ queryKey: ['views', 'list', slideReportId] });
-
-      // Use a small delay to allow the query to refetch, then find and select the new view
-      setTimeout(() => {
-        const updatedViews = queryClient.getQueryData<any[]>(['views', 'list', slideReportId]) || [];
-
-        const newView = updatedViews.find(v => v.name === viewName);
-        if (newView) {
-          setSelectedViewId(newView.id);
-        }
-      }, 300);
-    } catch (error) {
-      // Error toast is handled by the mutation
-      console.error('Error saving view:', error);
-    }
-  }, [slideReportId, slideReport, user, accountId, selectedYear, selectedMonth, customDateRange, comparisonType, priceCheckChartTimeRange, filterValues, createView, queryClient]);
-
-  // Update an existing view with current filter configuration
-  const handleUpdateView = useCallback(async (viewId: string) => {
-    if (!slideReportId || !user) return;
-    try {
-      const updatedView = await updateView.mutateAsync({
-        id: viewId,
-        selected_year: selectedYear,
-        selected_month: selectedMonth,
-        comparison_type: comparisonType as any,
-        price_check_chart_time_range: priceCheckChartTimeRange,
-        filter_values: { ...filterValues },
-        filter_configs: { ...filterConfigs }, // Save current pill config with this view
-      } as any);
-      queryClient.invalidateQueries({ queryKey: ['views', 'list', slideReportId] });
-      toast({ title: 'View updated', description: `View "${(updatedView as any)?.name ?? viewId}" has been updated.` });
-    } catch (error) {
-      console.error('Error updating view:', error);
-      toast({ title: 'Error', description: 'Failed to update view.', variant: 'destructive' });
-    }
-  }, [slideReportId, user, selectedYear, selectedMonth, customDateRange, comparisonType, priceCheckChartTimeRange, filterValues, filterConfigs, updateView, queryClient]);
-
   // Apply a saved view (or reset to Master when viewId is null)
   const handleApplyView = useCallback((viewId: string | null, options?: ApplyViewOptions) => {
     if (!slideReportId) return;
@@ -2994,89 +2886,17 @@ export default function SlideViewPage() {
     setEditPnlValue("");
   }, []);
 
-  // ========== View delete handler ==========
-  const handleDeleteView = useCallback(async (viewId: string) => {
-    try {
-      await deleteView.mutateAsync(viewId);
-      if (selectedViewId === viewId) {
-        setSelectedViewId(null);
-      }
-      toast({ title: "View deleted" });
-    } catch (error) {
-      toast({ title: "Error", description: "Failed to delete view", variant: "destructive" });
-    }
-  }, [deleteView, selectedViewId]);
-
   // ========== KPI Cards & Render Helpers ==========
-  const isPerformanceModelView = useMemo(() => {
-    if (!selectedViewId) return false;
-    const v = views.find(view => view.id === selectedViewId);
-    return v?.name?.toLowerCase() === 'performance model';
-  }, [selectedViewId, views]);
-
-  const PERFORMANCE_MODEL_KEYS = new Set(['commissionsPaid', 'commissionsFree', 'grossProfit']);
-
-  // Gross Profit and other Performance Model KPIs/columns are only shown for the Performance Model
-  // view in the authenticated (owner) context — never in shared/public views.
-  const showPerformanceModelKPIs = isPerformanceModelView && !isPublicShareStudio && !isSharedPreview;
-
-  const overviewMetricsBase = useOverviewMetrics(currentTotals);
-
-  const performanceModelOverviewPatch = useMemo(() => {
-    if (!isPerformanceModelView) return null;
-    const channels = ['metasearch', 'sem', 'social'] as const;
-    let commissionsPaid = 0;
-    let commissionsFree = 0;
-    for (const ch of channels) {
-      const rows = filteredData.getFilteredRowsForChannel(ch);
-      const dimMap =
-        (effectivePivotData?.channels as Record<string, { dimensionMap?: Record<string, string> }> | undefined)?.[ch]
-          ?.dimensionMap ?? {};
-      const part = computePerformanceModelCommissionSplit(ch, rows, dimMap);
-      commissionsPaid += part.commissionsPaid;
-      commissionsFree += part.commissionsFree;
-    }
-    const cost =
-      (currentTotals.metasearch?.cost || 0) +
-      (currentTotals.sem?.cost || 0) +
-      (currentTotals.social?.cost || 0);
-    return {
-      commissionsPaid,
-      commissionsFree,
-      grossProfit: commissionsPaid + commissionsFree - cost,
-    };
-  }, [isPerformanceModelView, filteredData, effectivePivotData, currentTotals]);
-
-  const overviewMetrics = useMemo(
-    () =>
-      performanceModelOverviewPatch
-        ? { ...overviewMetricsBase, ...performanceModelOverviewPatch }
-        : overviewMetricsBase,
-    [overviewMetricsBase, performanceModelOverviewPatch]
-  );
+  const overviewMetrics = useOverviewMetrics(currentTotals);
 
   const KPI_CARDS = useKPICards(overviewMetrics);
 
   const getReportKPICards = useCallback(
     (channel: 'metasearch' | 'sem' | 'social', data: MetricData) => {
       const derived = calculateDerivedMetrics(data);
-      if (!isPerformanceModelView) {
-        return buildKPICardsFromDerivedMetrics(derived);
-      }
-      const rows = filteredData.getFilteredRowsForChannel(channel);
-      const dimMap =
-        (effectivePivotData?.channels as Record<string, { dimensionMap?: Record<string, string> }> | undefined)?.[
-          channel
-        ]?.dimensionMap ?? {};
-      const { commissionsPaid, commissionsFree } = computePerformanceModelCommissionSplit(channel, rows, dimMap);
-      return buildKPICardsFromDerivedMetrics({
-        ...derived,
-        commissionsPaid,
-        commissionsFree,
-        grossProfit: commissionsPaid + commissionsFree - data.cost,
-      });
+      return buildKPICardsFromDerivedMetrics(derived);
     },
-    [isPerformanceModelView, filteredData, effectivePivotData]
+    []
   );
 
   const getOverviewComparisonMetrics = useCallback(() => {
@@ -3089,68 +2909,18 @@ export default function SlideViewPage() {
       totals.revenue += ch.revenue || 0;
       totals.bookings += ch.bookings || 0;
     });
-    // If all base metrics are zero, there's no real comparison data
     const hasAnyCompData = totals.impressions > 0 || totals.clicks > 0 || totals.cost > 0 || totals.revenue > 0 || totals.bookings > 0;
     if (!hasAnyCompData) return null;
     const derived = calculateDerivedMetrics(totals);
     const label = comparisonType === 'previous_period' ? 'vs prev period' : comparisonType === 'previous_month' ? 'vs prev month' : 'vs prev year';
-
-    if (!isPerformanceModelView) {
-      return { ...derived, label };
-    }
-
-    const exactCurrentRange = exactDateRangeFromDayPicker(customDateRange);
-    const comparisonDateRange = exactCurrentRange
-      ? buildComparisonDateRangeFromExact(exactCurrentRange, comparisonType as 'previous_period' | 'previous_year' | 'previous_month')
-      : buildComparisonDateRange(selectedYear, selectedMonth, comparisonType as 'previous_period' | 'previous_year' | 'previous_month');
-
-    if (!comparisonDateRange) {
-      return { ...derived, label };
-    }
-
-    const channels = ['metasearch', 'sem', 'social'] as const;
-    let commissionsPaid = 0;
-    let commissionsFree = 0;
-    for (const ch of channels) {
-      const chData = (effectivePivotData?.channels as unknown as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[ch];
-      const rows = getFilteredPivotRowsForChannel(
-        chData,
-        ch,
-        filterValues,
-        comparisonDateRange,
-        configuredDimensionNames
-      );
-      const dimMap = chData?.dimensionMap ?? {};
-      const part = computePerformanceModelCommissionSplit(ch, rows, dimMap);
-      commissionsPaid += part.commissionsPaid;
-      commissionsFree += part.commissionsFree;
-    }
-
-    return {
-      ...derived,
-      commissionsPaid,
-      commissionsFree,
-      grossProfit: commissionsPaid + commissionsFree - totals.cost,
-      label,
-    };
-  }, [
-    comparisonTotals,
-    comparisonType,
-    isPerformanceModelView,
-    customDateRange,
-    selectedYear,
-    selectedMonth,
-    effectivePivotData,
-    filterValues,
-    configuredDimensionNames,
-  ]);
+    return { ...derived, label };
+  }, [comparisonTotals, comparisonType]);
 
   const getChannelComparisonMetrics = useCallback(
     (channel: 'metasearch' | 'sem' | 'social') => {
       if (!comparisonTotals || comparisonType === 'none') return null;
       const ch = comparisonTotals[channel];
       if (!ch) return null;
-      // If all base metrics are zero, there's no real comparison data — don't show misleading 100% changes
       const hasAnyCompData =
         (ch.impressions || 0) > 0 ||
         (ch.clicks || 0) > 0 ||
@@ -3160,57 +2930,13 @@ export default function SlideViewPage() {
       if (!hasAnyCompData) return null;
       const derived = calculateDerivedMetrics(ch);
       const label = comparisonType === 'previous_period' ? 'vs prev period' : comparisonType === 'previous_month' ? 'vs prev month' : 'vs prev year';
-
-      if (!isPerformanceModelView) {
-        return { ...derived, label };
-      }
-
-      const exactCurrentRange = exactDateRangeFromDayPicker(customDateRange);
-      const comparisonDateRange = exactCurrentRange
-        ? buildComparisonDateRangeFromExact(exactCurrentRange, comparisonType as 'previous_period' | 'previous_year' | 'previous_month')
-        : buildComparisonDateRange(selectedYear, selectedMonth, comparisonType as 'previous_period' | 'previous_year' | 'previous_month');
-
-      if (!comparisonDateRange) {
-        return { ...derived, label };
-      }
-
-      const chData = (effectivePivotData?.channels as unknown as Record<string, { rawDataRows?: RawDataRow[]; dimensionMap?: Record<string, string> }> | undefined)?.[channel];
-      const rows = getFilteredPivotRowsForChannel(
-        chData,
-        channel,
-        filterValues,
-        comparisonDateRange,
-        configuredDimensionNames
-      );
-      const dimMap = chData?.dimensionMap ?? {};
-      const { commissionsPaid, commissionsFree } = computePerformanceModelCommissionSplit(channel, rows, dimMap);
-
-      return {
-        ...derived,
-        commissionsPaid,
-        commissionsFree,
-        grossProfit: commissionsPaid + commissionsFree - ch.cost,
-        label,
-      };
+      return { ...derived, label };
     },
-    [
-      comparisonTotals,
-      comparisonType,
-      isPerformanceModelView,
-      customDateRange,
-      selectedYear,
-      selectedMonth,
-      effectivePivotData,
-      filterValues,
-      configuredDimensionNames,
-    ]
+    [comparisonTotals, comparisonType]
   );
 
   const renderKPICards = useCallback((cards: any[], comparisonMetrics?: any) => {
-    const visible = showPerformanceModelKPIs
-      ? cards
-      : cards.filter((kpi: any) => !PERFORMANCE_MODEL_KEYS.has(kpi.key));
-    const enriched = visible.map((kpi: any) => {
+    const enriched = cards.map((kpi: any) => {
       const formattedValue = (() => {
         if (kpi.format === 'currency') {
           if (kpi.key === 'cpc' || kpi.key === 'aov') return formatNumber(kpi.value, 'currency', undefined, 2);
@@ -3227,7 +2953,7 @@ export default function SlideViewPage() {
       };
     });
     return <KPICardsSection cards={enriched} comparisonMetrics={comparisonMetrics} />;
-  }, [showPerformanceModelKPIs]);
+  }, []);
 
   const renderKPICardsSkeleton = useCallback(() => <KPICardsSkeleton />, []);
 
@@ -3415,9 +3141,6 @@ export default function SlideViewPage() {
         setSelectedViewId={setSelectedViewId}
         availableViews={availableViews}
         handleApplyView={handleApplyView}
-        handleDeleteView={handleDeleteView}
-        setIsSaveViewDialogOpen={setIsSaveViewDialogOpen}
-        setIsSaveOrUpdateViewDialogOpen={setIsSaveOrUpdateViewDialogOpen}
         isReadOnlyMode={isReadOnlyMode}
         isRestrictedUser={allowedViewIds !== null || isPublicShareStudio}
       />
@@ -3489,9 +3212,6 @@ export default function SlideViewPage() {
             onClearFilter={dsFilters.clearChannelFilter}
             onResetAllFilters={dsFilters.resetFilters}
             onShare={() => setIsShareModalOpen(true)}
-            onRefreshData={handleRefreshDataWithModal}
-            isRefreshInProgress={isRefreshModalOpen}
-            showRefreshButton={!slideReport?.configuration?.isChildReport}
             lockedDimensionIds={isPublicShareStudio ? shareLockedDimensionIds : undefined}
             allowDataFilterChanges={viewerMayAdjustDataFilters}
             isRestrictedUser={allowedViewIds !== null || isPublicShareStudio}
@@ -3615,7 +3335,6 @@ export default function SlideViewPage() {
                   setDimensionSettingsOpen(true);
                 }}
                 configuredDimensionNames={configuredDimensionNames}
-                isPerformanceModelView={showPerformanceModelKPIs}
               />
             </TabsContent>
           ))}
@@ -3760,30 +3479,6 @@ export default function SlideViewPage() {
         />
       )}
 
-      {!isPublicShareStudio && (
-        <>
-          <SaveViewDialog
-            open={isSaveViewDialogOpen}
-            onOpenChange={setIsSaveViewDialogOpen}
-            onSave={handleSaveView}
-            existingViewNames={views.map(v => v.name)}
-            availableMainDimensions={availableMainDimensions}
-            defaultMainDimensionId={defaultMainDimensionId}
-          />
-
-          <SaveOrUpdateViewDialog
-            open={isSaveOrUpdateViewDialogOpen}
-            onOpenChange={setIsSaveOrUpdateViewDialogOpen}
-            onSaveNew={() => {
-              setIsSaveOrUpdateViewDialogOpen(false);
-              setIsSaveViewDialogOpen(true);
-            }}
-            onUpdate={handleUpdateView}
-            availableViews={availableViews}
-            currentViewId={selectedViewId}
-          />
-        </>
-      )}
     </div>
   );
 }

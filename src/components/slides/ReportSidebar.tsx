@@ -10,8 +10,6 @@ import {
   Database,
   Layers,
   LineChart,
-  BookmarkPlus,
-  Trash2,
   UserCog,
   GalleryHorizontalEnd,
 } from "lucide-react";
@@ -51,9 +49,6 @@ interface ReportSidebarProps {
   setSelectedViewId: (viewId: string | null) => void;
   availableViews: View[];
   handleApplyView: (viewId: string | null, options?: ApplyViewOptions) => void;
-  handleDeleteView: (viewId: string) => void;
-  setIsSaveViewDialogOpen: (open: boolean) => void;
-  setIsSaveOrUpdateViewDialogOpen: (open: boolean) => void;
   isReadOnlyMode: boolean;
   /** True for non-owner users with restricted view access — hides admin UI */
   isRestrictedUser?: boolean;
@@ -74,9 +69,6 @@ export function ReportSidebar({
   setSelectedViewId,
   availableViews,
   handleApplyView,
-  handleDeleteView,
-  setIsSaveViewDialogOpen,
-  setIsSaveOrUpdateViewDialogOpen,
   isReadOnlyMode,
   isRestrictedUser = false,
   userLabel,
@@ -132,36 +124,6 @@ export function ReportSidebar({
                 ))}
               </SelectContent>
             </Select>
-            {!isReadOnlyMode && !isRestrictedUser && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={() => {
-                    if (selectedViewId && selectedViewId !== "unsaved") {
-                      setIsSaveOrUpdateViewDialogOpen(true);
-                    } else {
-                      setIsSaveViewDialogOpen(true);
-                    }
-                  }}
-                  title="Save current filters as a view"
-                >
-                  <BookmarkPlus className="h-4 w-4" />
-                </Button>
-                {selectedViewId && selectedViewId !== "unsaved" && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
-                    onClick={() => handleDeleteView(selectedViewId)}
-                    title="Delete this view"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                )}
-              </>
-            )}
           </div>
         </div>
       )}
