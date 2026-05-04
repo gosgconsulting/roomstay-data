@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -680,18 +681,18 @@
           <th>Hotel / Group</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>CoS %</th><th>Bookings</th><th>Clicks</th><th>Imp.</th>
         </tr></thead>
         <tbody>
-          <tr><td>Brady Hotels Central Melbourne</td><td>$2,746</td><td>$58,033</td><td class="pos">21.1×</td><td class="pos">4.7%</td><td>67</td><td>2,604</td><td>140K</td></tr>
-          <tr><td>Brady Apt Hotel Hardware Lane</td><td>$2,917</td><td>$56,888</td><td class="pos">19.5×</td><td class="pos">5.1%</td><td>53</td><td>2,049</td><td>121K</td></tr>
-          <tr><td>Brady Apt Hotel Flinders Street</td><td>$2,475</td><td>$39,243</td><td>15.9×</td><td>6.3%</td><td>43</td><td>2,154</td><td>137K</td></tr>
-          <tr><td>Brady Hotels Jones Lane</td><td>$2,317</td><td>$38,406</td><td>16.6×</td><td>6.0%</td><td>50</td><td>2,025</td><td>114K</td></tr>
-          <tr><td>Brady Group (cross-portfolio)</td><td>$2,907</td><td>$25,989</td><td class="neg">8.9×</td><td class="neg">11.2%</td><td>57</td><td>5,505</td><td>284K</td></tr>
+          <tr><td>Brady Hotels Central Melbourne</td><td>$2,891</td><td>$72,179</td><td class="pos">25.0×</td><td class="pos">4.0%</td><td>149</td><td>3,393</td><td>149K</td></tr>
+          <tr><td>Brady Apt Hotel Hardware Lane</td><td>$3,087</td><td>$86,061</td><td class="pos">27.9×</td><td class="pos">3.6%</td><td>151</td><td>3,540</td><td>153K</td></tr>
+          <tr><td>Brady Apt Hotel Flinders Street</td><td>$2,588</td><td>$65,933</td><td class="pos">25.5×</td><td class="pos">3.9%</td><td>124</td><td>3,562</td><td>180K</td></tr>
+          <tr><td>Brady Hotels Jones Lane</td><td>$2,458</td><td>$67,180</td><td class="pos">27.3×</td><td class="pos">3.7%</td><td>170</td><td>2,832</td><td>132K</td></tr>
+          <tr><td>Brady Group (cross-portfolio)</td><td>$3,613</td><td>$77,000</td><td class="pos">21.3×</td><td class="pos">4.7%</td><td>145</td><td>6,608</td><td>399K</td></tr>
         </tbody>
         <tfoot><tr>
-          <td>Total</td><td>$13,362</td><td>$218,559</td><td>16.4×</td><td>6.1%</td><td>270</td><td>14,337</td><td>796K</td>
+          <td>Total</td><td>$14,637</td><td>$368,353</td><td class="pos">25.2×</td><td class="pos">4.0%</td><td>739</td><td>19,935</td><td>1.0M</td>
         </tr></tfoot>
       </table>
       <div class="action-card anim d4" style="margin-top:var(--gap)">
-        <strong>Top revenue + ROAS:</strong> Brady Central (21.1×) + Hardware Lane (19.5×) drive over half of revenue. <strong>Brady Group cross-portfolio</strong> at 8.9× drags blended down — needs reallocation to hotel-specific PMAX.
+        <strong>Top revenue:</strong> Hardware Lane $86K (27.9×) + Central $72K (25.0×) lead all hotels. All hotels 21–28× ROAS across SEM + Social + Metasearch. Blended <strong>25.2× ROAS</strong> on $14.6K spend → $368K revenue.
       </div>
     </div>
   </div>
@@ -714,7 +715,7 @@
         <tbody>
           <tr>
             <td><span style="color:var(--ch-sem);font-weight:700">● SEM</span></td>
-            <td>$7,542</td><td>$199K</td><td class="pos">26.3×</td><td class="pos">3.8%</td><td>11,721</td><td>402</td>
+            <td>$7,542</td><td>$212K</td><td class="pos">28.1×</td><td class="pos">3.6%</td><td>11,721</td><td>424</td>
           </tr>
           <tr>
             <td><span style="color:var(--ch-meta);font-weight:700">● Metasearch</span></td>
@@ -726,7 +727,7 @@
           </tr>
         </tbody>
         <tfoot><tr>
-          <td>Total</td><td>$14,744</td><td>$366K</td><td>24.8×</td><td>4.0%</td><td>19,935</td><td>718</td>
+          <td>Total</td><td>$14,744</td><td>$379K</td><td class="pos">25.7×</td><td class="pos">3.9%</td><td>19,935</td><td>740</td>
         </tr></tfoot>
       </table>
       <div class="chart-grid-3">
@@ -750,32 +751,32 @@
         <!-- REVENUE DONUT -->
         <div class="chart-card anim d4">
           <div class="ch-sub">Revenue Share</div>
-          <div class="ch-title">SEM 54% · Social 28%</div>
+          <div class="ch-title">SEM 56% · Social 27%</div>
           <div class="ch-body" style="display:flex;align-items:center;gap:1rem">
             <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-              <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient(var(--ch-sem) 0% 54.3%,var(--ch-meta) 54.3% 71.8%,var(--ch-social) 71.8% 100%)"></div>
+              <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient(var(--ch-sem) 0% 55.9%,var(--ch-meta) 55.9% 72.8%,var(--ch-social) 72.8% 100%)"></div>
               <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;border-radius:50%;background:#fff"></div>
             </div>
             <div style="font-size:var(--fs-label);line-height:2;flex:1">
-              <div><span style="color:var(--ch-sem)">■</span> SEM <strong>54.3%</strong></div>
-              <div><span style="color:var(--ch-meta)">■</span> Metasearch <strong>17.5%</strong></div>
-              <div><span style="color:var(--ch-social)">■</span> Social <strong>28.2%</strong></div>
+              <div><span style="color:var(--ch-sem)">■</span> SEM <strong>55.9%</strong></div>
+              <div><span style="color:var(--ch-meta)">■</span> Metasearch <strong>16.9%</strong></div>
+              <div><span style="color:var(--ch-social)">■</span> Social <strong>27.2%</strong></div>
             </div>
           </div>
-          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.5rem">$366K total attributed</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.5rem">$379K total attributed</div>
         </div>
         <!-- ROAS DONUT -->
         <div class="chart-card anim d5">
           <div class="ch-sub">ROAS Efficiency</div>
-          <div class="ch-title">Meta 36.8× · SEM 26.3× · Social 18.9×</div>
+          <div class="ch-title">Meta 36.8× · SEM 28.1× · Social 18.9×</div>
           <div class="ch-body" style="display:flex;align-items:center;gap:1rem">
             <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-              <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient(var(--ch-meta) 0% 44.9%,var(--ch-sem) 44.9% 77.0%,var(--ch-social) 77.0% 100%)"></div>
+              <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient(var(--ch-meta) 0% 43.9%,var(--ch-sem) 43.9% 77.4%,var(--ch-social) 77.4% 100%)"></div>
               <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;border-radius:50%;background:#fff"></div>
             </div>
             <div style="font-size:var(--fs-label);line-height:2;flex:1">
               <div><span style="color:var(--ch-meta)">■</span> Metasearch <strong>36.8×</strong></div>
-              <div><span style="color:var(--ch-sem)">■</span> SEM <strong>26.3×</strong></div>
+              <div><span style="color:var(--ch-sem)">■</span> SEM <strong>28.1×</strong></div>
               <div><span style="color:var(--ch-social)">■</span> Social <strong>18.9×</strong></div>
             </div>
           </div>
@@ -783,7 +784,7 @@
         </div>
       </div>
       <div class="action-card anim d6" style="margin-top:var(--gap-sm)">
-        <strong>Most efficient:</strong> Metasearch 36.8× ROAS · 2.71% CoS — best per-dollar return. <strong>SEM</strong> $199K (54%) · <strong>Social</strong> $103K (28%) — Meta full-attribution 18.9× ROAS · 5.3% CoS is strong performance. Social bookings 205 confirmed from Windsor.ai.
+        <strong>Most efficient:</strong> Metasearch 36.8× ROAS · 2.71% CoS — best per-dollar return. <strong>SEM</strong> $212K (56%) · <strong>Social</strong> $103K (27%) — $379K total revenue · 25.7× blended ROAS. Social bookings 205 confirmed from Windsor.ai.
       </div>
     </div>
   </div>
@@ -854,17 +855,17 @@
               <text x="270" y="121">$15K</text>
             </g>
             <!-- 2026 revenue (solid) -->
-            <polyline points="60,137 130,155 200,134 270,180" fill="none" stroke="#5DC8C5" stroke-width="3"/>
+            <polyline points="60,137 130,155 200,134 270,136" fill="none" stroke="#5DC8C5" stroke-width="3"/>
             <circle cx="60"  cy="137" r="4" fill="#5DC8C5" stroke="#FFFFFF" stroke-width="2"/>
             <circle cx="130" cy="155" r="4" fill="#5DC8C5" stroke="#FFFFFF" stroke-width="2"/>
             <circle cx="200" cy="134" r="4" fill="#5DC8C5" stroke="#FFFFFF" stroke-width="2"/>
-            <circle cx="270" cy="180" r="4" fill="#5DC8C5" stroke="#FFFFFF" stroke-width="2"/>
+            <circle cx="270" cy="136" r="4" fill="#5DC8C5" stroke="#FFFFFF" stroke-width="2"/>
             <!-- 2026 revenue data labels -->
             <g font-size="10" font-weight="700" font-family="Manrope,sans-serif" fill="#2D8E8B" text-anchor="middle">
               <text x="60"  y="126">$376K</text>
               <text x="130" y="170">$320K</text>
               <text x="200" y="123">$385K</text>
-              <text x="270" y="195">$258K</text>
+              <text x="270" y="125">$379K</text>
             </g>
             <g font-size="11" font-family="Manrope,sans-serif">
               <line x1="350" y1="8" x2="378" y2="8" stroke="#2B6FE0" stroke-width="3"/>
@@ -880,7 +881,7 @@
         </div>
         <div style="margin-top:var(--gap-sm);display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);font-size:var(--fs-small);color:var(--text-muted);padding-top:var(--gap-sm);border-top:1px solid var(--line)">
           <div><strong style="color:var(--ch-sem)">2025 Full Year:</strong> $155K cost · $4.77M revenue · <span class="pos" style="font-weight:600">30.8× ROAS</span></div>
-          <div><strong style="color:var(--ch-sem)">2026 YTD (Jan–Apr):</strong> $59.5K cost · $1.33M revenue · <span class="pos" style="font-weight:600">22.3× ROAS</span> · annualised: $4.0M rev</div>
+          <div><strong style="color:var(--ch-sem)">2026 YTD (Jan–Apr):</strong> $59.5K cost · $1.34M revenue · <span class="pos" style="font-weight:600">22.6× ROAS</span> · annualised: $4.0M rev</div>
         </div>
       </div>
     </div>
@@ -897,7 +898,7 @@
     <div class="sd-eyebrow sem anim d1">Section Two · Google Ads</div>
     <div class="sd-num anim d2">02</div>
     <div class="sd-title anim d3">SEM</div>
-    <div class="sd-sub anim d4">$7,151 spend · $166,996 revenue · 23.4× ROAS · 4 hotels + Group cross-portfolio.</div>
+    <div class="sd-sub anim d4">$7,542 spend · $211,757 revenue · 28.1× ROAS · 4 hotels + Group cross-portfolio.</div>
   </div>
   <div class="slide-num">08 / 42</div>
 </section>
@@ -977,16 +978,16 @@
       <table class="dt anim d2">
         <thead><tr><th>Hotel / Group</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>CoS %</th><th>Conv.</th><th>Clicks</th><th>CPC</th></tr></thead>
         <tbody>
-          <tr><td>Brady Apt Hardware Lane</td><td>$1,499</td><td>$43,351</td><td class="pos">28.9×</td><td class="pos">3.5%</td><td>74.3</td><td>1,648</td><td>$0.91</td></tr>
-          <tr><td>Brady Apt Flinders Street</td><td>$1,072</td><td>$30,544</td><td class="pos">28.5×</td><td class="pos">3.5%</td><td>57.3</td><td>1,896</td><td>$0.57</td></tr>
-          <tr><td>Brady Hotels Central Melbourne</td><td>$1,592</td><td>$44,227</td><td class="pos">27.8×</td><td class="pos">3.6%</td><td>87.2</td><td>2,107</td><td>$0.76</td></tr>
-          <tr><td>Brady Hotels Jones Lane</td><td>$1,229</td><td>$33,412</td><td>27.2×</td><td class="pos">3.7%</td><td>90.6</td><td>1,302</td><td>$0.94</td></tr>
-          <tr><td>Brady Group (cross-portfolio)</td><td>$2,150</td><td>$47,149</td><td>21.9×</td><td class="pos">4.6%</td><td>92.1</td><td>4,768</td><td>$0.45</td></tr>
+          <tr><td>Brady Apt Hardware Lane</td><td>$1,499</td><td>$45,515</td><td class="pos">30.4×</td><td class="pos">3.3%</td><td>77.3</td><td>1,648</td><td>$0.91</td></tr>
+          <tr><td>Brady Apt Flinders Street</td><td>$1,072</td><td>$34,580</td><td class="pos">32.3×</td><td class="pos">3.1%</td><td>62.3</td><td>1,896</td><td>$0.57</td></tr>
+          <tr><td>Brady Hotels Central Melbourne</td><td>$1,592</td><td>$49,551</td><td class="pos">31.1×</td><td class="pos">3.2%</td><td>98.3</td><td>2,107</td><td>$0.76</td></tr>
+          <tr><td>Brady Hotels Jones Lane</td><td>$1,229</td><td>$33,591</td><td class="pos">27.3×</td><td class="pos">3.7%</td><td>91.6</td><td>1,302</td><td>$0.94</td></tr>
+          <tr><td>Brady Group (cross-portfolio)</td><td>$2,150</td><td>$48,520</td><td class="pos">22.6×</td><td class="pos">4.4%</td><td>94.4</td><td>4,768</td><td>$0.45</td></tr>
         </tbody>
-        <tfoot><tr><td>Total</td><td>$7,542</td><td>$198,683</td><td class="pos">26.3×</td><td class="pos">3.8%</td><td>401.5</td><td>11,721</td><td>$0.64</td></tr></tfoot>
+        <tfoot><tr><td>Total</td><td>$7,542</td><td>$211,757</td><td class="pos">28.1×</td><td class="pos">3.6%</td><td>423.8</td><td>11,721</td><td>$0.64</td></tr></tfoot>
       </table>
       <div class="action-card anim d4" style="margin-top:var(--gap)">
-        <strong>All hotels 27–29× ROAS</strong> — Hardware Lane 28.9× + Flinders 28.5× + Central 27.8× + Jones 27.2× all at scale. <strong>Brady Group 21.9×</strong> — Display Retargeting ($291 combined spend, near-zero conversions) flagged for pause; rest is solid brand + PMAX.
+        <strong>All hotels 27–32× ROAS</strong> — Flinders Street 32.3× + Central 31.1× + Hardware Lane 30.4× + Jones 27.3× all at scale. <strong>Brady Group 22.6×</strong> — Display Retargeting ($291 combined spend, near-zero conversions) flagged for pause; rest is solid brand + PMAX.
       </div>
     </div>
   </div>
@@ -1151,16 +1152,16 @@
               <text x="270" y="133">$7.5K</text>
             </g>
             <!-- 2026 revenue (solid) — Jan-Apr: 300,250,290,194 (K) — scale max 700K -->
-            <polyline points="60,162 130,180 200,165 270,196" fill="none" stroke="#5DC8C5" stroke-width="3"/>
+            <polyline points="60,162 130,180 200,165 270,190" fill="none" stroke="#5DC8C5" stroke-width="3"/>
             <circle cx="60"  cy="162" r="4" fill="#5DC8C5" stroke="#FFFFFF" stroke-width="2"/>
             <circle cx="130" cy="180" r="4" fill="#5DC8C5" stroke="#FFFFFF" stroke-width="2"/>
             <circle cx="200" cy="165" r="4" fill="#5DC8C5" stroke="#FFFFFF" stroke-width="2"/>
-            <circle cx="270" cy="196" r="4" fill="#5DC8C5" stroke="#FFFFFF" stroke-width="2"/>
+            <circle cx="270" cy="190" r="4" fill="#5DC8C5" stroke="#FFFFFF" stroke-width="2"/>
             <g font-size="10" font-weight="700" font-family="Manrope,sans-serif" fill="#2D8E8B" text-anchor="middle">
               <text x="60"  y="152">$300K</text>
               <text x="130" y="170">$250K</text>
               <text x="200" y="155">$290K</text>
-              <text x="270" y="211">$194K</text>
+              <text x="270" y="180">$212K</text>
             </g>
             <g font-size="11" font-family="Manrope,sans-serif">
               <line x1="350" y1="8" x2="378" y2="8" stroke="#2B6FE0" stroke-width="3"/>
@@ -1176,7 +1177,7 @@
         </div>
         <div style="margin-top:var(--gap-sm);display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);font-size:var(--fs-small);color:var(--text-muted);padding-top:var(--gap-sm);border-top:1px solid var(--line)">
           <div><strong style="color:var(--ch-sem)">FY 2025:</strong> $96,301 cost · $4.27M revenue · <span class="pos" style="font-weight:600">44.3× ROAS · 2.3% CoS</span></div>
-          <div><strong style="color:var(--ch-sem)">YTD 2026 (Jan–Apr):</strong> $33,424 cost · $1.03M revenue · <span class="pos" style="font-weight:600">30.8× ROAS · 3.2% CoS</span></div>
+          <div><strong style="color:var(--ch-sem)">YTD 2026 (Jan–Apr):</strong> $33.5K cost · $1.05M revenue · <span class="pos" style="font-weight:600">31.3× ROAS · 3.2% CoS</span></div>
         </div>
       </div>
     </div>
@@ -1665,7 +1666,7 @@
     <div class="sd-eyebrow social anim d1">Section Four · Meta Ads · Facebook · Instagram</div>
     <div class="sd-num anim d2">04</div>
     <div class="sd-title anim d3">Social</div>
-    <div class="sd-sub anim d4">$5,089 spend · 372K impressions · 5,924 clicks · 4 hotels + Group cross-portfolio.</div>
+    <div class="sd-sub anim d4">$5,452 spend · 402K impressions · 6,382 clicks · 4 hotels + Group cross-portfolio.</div>
   </div>
   <div class="slide-num">23 / 42</div>
 </section>
@@ -2488,47 +2489,53 @@
       <h2 class="slide-title anim d2">What We Do Next — Paid Channels</h2>
     </div>
     <div class="slide-content">
-      <div style="display:flex;flex-direction:column;gap:var(--gap);flex:1;justify-content:center">
-        <div class="action-card anim d2">
-          <strong>① SEM</strong> — projected <span class="pos" style="font-weight:600">+$30K rev</span>
-          <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-            <li>Pause 9 zero-conversion markets ($135 saved)</li>
-            <li>Pause both Display Retargeting campaigns ($440 saved)</li>
-            <li>Scale PMAX Brady Central +25%, Hardware Lane +60%, Brady Group broad +100%</li>
-            <li>Bid modifiers: Tablet +30%, Desktop +20%, Mobile −10%</li>
-            <li>Launch dedicated Singapore campaign ($300/mo)</li>
-          </ul>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:1;min-height:0">
+        <!-- LEFT COLUMN -->
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)">
+          <div class="action-card anim d2" style="flex:1">
+            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-sem);font-weight:700;margin-bottom:0.35rem">① SEM <span style="font-weight:400;color:var(--text-muted)">— proj. <span class="pos" style="font-weight:600">+$30K rev</span></span></div>
+            <ul style="margin:0;padding:0 0 0 1.1rem;list-style:disc;line-height:1.65;color:var(--text);font-size:var(--fs-small)">
+              <li>Pause 9 zero-conv. markets ($135 saved)</li>
+              <li>Pause both Display Retargeting ($440 saved)</li>
+              <li>Scale PMAX: Central +25%, Hardware +60%, Group +100%</li>
+              <li>Bid: Tablet +30%, Desktop +20%, Mobile −10%</li>
+              <li>Launch Singapore dedicated campaign ($300/mo)</li>
+            </ul>
+          </div>
+          <div class="action-card meta anim d3" style="flex:1">
+            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-meta);font-weight:700;margin-bottom:0.35rem">② Metasearch <span style="font-weight:400;color:var(--text-muted)">— proj. <span class="pos" style="font-weight:600">+$8.4K rev</span></span></div>
+            <ul style="margin:0;padding:0 0 0 1.1rem;list-style:disc;line-height:1.65;color:var(--text);font-size:var(--fs-small)">
+              <li>CPC: Flinders +20%, Jones Lane +25%, others hold</li>
+              <li>Tripadvisor +$300 (underspending at $12)</li>
+              <li>Singapore market push — top hotels 96× ROAS</li>
+              <li>Pricing audit: Jones Lane AOV $338 trails peers</li>
+            </ul>
+          </div>
         </div>
-        <div class="action-card meta anim d3">
-          <strong>② Metasearch</strong> — projected <span class="pos" style="font-weight:600">+$8.4K rev</span>
-          <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-            <li>CPC: Flinders +20%, Jones Lane +25%, Hardware/Central hold</li>
-            <li>Tripadvisor budget +$300 (currently underspending at $12)</li>
-            <li>Singapore market push on top hotels (96× ROAS)</li>
-            <li>Pricing audit on Jones Lane (AOV $338 trails peers)</li>
-          </ul>
-        </div>
-        <div class="action-card social anim d4">
-          <strong>③ Social</strong> — April base $103K att. rev · projected <span class="pos" style="font-weight:600">+$15K May uplift</span>
-          <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-            <li>Pause 4× Autumn Sale promos + Awareness Daily + FB Marketplace ($864 saved)</li>
-            <li>Build F45-64 lookalike audiences from CRM</li>
-            <li>+30% budget on F65+ segment (highest CTR 2.69%)</li>
-            <li>3 fresh creative variants on Brady Group Sales Daily</li>
-            <li>Refresh IG Stories/Reels with new 9:16 vertical creative</li>
-          </ul>
-        </div>
-        <div class="action-card action anim d5">
-          <strong>④ Pricing &amp; Internationalisation</strong>
-          <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-            <li>Brady Jones Lane rate plan review (AOV trails CBD peers)</li>
-            <li>Test +5–8% weekend rates on Hardware Lane</li>
-            <li>UK/JP geo bid +50% on AU campaigns (60×+ ROAS)</li>
-            <li>Singapore market: dedicated SEM + Metasearch push</li>
-          </ul>
+        <!-- RIGHT COLUMN -->
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)">
+          <div class="action-card social anim d4" style="flex:1">
+            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-social);font-weight:700;margin-bottom:0.35rem">③ Social <span style="font-weight:400;color:var(--text-muted)">— $103K April base · proj. <span class="pos" style="font-weight:600">+$15K May</span></span></div>
+            <ul style="margin:0;padding:0 0 0 1.1rem;list-style:disc;line-height:1.65;color:var(--text);font-size:var(--fs-small)">
+              <li>Pause Autumn Sale promos + Awareness + Marketplace ($864 saved)</li>
+              <li>Build F45–64 LAL audiences from CRM</li>
+              <li>+30% budget on F65+ (highest CTR 2.69%)</li>
+              <li>3 fresh creative variants on Brady Group Sales Daily</li>
+              <li>Refresh IG Stories/Reels — new 9:16 vertical</li>
+            </ul>
+          </div>
+          <div class="action-card action anim d5" style="flex:1">
+            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-action);font-weight:700;margin-bottom:0.35rem">④ Pricing &amp; Internationalisation</div>
+            <ul style="margin:0;padding:0 0 0 1.1rem;list-style:disc;line-height:1.65;color:var(--text);font-size:var(--fs-small)">
+              <li>Jones Lane rate plan review (AOV trails CBD peers)</li>
+              <li>Test +5–8% weekend rates on Hardware Lane</li>
+              <li>UK/JP geo bid +50% on AU campaigns (60×+ ROAS)</li>
+              <li>Singapore: dedicated SEM + Metasearch push</li>
+            </ul>
+          </div>
         </div>
       </div>
-      <div class="anim d6" style="margin-top:var(--gap);padding-top:var(--gap);border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end">
+      <div class="anim d6" style="margin-top:var(--gap-sm);padding-top:var(--gap-sm);border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end;flex-shrink:0">
         <div>
           <div style="font-size:var(--fs-label);letter-spacing:0.22em;text-transform:uppercase;color:var(--text-light)">Prepared by</div>
           <div style="font-size:var(--fs-body);color:var(--text);font-weight:600">Dijitally Agency</div>
@@ -2750,7 +2757,241 @@
       window.addEventListener('load', generatePDF);
     }
   }
-})();
+
+
+
+  // === AUTO-PPTX MODE ===
+  // Per-slide: scroll into view → extract only title/eyebrow/footer/notes text →
+  // hide all text → html2canvas background image → restore → add image + text boxes.
+  if (window.location.hash === '#pptx') {
+    var __rgbToHex = function(css) {
+      var m = (css || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      return m ? ((+m[1] << 16 | +m[2] << 8 | +m[3]).toString(16).padStart(6, '0').toUpperCase()) : '11192E';
+    };
+    // Only extract the semantic "safe" text layers — title, eyebrow, notes, footer.
+    // Tables, charts and metric cards stay in the background image.
+    var PPTX_SELECTORS = [
+      '.slide-eyebrow', '.slide-title', '.section-tag',
+      '.slide-num', '.slide-tail',
+      '.action-card',
+      '.cover-eyebrow', '.cover-title', '.cover-sub',
+      '.cover-meta-label', '.cover-meta-value',
+      '.sd-eyebrow', '.sd-num', '.sd-title', '.sd-sub'
+    ];
+    var __extractTexts = function(slideEl) {
+      var sr = slideEl.getBoundingClientRect();
+      var W = sr.width, H = sr.height;
+      var seen = new Set(), out = [];
+      var els = [];
+      PPTX_SELECTORS.forEach(function(sel) {
+        slideEl.querySelectorAll(sel).forEach(function(el) { els.push(el); });
+      });
+      els.forEach(function(el) {
+        if (seen.has(el)) return;
+        seen.add(el);
+        var st = window.getComputedStyle(el);
+        if (st.display === 'none' || st.visibility === 'hidden' || parseFloat(st.opacity) < 0.05) return;
+        var r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        var x = (r.left - sr.left) / W * 13.33;
+        var y = (r.top - sr.top) / H * 7.5;
+        var w = r.width / W * 13.33;
+        var h = r.height / H * 7.5;
+        if (x < 0) { w += x; x = 0; } if (y < 0) { h += y; y = 0; }
+        if (x + w > 13.33) w = 13.33 - x; if (y + h > 7.5) h = 7.5 - y;
+        if (w < 0.05 || h < 0.05) return;
+        var txt = (el.innerText || '').replace(/\s+/g, ' ').trim();
+        if (!txt) return;
+        var align = 'left';
+        if (st.textAlign === 'center') align = 'center';
+        else if (st.textAlign === 'right') align = 'right';
+        out.push({
+          t: txt, x: x, y: y, w: w, h: h,
+          fs: Math.max(6, Math.round(parseFloat(st.fontSize) * 72 / 96)),
+          color: __rgbToHex(st.color),
+          bold: parseInt(st.fontWeight) >= 600,
+          italic: st.fontStyle === 'italic',
+          face: (st.fontFamily.split(',')[0] || 'Manrope').replace(/['"]/g, '').trim(),
+          align: align,
+        });
+      });
+      return out;
+    };
+    var generatePPTX = async function () {
+      document.querySelectorAll('.slide').forEach(function (s) { s.classList.add('visible'); });
+      document.body.classList.add('pdf-mode');
+      var overlay = document.createElement('div');
+      overlay.className = 'pdf-overlay';
+      overlay.innerHTML =
+        '<div class="pdf-title">Generating PowerPoint…</div>' +
+        '<div class="pdf-progress" id="__pptxProgress">Preparing slides…</div>' +
+        '<div class="pdf-bar"><div class="pdf-bar-fill" id="__pptxBar" style="width:0%"></div></div>';
+      document.body.appendChild(overlay);
+      try { await document.fonts.ready; } catch (e) {}
+      await new Promise(function (r) { setTimeout(r, 800); });
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var total = slides.length;
+      var titleText = (document.title || 'slides')
+        .replace(/×/g, 'x').replace(/[—–]/g, '-').replace(/[·•]/g, '-')
+        .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+      var filename = (titleText || 'slides') + '.pptx';
+      var pptx = new PptxGenJS();
+      pptx.layout = 'LAYOUT_WIDE';
+      for (var i = 0; i < total; i++) {
+        var prog = document.getElementById('__pptxProgress');
+        var bar = document.getElementById('__pptxBar');
+        if (prog) prog.textContent = 'Rendering slide ' + (i + 1) + ' of ' + total + '…';
+        if (bar) bar.style.width = (i / total * 100) + '%';
+        window.scrollTo(0, slides[i].offsetTop);
+        await new Promise(function (r) { setTimeout(r, 40); });
+        var texts = __extractTexts(slides[i]);
+        var hs = document.createElement('style');
+        hs.id = '__pptx-no-text';
+        hs.textContent = PPTX_SELECTORS.join(', ') + ' { color: rgba(0,0,0,0) !important; -webkit-text-fill-color: rgba(0,0,0,0) !important; text-shadow: none !important; }';
+        document.head.appendChild(hs);
+        var canvas = await html2canvas(slides[i], {
+          scale: 2, useCORS: true, backgroundColor: '#FFFFFF',
+          width: 1280, height: 720, windowWidth: 1280, windowHeight: 720, logging: false
+        });
+        var rm = document.getElementById('__pptx-no-text'); if (rm) rm.remove();
+        var pptSlide = pptx.addSlide();
+        pptSlide.addImage({ data: canvas.toDataURL('image/jpeg', 0.92), x: 0, y: 0, w: 13.33, h: 7.5 });
+        for (var j = 0; j < texts.length; j++) {
+          var tx = texts[j];
+          try {
+            pptSlide.addText(tx.t, {
+              x: tx.x, y: tx.y, w: tx.w, h: tx.h,
+              fontSize: tx.fs, color: tx.color,
+              bold: tx.bold, italic: tx.italic,
+              fontFace: tx.face, align: tx.align,
+              valign: 'top',
+              line: { type: 'none', width: 0 },
+              fill: { type: 'none' },
+              margin: [0, 0, 0, 0],
+              wrap: true,
+            });
+          } catch(e) {}
+        }
+      }
+      if (document.getElementById('__pptxBar')) document.getElementById('__pptxBar').style.width = '100%';
+      if (document.getElementById('__pptxProgress')) document.getElementById('__pptxProgress').textContent = 'Saving file…';
+      await pptx.writeFile({ fileName: filename });
+      if (document.getElementById('__pptxProgress')) document.getElementById('__pptxProgress').textContent = 'Done!';
+      setTimeout(function () { try { window.close(); } catch (e) {} }, 1500);
+    };
+    if (document.readyState === 'complete') { generatePPTX(); }
+    else { window.addEventListener('load', generatePPTX); }
+  }
+
+  // === AUTO-GSLIDES MODE ===
+  if (window.location.hash === '#gslides') {
+    var __rgbToHexG = function(css) {
+      var m = (css || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      return m ? ((+m[1] << 16 | +m[2] << 8 | +m[3]).toString(16).padStart(6, '0').toUpperCase()) : '11192E';
+    };
+    var GSLIDES_SELECTORS = [
+      '.slide-eyebrow', '.slide-title', '.section-tag',
+      '.slide-num', '.slide-tail',
+      '.action-card',
+      '.cover-eyebrow', '.cover-title', '.cover-sub',
+      '.cover-meta-label', '.cover-meta-value',
+      '.sd-eyebrow', '.sd-num', '.sd-title', '.sd-sub'
+    ];
+    var __extractTextsG = function(slideEl) {
+      var sr = slideEl.getBoundingClientRect();
+      var W = sr.width, H = sr.height;
+      var seen = new Set(), out = [];
+      var els = [];
+      GSLIDES_SELECTORS.forEach(function(sel) {
+        slideEl.querySelectorAll(sel).forEach(function(el) { els.push(el); });
+      });
+      els.forEach(function(el) {
+        if (seen.has(el)) return;
+        seen.add(el);
+        var st = window.getComputedStyle(el);
+        if (st.display === 'none' || st.visibility === 'hidden' || parseFloat(st.opacity) < 0.05) return;
+        var r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        var x = (r.left - sr.left) / W * 13.33;
+        var y = (r.top - sr.top) / H * 7.5;
+        var w = r.width / W * 13.33;
+        var h = r.height / H * 7.5;
+        if (x < 0) { w += x; x = 0; } if (y < 0) { h += y; y = 0; }
+        if (x + w > 13.33) w = 13.33 - x; if (y + h > 7.5) h = 7.5 - y;
+        if (w < 0.05 || h < 0.05) return;
+        var txt = (el.innerText || '').replace(/\s+/g, ' ').trim();
+        if (!txt) return;
+        var align = 'left';
+        if (st.textAlign === 'center') align = 'center';
+        else if (st.textAlign === 'right') align = 'right';
+        out.push({
+          t: txt, x: x, y: y, w: w, h: h,
+          fs: Math.max(6, Math.round(parseFloat(st.fontSize) * 72 / 96)),
+          color: __rgbToHexG(st.color),
+          bold: parseInt(st.fontWeight) >= 600,
+          italic: st.fontStyle === 'italic',
+          face: (st.fontFamily.split(',')[0] || 'Manrope').replace(/['"]/g, '').trim(),
+          align: align,
+        });
+      });
+      return out;
+    };
+    var generateGSlides = async function () {
+      document.querySelectorAll('.slide').forEach(function(s){s.classList.add('visible');});
+      document.body.classList.add('pdf-mode');
+      var overlay=document.createElement('div'); overlay.className='pdf-overlay';
+      overlay.innerHTML='<div class="pdf-title">Preparing for Google Slides…</div>'+
+        '<div class="pdf-progress" id="__gsProgress">Capturing slides…</div>'+
+        '<div class="pdf-bar"><div class="pdf-bar-fill" id="__gsBar" style="width:0%"></div></div>';
+      document.body.appendChild(overlay);
+      try{await document.fonts.ready;}catch(e){}
+      await new Promise(function(r){setTimeout(r,800);});
+      var slides=Array.prototype.slice.call(document.querySelectorAll('.slide')), total=slides.length;
+      var titleText=(document.title||'slides').replace(/×/g,'x').replace(/[—–]/g,'-').replace(/[·•]/g,'-')
+        .replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,' ').trim();
+      var filename=(titleText||'slides')+'.pptx';
+      var pptx=new PptxGenJS(); pptx.layout='LAYOUT_WIDE';
+      for(var i=0;i<total;i++){
+        var prog=document.getElementById('__gsProgress'), bar=document.getElementById('__gsBar');
+        if(prog) prog.textContent='Capturing slide '+(i+1)+' of '+total+'…';
+        if(bar) bar.style.width=(i/total*100)+'%';
+        window.scrollTo(0, slides[i].offsetTop);
+        await new Promise(function(r){setTimeout(r,40);});
+        var texts=__extractTextsG(slides[i]);
+        var hs=document.createElement('style'); hs.id='__gs-no-text';
+        hs.textContent=GSLIDES_SELECTORS.join(', ') + ' { color: rgba(0,0,0,0) !important; -webkit-text-fill-color: rgba(0,0,0,0) !important; text-shadow: none !important; }';
+        document.head.appendChild(hs);
+        var canvas=await html2canvas(slides[i],{scale:2,useCORS:true,backgroundColor:'#FFFFFF',
+          width:1280,height:720,windowWidth:1280,windowHeight:720,logging:false});
+        var rm=document.getElementById('__gs-no-text'); if(rm) rm.remove();
+        var pptSlide=pptx.addSlide();
+        pptSlide.addImage({data:canvas.toDataURL('image/jpeg',0.92),x:0,y:0,w:13.33,h:7.5});
+        for(var j=0;j<texts.length;j++){
+          var tx=texts[j];
+          try{
+            pptSlide.addText(tx.t,{
+              x:tx.x,y:tx.y,w:tx.w,h:tx.h,
+              fontSize:tx.fs,color:tx.color,
+              bold:tx.bold,italic:tx.italic,
+              fontFace:tx.face,align:tx.align,
+              valign:'top',
+              line:{type:'none',width:0},
+              fill:{type:'none'},
+              margin:[0,0,0,0],
+              wrap:true,
+            });
+          }catch(e){}
+        }
+      }
+      if(document.getElementById('__gsBar')) document.getElementById('__gsBar').style.width='100%';
+      if(document.getElementById('__gsProgress')) document.getElementById('__gsProgress').textContent='Sending to Google Slides…';
+      var pptxB64=await pptx.write({outputType:'base64'});
+      if(window.opener) window.opener.postMessage({type:'roomstay-gslides-ready',filename:filename,data:pptxB64},window.location.origin);
+      setTimeout(function(){try{window.close();}catch(e){}},800);
+    };
+    if(document.readyState==='complete'){generateGSlides();}
+    else{window.addEventListener('load',generateGSlides);}
+  }})();
 </script>
 </body>
 </html>

@@ -2342,9 +2342,10 @@
   <div class="slide-num">14 / 14</div>
 </section>
 
-<!-- jsPDF + html2canvas for #pdf hash -->
+<!-- jsPDF + html2canvas + PptxGenJS for #pdf and #pptx hash -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 
 <script>
 (function () {
@@ -2469,7 +2470,241 @@
     if (document.readyState === 'complete') { generatePDF(); }
     else { window.addEventListener('load', generatePDF); }
   }
-})();
+
+
+
+  // === AUTO-PPTX MODE ===
+  // Per-slide: scroll into view → extract only title/eyebrow/footer/notes text →
+  // hide all text → html2canvas background image → restore → add image + text boxes.
+  if (window.location.hash === '#pptx') {
+    var __rgbToHex = function(css) {
+      var m = (css || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      return m ? ((+m[1] << 16 | +m[2] << 8 | +m[3]).toString(16).padStart(6, '0').toUpperCase()) : '11192E';
+    };
+    // Only extract the semantic "safe" text layers — title, eyebrow, notes, footer.
+    // Tables, charts and metric cards stay in the background image.
+    var PPTX_SELECTORS = [
+      '.slide-eyebrow', '.slide-title', '.section-tag',
+      '.slide-num', '.slide-tail',
+      '.action-card',
+      '.cover-eyebrow', '.cover-title', '.cover-sub',
+      '.cover-meta-label', '.cover-meta-value',
+      '.sd-eyebrow', '.sd-num', '.sd-title', '.sd-sub'
+    ];
+    var __extractTexts = function(slideEl) {
+      var sr = slideEl.getBoundingClientRect();
+      var W = sr.width, H = sr.height;
+      var seen = new Set(), out = [];
+      var els = [];
+      PPTX_SELECTORS.forEach(function(sel) {
+        slideEl.querySelectorAll(sel).forEach(function(el) { els.push(el); });
+      });
+      els.forEach(function(el) {
+        if (seen.has(el)) return;
+        seen.add(el);
+        var st = window.getComputedStyle(el);
+        if (st.display === 'none' || st.visibility === 'hidden' || parseFloat(st.opacity) < 0.05) return;
+        var r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        var x = (r.left - sr.left) / W * 13.33;
+        var y = (r.top - sr.top) / H * 7.5;
+        var w = r.width / W * 13.33;
+        var h = r.height / H * 7.5;
+        if (x < 0) { w += x; x = 0; } if (y < 0) { h += y; y = 0; }
+        if (x + w > 13.33) w = 13.33 - x; if (y + h > 7.5) h = 7.5 - y;
+        if (w < 0.05 || h < 0.05) return;
+        var txt = (el.innerText || '').replace(/\s+/g, ' ').trim();
+        if (!txt) return;
+        var align = 'left';
+        if (st.textAlign === 'center') align = 'center';
+        else if (st.textAlign === 'right') align = 'right';
+        out.push({
+          t: txt, x: x, y: y, w: w, h: h,
+          fs: Math.max(6, Math.round(parseFloat(st.fontSize) * 72 / 96)),
+          color: __rgbToHex(st.color),
+          bold: parseInt(st.fontWeight) >= 600,
+          italic: st.fontStyle === 'italic',
+          face: (st.fontFamily.split(',')[0] || 'Manrope').replace(/['"]/g, '').trim(),
+          align: align,
+        });
+      });
+      return out;
+    };
+    var generatePPTX = async function () {
+      document.querySelectorAll('.slide').forEach(function (s) { s.classList.add('visible'); });
+      document.body.classList.add('pdf-mode');
+      var overlay = document.createElement('div');
+      overlay.className = 'pdf-overlay';
+      overlay.innerHTML =
+        '<div class="pdf-title">Generating PowerPoint…</div>' +
+        '<div class="pdf-progress" id="__pptxProgress">Preparing slides…</div>' +
+        '<div class="pdf-bar"><div class="pdf-bar-fill" id="__pptxBar" style="width:0%"></div></div>';
+      document.body.appendChild(overlay);
+      try { await document.fonts.ready; } catch (e) {}
+      await new Promise(function (r) { setTimeout(r, 800); });
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var total = slides.length;
+      var titleText = (document.title || 'slides')
+        .replace(/×/g, 'x').replace(/[—–]/g, '-').replace(/[·•]/g, '-')
+        .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+      var filename = (titleText || 'slides') + '.pptx';
+      var pptx = new PptxGenJS();
+      pptx.layout = 'LAYOUT_WIDE';
+      for (var i = 0; i < total; i++) {
+        var prog = document.getElementById('__pptxProgress');
+        var bar = document.getElementById('__pptxBar');
+        if (prog) prog.textContent = 'Rendering slide ' + (i + 1) + ' of ' + total + '…';
+        if (bar) bar.style.width = (i / total * 100) + '%';
+        window.scrollTo(0, slides[i].offsetTop);
+        await new Promise(function (r) { setTimeout(r, 40); });
+        var texts = __extractTexts(slides[i]);
+        var hs = document.createElement('style');
+        hs.id = '__pptx-no-text';
+        hs.textContent = PPTX_SELECTORS.join(', ') + ' { color: rgba(0,0,0,0) !important; -webkit-text-fill-color: rgba(0,0,0,0) !important; text-shadow: none !important; }';
+        document.head.appendChild(hs);
+        var canvas = await html2canvas(slides[i], {
+          scale: 2, useCORS: true, backgroundColor: '#FFFFFF',
+          width: 1280, height: 720, windowWidth: 1280, windowHeight: 720, logging: false
+        });
+        var rm = document.getElementById('__pptx-no-text'); if (rm) rm.remove();
+        var pptSlide = pptx.addSlide();
+        pptSlide.addImage({ data: canvas.toDataURL('image/jpeg', 0.92), x: 0, y: 0, w: 13.33, h: 7.5 });
+        for (var j = 0; j < texts.length; j++) {
+          var tx = texts[j];
+          try {
+            pptSlide.addText(tx.t, {
+              x: tx.x, y: tx.y, w: tx.w, h: tx.h,
+              fontSize: tx.fs, color: tx.color,
+              bold: tx.bold, italic: tx.italic,
+              fontFace: tx.face, align: tx.align,
+              valign: 'top',
+              line: { type: 'none', width: 0 },
+              fill: { type: 'none' },
+              margin: [0, 0, 0, 0],
+              wrap: true,
+            });
+          } catch(e) {}
+        }
+      }
+      if (document.getElementById('__pptxBar')) document.getElementById('__pptxBar').style.width = '100%';
+      if (document.getElementById('__pptxProgress')) document.getElementById('__pptxProgress').textContent = 'Saving file…';
+      await pptx.writeFile({ fileName: filename });
+      if (document.getElementById('__pptxProgress')) document.getElementById('__pptxProgress').textContent = 'Done!';
+      setTimeout(function () { try { window.close(); } catch (e) {} }, 1500);
+    };
+    if (document.readyState === 'complete') { generatePPTX(); }
+    else { window.addEventListener('load', generatePPTX); }
+  }
+
+  // === AUTO-GSLIDES MODE ===
+  if (window.location.hash === '#gslides') {
+    var __rgbToHexG = function(css) {
+      var m = (css || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      return m ? ((+m[1] << 16 | +m[2] << 8 | +m[3]).toString(16).padStart(6, '0').toUpperCase()) : '11192E';
+    };
+    var GSLIDES_SELECTORS = [
+      '.slide-eyebrow', '.slide-title', '.section-tag',
+      '.slide-num', '.slide-tail',
+      '.action-card',
+      '.cover-eyebrow', '.cover-title', '.cover-sub',
+      '.cover-meta-label', '.cover-meta-value',
+      '.sd-eyebrow', '.sd-num', '.sd-title', '.sd-sub'
+    ];
+    var __extractTextsG = function(slideEl) {
+      var sr = slideEl.getBoundingClientRect();
+      var W = sr.width, H = sr.height;
+      var seen = new Set(), out = [];
+      var els = [];
+      GSLIDES_SELECTORS.forEach(function(sel) {
+        slideEl.querySelectorAll(sel).forEach(function(el) { els.push(el); });
+      });
+      els.forEach(function(el) {
+        if (seen.has(el)) return;
+        seen.add(el);
+        var st = window.getComputedStyle(el);
+        if (st.display === 'none' || st.visibility === 'hidden' || parseFloat(st.opacity) < 0.05) return;
+        var r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) return;
+        var x = (r.left - sr.left) / W * 13.33;
+        var y = (r.top - sr.top) / H * 7.5;
+        var w = r.width / W * 13.33;
+        var h = r.height / H * 7.5;
+        if (x < 0) { w += x; x = 0; } if (y < 0) { h += y; y = 0; }
+        if (x + w > 13.33) w = 13.33 - x; if (y + h > 7.5) h = 7.5 - y;
+        if (w < 0.05 || h < 0.05) return;
+        var txt = (el.innerText || '').replace(/\s+/g, ' ').trim();
+        if (!txt) return;
+        var align = 'left';
+        if (st.textAlign === 'center') align = 'center';
+        else if (st.textAlign === 'right') align = 'right';
+        out.push({
+          t: txt, x: x, y: y, w: w, h: h,
+          fs: Math.max(6, Math.round(parseFloat(st.fontSize) * 72 / 96)),
+          color: __rgbToHexG(st.color),
+          bold: parseInt(st.fontWeight) >= 600,
+          italic: st.fontStyle === 'italic',
+          face: (st.fontFamily.split(',')[0] || 'Manrope').replace(/['"]/g, '').trim(),
+          align: align,
+        });
+      });
+      return out;
+    };
+    var generateGSlides = async function () {
+      document.querySelectorAll('.slide').forEach(function(s){s.classList.add('visible');});
+      document.body.classList.add('pdf-mode');
+      var overlay=document.createElement('div'); overlay.className='pdf-overlay';
+      overlay.innerHTML='<div class="pdf-title">Preparing for Google Slides…</div>'+
+        '<div class="pdf-progress" id="__gsProgress">Capturing slides…</div>'+
+        '<div class="pdf-bar"><div class="pdf-bar-fill" id="__gsBar" style="width:0%"></div></div>';
+      document.body.appendChild(overlay);
+      try{await document.fonts.ready;}catch(e){}
+      await new Promise(function(r){setTimeout(r,800);});
+      var slides=Array.prototype.slice.call(document.querySelectorAll('.slide')), total=slides.length;
+      var titleText=(document.title||'slides').replace(/×/g,'x').replace(/[—–]/g,'-').replace(/[·•]/g,'-')
+        .replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,' ').trim();
+      var filename=(titleText||'slides')+'.pptx';
+      var pptx=new PptxGenJS(); pptx.layout='LAYOUT_WIDE';
+      for(var i=0;i<total;i++){
+        var prog=document.getElementById('__gsProgress'), bar=document.getElementById('__gsBar');
+        if(prog) prog.textContent='Capturing slide '+(i+1)+' of '+total+'…';
+        if(bar) bar.style.width=(i/total*100)+'%';
+        window.scrollTo(0, slides[i].offsetTop);
+        await new Promise(function(r){setTimeout(r,40);});
+        var texts=__extractTextsG(slides[i]);
+        var hs=document.createElement('style'); hs.id='__gs-no-text';
+        hs.textContent=GSLIDES_SELECTORS.join(', ') + ' { color: rgba(0,0,0,0) !important; -webkit-text-fill-color: rgba(0,0,0,0) !important; text-shadow: none !important; }';
+        document.head.appendChild(hs);
+        var canvas=await html2canvas(slides[i],{scale:2,useCORS:true,backgroundColor:'#FFFFFF',
+          width:1280,height:720,windowWidth:1280,windowHeight:720,logging:false});
+        var rm=document.getElementById('__gs-no-text'); if(rm) rm.remove();
+        var pptSlide=pptx.addSlide();
+        pptSlide.addImage({data:canvas.toDataURL('image/jpeg',0.92),x:0,y:0,w:13.33,h:7.5});
+        for(var j=0;j<texts.length;j++){
+          var tx=texts[j];
+          try{
+            pptSlide.addText(tx.t,{
+              x:tx.x,y:tx.y,w:tx.w,h:tx.h,
+              fontSize:tx.fs,color:tx.color,
+              bold:tx.bold,italic:tx.italic,
+              fontFace:tx.face,align:tx.align,
+              valign:'top',
+              line:{type:'none',width:0},
+              fill:{type:'none'},
+              margin:[0,0,0,0],
+              wrap:true,
+            });
+          }catch(e){}
+        }
+      }
+      if(document.getElementById('__gsBar')) document.getElementById('__gsBar').style.width='100%';
+      if(document.getElementById('__gsProgress')) document.getElementById('__gsProgress').textContent='Sending to Google Slides…';
+      var pptxB64=await pptx.write({outputType:'base64'});
+      if(window.opener) window.opener.postMessage({type:'roomstay-gslides-ready',filename:filename,data:pptxB64},window.location.origin);
+      setTimeout(function(){try{window.close();}catch(e){}},800);
+    };
+    if(document.readyState==='complete'){generateGSlides();}
+    else{window.addEventListener('load',generateGSlides);}
+  }})();
 </script>
 </body>
 </html>
