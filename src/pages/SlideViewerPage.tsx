@@ -4,7 +4,7 @@ import {
   ArrowLeft, Maximize2, Minimize2, ExternalLink, FileDown,
   Pencil, Check, Plus, PanelLeft, Loader2,
   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
-  Type, ImageIcon,
+  Type, ImageIcon, ScrollText,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { GoogleSlidesExportModal } from "@/components/GoogleSlidesExportModal";
@@ -667,38 +667,6 @@ const IFRAME_HELPER_SCRIPT = /* js */ `
       try { document.execCommand(d.command, false, d.value || null); } catch(ex) {}
     }
 
-    if (d.type === 'roomstay-export-pptx') {
-      var slides = Array.from(document.querySelectorAll('.slide'));
-      if (!slides.length) {
-        parent.postMessage({ type: 'roomstay-pptx-error', message: 'No slides found in this deck.' }, '*');
-        return;
-      }
-      var filename = (document.title || 'presentation').replace(/[^a-zA-Z0-9_\- ]/g, '').trim() || 'presentation';
-
-      function runExport(lib) {
-        lib.exportToPptx(slides, {
-          fileName: filename + '.pptx',
-          svgAsVector: true,
-          autoEmbedFonts: true,
-        }).then(function() {
-          parent.postMessage({ type: 'roomstay-pptx-done' }, '*');
-        }).catch(function(err) {
-          parent.postMessage({ type: 'roomstay-pptx-error', message: String(err && err.message || err) }, '*');
-        });
-      }
-
-      if (window.domToPptx) {
-        runExport(window.domToPptx);
-      } else {
-        var s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/npm/dom-to-pptx@1.1.8/dist/dom-to-pptx.bundle.js';
-        s.onload = function() { runExport(window.domToPptx); };
-        s.onerror = function() {
-          parent.postMessage({ type: 'roomstay-pptx-error', message: 'Failed to load dom-to-pptx library.' }, '*');
-        };
-        document.head.appendChild(s);
-      }
-    }
   });
 
   // ── Init ────────────────────────────────────────────────────────────────────
@@ -725,7 +693,8 @@ export default function SlideViewerPage() {
   const [isGSlidesModalOpen, setIsGSlidesModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isPptxExporting, setIsPptxExporting] = useState(false);
-  const [showPanel, setShowPanel] = useState(true);
+  const [showPanel, setShowPanel] = useState(false);
+  const scriptChannelRef = useRef<BroadcastChannel | null>(null);
   const [slideCount, setSlideCount] = useState(0);
   const [slideTitles, setSlideTitles] = useState<string[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -753,13 +722,6 @@ export default function SlideViewerPage() {
         setSlideCount(d.total ?? 0);
         setSlideTitles(d.titles ?? []);
       }
-      if (d.type === "roomstay-pptx-done") {
-        setIsPptxExporting(false);
-      }
-      if (d.type === "roomstay-pptx-error") {
-        setIsPptxExporting(false);
-        console.error("[Export PPT]", d.message);
-      }
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
@@ -771,6 +733,34 @@ export default function SlideViewerPage() {
     document.addEventListener("fullscreenchange", handler);
     return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
+
+  // Broadcast slide changes to the script window via BroadcastChannel
+  useEffect(() => {
+    if (!slideId) return;
+    // Lazily open channel on first slide change
+    if (!scriptChannelRef.current) {
+      scriptChannelRef.current = new BroadcastChannel(`roomstay-script::${slideId}`);
+    }
+    scriptChannelRef.current.postMessage({
+      type: "slide-change",
+      index: currentSlide,
+      title: slideTitles[currentSlide] ?? "",
+      total: slideCount,
+    });
+  }, [currentSlide, slideTitles, slideCount, slideId]);
+
+  // Close channel on unmount
+  useEffect(() => {
+    return () => { scriptChannelRef.current?.close(); };
+  }, []);
+
+  const handleOpenScript = useCallback(() => {
+    window.open(
+      `/script/${slideId}`,
+      `roomstay-script-${slideId}`,
+      "width=640,height=820,menubar=no,toolbar=no,location=no"
+    );
+  }, [slideId]);
 
   // Close add-menu on outside click
   useEffect(() => {
@@ -814,6 +804,7 @@ export default function SlideViewerPage() {
       setShowPanel(true);
     } else {
       postToIframe({ type: "roomstay-disable-edit" });
+      setShowPanel(false);
     }
     setIsEditMode((p) => !p);
   };
@@ -859,10 +850,39 @@ export default function SlideViewerPage() {
     if (!w) window.open(src, "_blank");
   };
 
-  const handleExportPPT = () => {
-    if (!src || isPptxExporting) return;
+  const handleExportPPT = async () => {
+    if (isPptxExporting) return;
+    const iframeWin = iframeRef.current?.contentWindow as any;
+    const iframeDoc = iframeRef.current?.contentDocument;
+    if (!iframeWin || !iframeDoc) return;
+
     setIsPptxExporting(true);
-    postToIframe({ type: "roomstay-export-pptx" });
+    try {
+      // Inject the bundle into the iframe context if not already loaded
+      if (!iframeWin.domToPptx) {
+        await new Promise<void>((resolve, reject) => {
+          const s = iframeDoc.createElement("script");
+          s.src = "/dom-to-pptx.bundle.js";
+          s.onload = () => resolve();
+          s.onerror = () => reject(new Error("Failed to load dom-to-pptx"));
+          iframeDoc.head.appendChild(s);
+        });
+      }
+
+      const slides = Array.from(iframeDoc.querySelectorAll<HTMLElement>(".slide"));
+      const filename = (iframeDoc.title || "presentation")
+        .replace(/[^a-zA-Z0-9_ -]/g, "")
+        .trim() || "presentation";
+
+      await iframeWin.domToPptx.exportToPptx(
+        slides.length ? slides : [iframeDoc.body],
+        { fileName: `${filename}.pptx`, svgAsVector: true, autoEmbedFonts: true }
+      );
+    } catch (err) {
+      console.error("[Export PPT]", err);
+    } finally {
+      setIsPptxExporting(false);
+    }
   };
 
   if (!src) {
@@ -974,6 +994,16 @@ export default function SlideViewerPage() {
               >
                 <ExternalLink className="h-3.5 w-3.5" />
                 Open in Tab
+              </button>
+
+              {/* Script button */}
+              <button
+                className="h-8 px-2.5 rounded text-xs text-white/60 hover:text-white hover:bg-white/10 flex items-center gap-1.5 transition-colors"
+                onClick={handleOpenScript}
+                title="Open speaker script in a new window — syncs with slide navigation"
+              >
+                <ScrollText className="h-3.5 w-3.5" />
+                Script
               </button>
 
               <div className="w-px h-5 bg-white/10 mx-1" />

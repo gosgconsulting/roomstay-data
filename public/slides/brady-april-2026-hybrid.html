@@ -527,6 +527,120 @@
     }
 
   </style>
+<style id="speaker-notes-css">
+
+/* ── COMMENTS PANEL (editable footer) ──────────────────────────────── */
+#comments-panel {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 220px;
+  background: rgba(17,25,46,0.98);
+  color: #e8eaf0;
+  font-family: 'Manrope', sans-serif;
+  z-index: 9999;
+  transform: translateY(100%);
+  transition: transform 0.28s cubic-bezier(.4,0,.2,1);
+  border-top: 3px solid #2eb8a6;
+  display: flex;
+  flex-direction: column;
+}
+#comments-panel.open { transform: translateY(0); }
+#comments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 18px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  flex-shrink: 0;
+}
+#comments-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #2eb8a6;
+}
+#comments-slide-label {
+  font-size: 10px;
+  color: rgba(255,255,255,0.35);
+}
+#comments-save-indicator {
+  font-size: 10px;
+  color: rgba(46,184,166,0.7);
+  margin-left: 10px;
+  transition: opacity 0.4s;
+  opacity: 0;
+}
+#comments-save-indicator.show { opacity: 1; }
+#comments-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+  padding: 0 2px;
+  transition: color .2s;
+  margin-left: 12px;
+}
+#comments-close:hover { color: #fff; }
+#comments-textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #e8eaf0;
+  font-family: 'Manrope', sans-serif;
+  font-size: 13.5px;
+  line-height: 1.65;
+  padding: 10px 20px 12px;
+  resize: none;
+  outline: none;
+}
+#comments-textarea::placeholder { color: rgba(255,255,255,0.2); }
+
+/* ── COMMENT FAB "+" button ─────────────────────────────────────────── */
+#comments-fab {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: #2eb8a6;
+  color: #fff;
+  font-size: 22px;
+  line-height: 42px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 10000;
+  border: none;
+  box-shadow: 0 4px 16px rgba(46,184,166,0.45);
+  transition: background .2s, transform .15s, box-shadow .2s;
+  font-family: sans-serif;
+  font-weight: 300;
+}
+#comments-fab:hover {
+  background: #25a393;
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(46,184,166,0.55);
+}
+#comments-fab.active {
+  background: #1a7a6e;
+  transform: rotate(45deg) scale(1.05);
+}
+/* dot indicator when a comment exists for this slide */
+#comments-fab::after {
+  content: '';
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #f5c842;
+  border: 1.5px solid rgba(17,25,46,0.8);
+  display: none;
+}
+#comments-fab.has-comment::after { display: block; }
+</style>
 </head>
 <body>
 
@@ -548,7 +662,7 @@
       <div><div class="cover-meta-label">Properties</div><div class="cover-meta-value">4 Hotels + Group</div></div>
     </div>
   </div>
-  <div class="slide-num">01 / 42</div>
+  <div class="slide-num">01 / 48</div>
 </section>
 
 <!-- ════ 2. TOC ════ -->
@@ -568,6 +682,7 @@
             <li>Per-hotel results</li>
             <li>Channel mix · YTD</li>
           </ul>
+          <div style="font-size:var(--fs-label);margin-top:0.5rem;color:var(--pos);font-weight:600;display:flex;align-items:center;gap:0.3rem"><span style="width:5px;height:5px;border-radius:50%;background:var(--pos);flex-shrink:0"></span>Data: 30 Apr 2026</div>
         </div>
         <div class="toc-card anim d3">
           <div class="toc-num">02</div>
@@ -578,19 +693,10 @@
             <li>Action plan · Assets</li>
             <li>YTD trend · Forecast</li>
           </ul>
+          <div style="font-size:var(--fs-label);margin-top:0.5rem;color:var(--pos);font-weight:600;display:flex;align-items:center;gap:0.3rem"><span style="width:5px;height:5px;border-radius:50%;background:var(--pos);flex-shrink:0"></span>Data: 30 Apr 2026</div>
         </div>
-        <div class="toc-card meta anim d4">
+        <div class="toc-card social anim d4">
           <div class="toc-num">03</div>
-          <div class="toc-title">Metasearch</div>
-          <ul class="toc-list">
-            <li>Funnel strategy</li>
-            <li>Per hotel · Breakdowns</li>
-            <li>CPC action plan</li>
-            <li>YTD trend · Forecast</li>
-          </ul>
-        </div>
-        <div class="toc-card social anim d5">
-          <div class="toc-num">04</div>
           <div class="toc-title">Social</div>
           <ul class="toc-list">
             <li>Funnel strategy</li>
@@ -598,16 +704,29 @@
             <li>Membership · Action plan</li>
             <li>Assets · Forecast · Creative</li>
           </ul>
+          <div style="font-size:var(--fs-label);margin-top:0.5rem;color:var(--pos);font-weight:600;display:flex;align-items:center;gap:0.3rem"><span style="width:5px;height:5px;border-radius:50%;background:var(--pos);flex-shrink:0"></span>Data: 30 Apr 2026</div>
+        </div>
+        <div class="toc-card meta anim d5">
+          <div class="toc-num">04</div>
+          <div class="toc-title">Metasearch</div>
+          <ul class="toc-list">
+            <li>Funnel strategy</li>
+            <li>Per hotel · Breakdowns</li>
+            <li>CPC action plan</li>
+            <li>YTD trend · Forecast</li>
+          </ul>
+          <div style="font-size:var(--fs-label);margin-top:0.5rem;color:var(--neutral);font-weight:600;display:flex;align-items:center;gap:0.3rem"><span style="width:5px;height:5px;border-radius:50%;background:var(--neutral);flex-shrink:0"></span>Data: 28 Apr 2026</div>
         </div>
         <div class="toc-card seo anim d6">
           <div class="toc-num">05</div>
           <div class="toc-title">SEO &amp; Organic</div>
           <ul class="toc-list">
-            <li>Group site · Hotel pages</li>
-            <li>Brand vs Generic</li>
-            <li>Seasonality YoY</li>
+            <li>April overview · AI visibility</li>
+            <li>Landing pages (5 active)</li>
+            <li>Brand vs Generic · YoY</li>
             <li>GA4 Organic revenue</li>
           </ul>
+          <div style="font-size:var(--fs-label);margin-top:0.5rem;color:var(--neutral);font-weight:600;display:flex;align-items:center;gap:0.3rem"><span style="width:5px;height:5px;border-radius:50%;background:var(--neutral);flex-shrink:0"></span>Data: 28 Apr 2026</div>
         </div>
         <div class="toc-card action anim d7">
           <div class="toc-num">06</div>
@@ -617,11 +736,12 @@
             <li>Paid channels priorities</li>
             <li>SEO priorities</li>
           </ul>
+          <div style="font-size:var(--fs-label);margin-top:0.5rem;color:var(--neutral);font-weight:600;display:flex;align-items:center;gap:0.3rem"><span style="width:5px;height:5px;border-radius:50%;background:var(--neutral);flex-shrink:0"></span>Data: 28 Apr 2026</div>
         </div>
       </div>
     </div>
   </div>
-  <div class="slide-num">02 / 42</div>
+  <div class="slide-num">02 / 48</div>
 </section>
 
 <!-- ════ 3. SECTION DIVIDER OVERVIEW ════ -->
@@ -634,7 +754,7 @@
     <div class="sd-title anim d3">Overview</div>
     <div class="sd-sub anim d4">Portfolio capacity, per-hotel results and channel mix for April 2026.</div>
   </div>
-  <div class="slide-num">03 / 42</div>
+  <div class="slide-num">03 / 48</div>
 </section>
 
 <!-- ════ 4. HOTEL PORTFOLIO ════ -->
@@ -665,7 +785,7 @@
     </div>
   </div>
   <div class="section-tag">Overview</div>
-  <div class="slide-num">04 / 42</div>
+  <div class="slide-num">04 / 48</div>
 </section>
 
 <!-- ════ 5. RESULTS PER HOTEL ════ -->
@@ -697,7 +817,7 @@
     </div>
   </div>
   <div class="section-tag">Overview</div>
-  <div class="slide-num">05 / 42</div>
+  <div class="slide-num">05 / 48</div>
 </section>
 
 <!-- ════ 6. CHANNEL MIX — enhanced with KPI cards -->
@@ -789,7 +909,7 @@
     </div>
   </div>
   <div class="section-tag">Overview</div>
-  <div class="slide-num">06 / 42</div>
+  <div class="slide-num">06 / 48</div>
 </section>
 
 <!-- ════ 7. ALL CHANNELS YTD vs FY 2025 (combined chart) ════ -->
@@ -887,7 +1007,7 @@
     </div>
   </div>
   <div class="section-tag">Overview</div>
-  <div class="slide-num">07 / 42</div>
+  <div class="slide-num">07 / 48</div>
 </section>
 
 <!-- ════ 8. SECTION DIVIDER SEM ════ -->
@@ -900,7 +1020,7 @@
     <div class="sd-title anim d3">SEM</div>
     <div class="sd-sub anim d4">$7,542 spend · $211,757 revenue · 28.1× ROAS · 4 hotels + Group cross-portfolio.</div>
   </div>
-  <div class="slide-num">08 / 42</div>
+  <div class="slide-num">08 / 48</div>
 </section>
 
 <!-- ════ SEM FUNNEL STRATEGY ════ -->
@@ -964,7 +1084,7 @@
     </div>
   </div>
   <div class="section-tag sem">SEM</div>
-  <div class="slide-num">09 / 42</div>
+  <div class="slide-num">09 / 48</div>
 </section>
 
 <!-- ════ 9. SEM PER HOTEL (table) ════ -->
@@ -992,7 +1112,7 @@
     </div>
   </div>
   <div class="section-tag sem">SEM</div>
-  <div class="slide-num">10 / 42</div>
+  <div class="slide-num">10 / 48</div>
 </section>
 
 <!-- ════ 10. SEM BREAKDOWNS (chart slide) ════ -->
@@ -1048,7 +1168,7 @@
     </div>
   </div>
   <div class="section-tag sem">SEM</div>
-  <div class="slide-num">11 / 42</div>
+  <div class="slide-num">11 / 48</div>
 </section>
 
 <!-- ════ 11. SEM ACTION PLAN — DETAILED TABLE ════ -->
@@ -1087,7 +1207,7 @@
     </div>
   </div>
   <div class="section-tag sem">SEM</div>
-  <div class="slide-num">12 / 42</div>
+  <div class="slide-num">12 / 48</div>
 </section>
 
 <!-- ════ 13. SEM YTD vs FY 2025 — combined chart ════ -->
@@ -1183,7 +1303,7 @@
     </div>
   </div>
   <div class="section-tag sem">SEM</div>
-  <div class="slide-num">13 / 42</div>
+  <div class="slide-num">13 / 48</div>
 </section>
 
 <!-- ════ 14. SEM ASSET & MARKET STRATEGY (detailed) ════ -->
@@ -1238,7 +1358,7 @@
     </div>
   </div>
   <div class="section-tag sem">SEM</div>
-  <div class="slide-num">14 / 42</div>
+  <div class="slide-num">14 / 48</div>
 </section>
 
 <!-- ════ 15. SEM FORECAST May-Dec WITH EVENTS ════ -->
@@ -1276,7 +1396,7 @@
     </div>
   </div>
   <div class="section-tag sem">SEM</div>
-  <div class="slide-num">15 / 42</div>
+  <div class="slide-num">15 / 48</div>
 </section>
 
 <!-- ════ 16. SECTION DIVIDER METASEARCH ════ -->
@@ -1289,7 +1409,7 @@
     <div class="sd-title anim d3">Metasearch</div>
     <div class="sd-sub anim d4">$1,641 spend · $53,623 revenue · 32.7× ROAS · pure PPC channel.</div>
   </div>
-  <div class="slide-num">16 / 42</div>
+  <div class="slide-num">16 / 48</div>
 </section>
 
 <!-- ════ METASEARCH FUNNEL STRATEGY ════ -->
@@ -1343,7 +1463,7 @@
     </div>
   </div>
   <div class="section-tag meta">Metasearch</div>
-  <div class="slide-num">17 / 42</div>
+  <div class="slide-num">17 / 48</div>
 </section>
 
 
@@ -1371,7 +1491,7 @@
     </div>
   </div>
   <div class="section-tag meta">Metasearch</div>
-  <div class="slide-num">18 / 42</div>
+  <div class="slide-num">18 / 48</div>
 </section>
 
 <!-- ════ 18. METASEARCH BREAKDOWNS ════ -->
@@ -1417,7 +1537,7 @@
     </div>
   </div>
   <div class="section-tag meta">Metasearch</div>
-  <div class="slide-num">19 / 42</div>
+  <div class="slide-num">19 / 48</div>
 </section>
 <script>
 (function(){
@@ -1523,7 +1643,7 @@
     </div>
   </div>
   <div class="section-tag meta">Metasearch</div>
-  <div class="slide-num">20 / 42</div>
+  <div class="slide-num">20 / 48</div>
 </section>
 
 <!-- ════ 20. METASEARCH YTD — combined chart ════ -->
@@ -1617,7 +1737,7 @@
     </div>
   </div>
   <div class="section-tag meta">Metasearch</div>
-  <div class="slide-num">21 / 42</div>
+  <div class="slide-num">21 / 48</div>
 </section>
 
 <!-- ════ 21. METASEARCH FORECAST May-Dec WITH EVENTS ════ -->
@@ -1655,7 +1775,7 @@
     </div>
   </div>
   <div class="section-tag meta">Metasearch</div>
-  <div class="slide-num">22 / 42</div>
+  <div class="slide-num">22 / 48</div>
 </section>
 
 <!-- ════ 22. SECTION DIVIDER SOCIAL ════ -->
@@ -1668,7 +1788,7 @@
     <div class="sd-title anim d3">Social</div>
     <div class="sd-sub anim d4">$5,452 spend · 402K impressions · 6,382 clicks · 4 hotels + Group cross-portfolio.</div>
   </div>
-  <div class="slide-num">23 / 42</div>
+  <div class="slide-num">23 / 48</div>
 </section>
 
 <!-- ════ SOCIAL FUNNEL STRATEGY ════ -->
@@ -1732,7 +1852,7 @@
     </div>
   </div>
   <div class="section-tag social">Social</div>
-  <div class="slide-num">24 / 42</div>
+  <div class="slide-num">24 / 48</div>
 </section>
 
 
@@ -1762,7 +1882,7 @@
     </div>
   </div>
   <div class="section-tag social">Social</div>
-  <div class="slide-num">25 / 42</div>
+  <div class="slide-num">25 / 48</div>
 </section>
 
 <!-- ════ 24. SOCIAL BREAKDOWNS — chart slide ════ -->
@@ -1818,7 +1938,7 @@
     </div>
   </div>
   <div class="section-tag social">Social</div>
-  <div class="slide-num">26 / 42</div>
+  <div class="slide-num">26 / 48</div>
 </section>
 
 <!-- ════ 26. MEMBERSHIP CAMPAIGN — confirmed lead-objective -->
@@ -1870,7 +1990,7 @@
     </div>
   </div>
   <div class="section-tag social">Social</div>
-  <div class="slide-num">27 / 42</div>
+  <div class="slide-num">27 / 48</div>
 </section>
 
 <!-- ════ 27. SOCIAL ACTION PLAN — DETAILED TABLE ════ -->
@@ -1909,7 +2029,7 @@
     </div>
   </div>
   <div class="section-tag social">Social</div>
-  <div class="slide-num">28 / 42</div>
+  <div class="slide-num">28 / 48</div>
 </section>
 
 <!-- ════ 28. SOCIAL YTD — combined chart ════ -->
@@ -2000,7 +2120,7 @@
     </div>
   </div>
   <div class="section-tag social">Social</div>
-  <div class="slide-num">29 / 42</div>
+  <div class="slide-num">29 / 48</div>
 </section>
 
 <!-- ════ 29. SOCIAL ASSET & CREATIVE STRATEGY ════ -->
@@ -2050,7 +2170,7 @@
     </div>
   </div>
   <div class="section-tag social">Social</div>
-  <div class="slide-num">30 / 42</div>
+  <div class="slide-num">30 / 48</div>
 </section>
 
 <!-- ════ 30. SOCIAL FORECAST May-Dec WITH EVENTS ════ -->
@@ -2088,7 +2208,7 @@
     </div>
   </div>
   <div class="section-tag social">Social</div>
-  <div class="slide-num">31 / 42</div>
+  <div class="slide-num">31 / 48</div>
 </section>
 
 <!-- ════ NEW: ASSET PERFORMANCE — APRIL 2026 CREATIVE REFRESH -->
@@ -2118,368 +2238,10 @@
     </div>
   </div>
   <div class="section-tag social">Creative</div>
-  <div class="slide-num">32 / 42</div>
+  <div class="slide-num">32 / 48</div>
 </section>
 
 
-<!-- ════ 32. SECTION DIVIDER SEO ════ -->
-<section class="slide section-divider">
-  <div class="bracket tl"></div>
-  <div class="bracket br"></div>
-  <div>
-    <div class="sd-eyebrow anim d1" style="color:var(--ch-seo-l)">Section Five · Organic Search</div>
-    <div class="sd-num anim d2">05</div>
-    <div class="sd-title anim d3">SEO &amp; Organic</div>
-    <div class="sd-sub anim d4">Group website + 4 hotel pages. Brand vs generic split, seasonality, and GA4 organic revenue.</div>
-  </div>
-  <div class="slide-num">33 / 42</div>
-</section>
-
-<!-- ════ 33. SEO — GROUP SITE + HOTEL PAGES (YoY) ════ -->
-<section class="slide">
-  <div class="slide-inner">
-    <div class="slide-header">
-      <div class="slide-eyebrow seo anim d1">SEO · Site Architecture · GSC · YoY</div>
-      <h2 class="slide-title anim d2">Group Website &amp; Hotel Pages — 2026 vs 2025</h2>
-      <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.3rem">Per-page GSC metrics for 22 Mar – 21 Apr 2026 vs same window in 2025. NEW = page didn't exist (or had 0 impressions) a year ago.</div>
-    </div>
-    <div class="slide-content">
-      <div class="chart-card anim d2" style="padding:var(--gap);flex:1;min-height:0">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem">
-          <div>
-            <div class="ch-sub">Single group domain · 4 hotel pages</div>
-            <div class="ch-title" style="color:var(--ch-seo)">bradyhotels.com.au</div>
-          </div>
-          <div style="display:flex;gap:var(--gap-sm);font-size:var(--fs-small)">
-            <span style="display:inline-flex;align-items:center;gap:0.4rem;background:var(--bg-soft);padding:0.3rem 0.7rem;border-radius:20px"><span style="width:8px;height:8px;border-radius:50%;background:var(--pos)"></span><strong>2026</strong> 22 Mar – 21 Apr</span>
-            <span style="display:inline-flex;align-items:center;gap:0.4rem;background:var(--bg-soft);padding:0.3rem 0.7rem;border-radius:20px;color:var(--text-muted)"><span style="width:8px;height:8px;border-radius:50%;background:var(--text-light)"></span><strong>2025</strong> 22 Mar – 21 Apr</span>
-          </div>
-        </div>
-        <div class="ch-body" style="justify-content:flex-start">
-          <table class="dt compact" style="margin-top:0.3rem;font-size:var(--fs-label)">
-            <thead><tr>
-              <th>Page</th><th>Type</th><th>Clicks <span style="color:var(--pos)">'26</span></th><th>Clicks '25</th><th>YoY Δ</th><th>CTR '26</th><th>Pos '26</th><th>Pos '25</th>
-            </tr></thead>
-            <tbody>
-              <tr><td>/central-melbourne/</td><td>Hotel</td><td>677</td><td>917</td><td><span class="ftag ftag-loss">−26.2%</span></td><td>3.96%</td><td class="pos">3.4</td><td>27.4</td></tr>
-              <tr><td>/jones-lane/</td><td>Hotel</td><td>462</td><td>659</td><td><span class="ftag ftag-loss">−29.9%</span></td><td>4.03%</td><td class="pos">3.8</td><td>13.2</td></tr>
-              <tr><td>/flinders-street/</td><td>Apt Hotel</td><td>315</td><td>233</td><td><span class="ftag ftag-win">+35.2%</span></td><td>1.96%</td><td class="pos">5.7</td><td>23.8</td></tr>
-              <tr><td>/hardware-lane/</td><td>Apt Hotel</td><td>215</td><td>280</td><td><span class="ftag ftag-loss">−23.2%</span></td><td>1.60%</td><td class="pos">6.2</td><td>17.6</td></tr>
-              <tr><td>/ (homepage)</td><td>Group</td><td>428</td><td>388</td><td><span class="ftag ftag-win">+10.3%</span></td><td>1.16%</td><td class="pos">7.1</td><td>24.9</td></tr>
-              <tr><td>/melbourne-dining-guide/hardware-lane-dining/</td><td>Content</td><td>182</td><td>—</td><td><span class="ftag ftag-win">NEW</span></td><td>1.10%</td><td>15.2</td><td>—</td></tr>
-              <tr><td>/long-stay-accommodation-melbourne/</td><td>Content</td><td>96</td><td>—</td><td><span class="ftag ftag-win">NEW</span></td><td>1.28%</td><td>10.4</td><td>—</td></tr>
-              <tr><td>/melbourne-dining-guide/lonsdale-street/</td><td>Content</td><td>89</td><td>—</td><td><span class="ftag ftag-win">NEW</span></td><td>1.33%</td><td>14.6</td><td>—</td></tr>
-            </tbody>
-            <tfoot>
-              <tr><td>Hotel pages (4) Total</td><td>—</td><td>1,669</td><td>2,089</td><td><span class="ftag ftag-loss">−20.1%</span></td><td>2.79%</td><td class="pos">~4.8</td><td>~22.0</td></tr>
-              <tr><td>Top 8 pages Total</td><td>—</td><td>2,464</td><td>2,477</td><td><span class="ftag ftag-hold">−0.5%</span></td><td>1.96%</td><td>—</td><td>—</td></tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-      <div class="action-card anim d3" style="margin-top:var(--gap-sm);border-left-color:var(--ch-seo)">
-        <strong>Massive ranking improvement YoY</strong> — every hotel page jumped into top-10: Central Melbourne 27.4 → 3.4, Jones Lane 13.2 → 3.8, Flinders 23.8 → 5.7, Hardware 17.6 → 6.2. Homepage 24.9 → 7.1. <strong>But hotel-page clicks down −20%</strong> — better positions, fewer clicks suggests SERP CTR loss to AI overviews + sitelinks (own brand) and lower overall brand search volume. <strong>Bright spot:</strong> Flinders Street +35% YoY (only hotel page up). <strong>Content engine launched in 2026</strong> — 3 new pages (dining guides + long-stay) added 367 clicks/mo from zero, partly offsetting the brand drop.
-      </div>
-    </div>
-  </div>
-  <div class="section-tag seo">SEO</div>
-  <div class="slide-num">34 / 42</div>
-</section>
-
-<!-- ════ 34. SEO — BRAND vs GENERIC ════ -->
-<section class="slide">
-  <div class="slide-inner">
-    <div class="slide-header">
-      <div class="slide-eyebrow seo anim d1">SEO · Brand vs Generic · GSC · YoY</div>
-      <h2 class="slide-title anim d2">Brand vs Generic — Where Clicks Come From</h2>
-      <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.3rem">Brand keywords contain 'brady', 'bradys', 'brandy', 'bradley'. Everything else is generic. Aggregates cover all queries returned by GSC.</div>
-    </div>
-    <div class="slide-content">
-      <div style="display:flex;gap:var(--gap-sm);align-items:center;margin-bottom:var(--gap-sm);font-size:var(--fs-small)" class="anim d2">
-        <span style="display:inline-flex;align-items:center;gap:0.4rem;background:var(--bg-soft);padding:0.3rem 0.7rem;border-radius:20px"><span style="width:8px;height:8px;border-radius:50%;background:var(--pos)"></span><strong>2026</strong> 22 Mar – 21 Apr 2026</span>
-        <span style="display:inline-flex;align-items:center;gap:0.4rem;background:var(--bg-soft);padding:0.3rem 0.7rem;border-radius:20px;color:var(--text-muted)"><span style="width:8px;height:8px;border-radius:50%;background:var(--text-light)"></span><strong>VS YoY</strong> 22 Mar – 21 Apr 2025</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:1;min-height:0">
-        <div class="chart-card anim d3" style="padding:var(--gap)">
-          <div style="display:inline-block;background:rgba(232,75,60,0.10);color:var(--grad-1);font-weight:700;font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;padding:0.3rem 0.7rem;border-radius:4px;margin-bottom:0.6rem">Brand</div>
-          <span style="float:right;font-size:var(--fs-small);color:var(--text-muted)">284 keywords (2026)</span>
-          <table class="dt compact" style="font-size:var(--fs-small)">
-            <thead><tr>
-              <th>Metric</th><th><span style="color:var(--pos);font-weight:700">2026</span><br><span style="font-weight:400;letter-spacing:0;color:var(--text-light);font-size:0.8em">22 Mar – 21 Apr</span></th><th>2025<br><span style="font-weight:400;letter-spacing:0;color:var(--text-light);font-size:0.8em">22 Mar – 21 Apr</span></th><th>YOY Δ</th>
-            </tr></thead>
-            <tbody>
-              <tr><td>Clicks</td><td>1,542</td><td>2,051</td><td><span class="ftag ftag-loss">−24.8%</span></td></tr>
-              <tr><td>Impressions</td><td>21,944</td><td>21,155</td><td><span class="ftag ftag-win">+3.7%</span></td></tr>
-              <tr><td>Avg. position</td><td>5.0</td><td>3.2</td><td><span class="ftag ftag-loss">+1.8</span></td></tr>
-              <tr><td>CTR</td><td>7.03%</td><td>9.70%</td><td><span class="ftag ftag-loss">−2.67pp</span></td></tr>
-              <tr><td># Keywords</td><td>284</td><td>334</td><td><span class="ftag ftag-loss">−15.0%</span></td></tr>
-              <tr><td>% of total clicks</td><td>83.8%</td><td>92.3%</td><td><span class="ftag ftag-loss">−8.5pp</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="chart-card anim d4" style="padding:var(--gap)">
-          <div style="display:inline-block;background:rgba(94,63,190,0.10);color:var(--ch-seo);font-weight:700;font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;padding:0.3rem 0.7rem;border-radius:4px;margin-bottom:0.6rem">Generic</div>
-          <span style="float:right;font-size:var(--fs-small);color:var(--text-muted)">5,349 keywords (2026)</span>
-          <table class="dt compact" style="font-size:var(--fs-small)">
-            <thead><tr>
-              <th>Metric</th><th><span style="color:var(--pos);font-weight:700">2026</span><br><span style="font-weight:400;letter-spacing:0;color:var(--text-light);font-size:0.8em">22 Mar – 21 Apr</span></th><th>2025<br><span style="font-weight:400;letter-spacing:0;color:var(--text-light);font-size:0.8em">22 Mar – 21 Apr</span></th><th>YOY Δ</th>
-            </tr></thead>
-            <tbody>
-              <tr><td>Clicks</td><td>299</td><td>172</td><td><span class="ftag ftag-win">+73.8%</span></td></tr>
-              <tr><td>Impressions</td><td>71,053</td><td>128,563</td><td><span class="ftag ftag-loss">−44.7%</span></td></tr>
-              <tr><td>Avg. position</td><td>13.4</td><td>32.2</td><td><span class="ftag ftag-win">−18.8</span></td></tr>
-              <tr><td>CTR</td><td>0.42%</td><td>0.13%</td><td><span class="ftag ftag-win">+0.29pp</span></td></tr>
-              <tr><td># Keywords</td><td>5,349</td><td>8,028</td><td><span class="ftag ftag-loss">−33.4%</span></td></tr>
-              <tr><td>% of total clicks</td><td>16.2%</td><td>7.7%</td><td><span class="ftag ftag-win">+8.5pp</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div class="action-card anim d5" style="margin-top:var(--gap-sm);border-left-color:var(--ch-seo)">
-        <strong>Brand traffic down YoY (−24.8% clicks)</strong> — avg position drifted from 3.2 to 5.0 and CTR fell from 9.70% to 7.03%. Likely cause: more SERP features (sitelinks, maps, AI overviews) pushing organic listings down. <strong>Generic clicks +73.8% YoY</strong> with avg position improving from 32.2 → 13.4 — content investment (dining guides, long-stay pages) is working. Generic now drives 16.2% of organic clicks vs 7.7% a year ago. <strong>Action:</strong> Brand metadata + sitelinks audit to defend top-spot CTR; double down on the generic content engine that's clearly compounding.
-      </div>
-    </div>
-  </div>
-  <div class="section-tag seo">SEO</div>
-  <div class="slide-num">35 / 42</div>
-</section>
-
-<!-- ════ 35. SEO — ORGANIC TRAFFIC YoY ════ -->
-<section class="slide">
-  <div class="slide-inner">
-    <div class="slide-header">
-      <div class="slide-eyebrow seo anim d1">SEO · Organic Traffic · GA4 · YoY</div>
-      <h2 class="slide-title anim d2">Organic Search Traffic — 2026 vs 2025</h2>
-      <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.3rem">Monthly GA4 organic search sessions, 2026 YTD vs 2025 same months. Paid channels excluded.</div>
-    </div>
-    <div class="slide-content">
-      <div style="display:flex;gap:var(--gap-sm);align-items:center;margin-bottom:var(--gap-sm);font-size:var(--fs-small)" class="anim d2">
-        <span style="display:inline-flex;align-items:center;gap:0.4rem;background:var(--bg-soft);padding:0.3rem 0.7rem;border-radius:20px"><span style="width:8px;height:8px;border-radius:50%;background:var(--ch-seo)"></span><strong>2026</strong> Jan – Apr (YTD)</span>
-        <span style="display:inline-flex;align-items:center;gap:0.4rem;background:var(--bg-soft);padding:0.3rem 0.7rem;border-radius:20px;color:var(--text-muted)"><span style="width:8px;height:8px;border-radius:50%;background:#C8CDD7"></span><strong>2025</strong> Jan – Dec</span>
-      </div>
-      <div class="chart-card anim d3" style="padding:var(--gap)">
-        <div class="ch-body" style="justify-content:center">
-          <svg viewBox="0 0 1100 320" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;max-height:42vh">
-            <!-- y-axis grid lines -->
-            <line x1="40" y1="40"  x2="1080" y2="40"  stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
-            <line x1="40" y1="100" x2="1080" y2="100" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
-            <line x1="40" y1="160" x2="1080" y2="160" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
-            <line x1="40" y1="220" x2="1080" y2="220" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
-            <line x1="40" y1="270" x2="1080" y2="270" stroke="#11192E" stroke-width="1"/>
-            <!-- 12 months · GA4 organic sessions · max 7,694 (Jul 2025) → 230px height; scale 230/7694 = 0.02989 -->
-            <!-- Jan: 2025=5390, 2026=4103 -->
-            <g><rect x="50"  y="108.9" width="32" height="161.1" fill="#C8CDD7"/><rect x="86"  y="147.4" width="32" height="122.6" fill="#5E3FBE"/><text x="84" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Jan</text><text x="66" y="103" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">5,390</text><text x="102" y="142" font-family="Manrope" font-size="11" fill="#5E3FBE" text-anchor="middle" font-weight="600">4,103</text></g>
-            <!-- Feb: 2025=4735, 2026=4059 -->
-            <g><rect x="138" y="128.5" width="32" height="141.5" fill="#C8CDD7"/><rect x="174" y="148.7" width="32" height="121.3" fill="#5E3FBE"/><text x="172" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Feb</text><text x="154" y="123" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">4,735</text><text x="190" y="143" font-family="Manrope" font-size="11" fill="#5E3FBE" text-anchor="middle" font-weight="600">4,059</text></g>
-            <!-- Mar: 2025=5161, 2026=4576 -->
-            <g><rect x="226" y="115.7" width="32" height="154.3" fill="#C8CDD7"/><rect x="262" y="133.2" width="32" height="136.8" fill="#5E3FBE"/><text x="260" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Mar</text><text x="242" y="110" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">5,161</text><text x="278" y="128" font-family="Manrope" font-size="11" fill="#5E3FBE" text-anchor="middle" font-weight="600">4,576</text></g>
-            <!-- Apr: 2025=4388, 2026=3730* (run-rate from 21d=2611) -->
-            <g><rect x="314" y="138.8" width="32" height="131.2" fill="#C8CDD7"/><rect x="350" y="158.5" width="32" height="111.5" fill="#5E3FBE" fill-opacity="0.55" stroke="#5E3FBE" stroke-width="2" stroke-dasharray="3,3"/><text x="348" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Apr</text><text x="330" y="133" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">4,388</text><text x="366" y="153" font-family="Manrope" font-size="11" fill="#5E3FBE" text-anchor="middle" font-weight="600">3,730*</text></g>
-            <!-- May: 2025=4912 -->
-            <g><rect x="402" y="123.2" width="32" height="146.8" fill="#C8CDD7"/><text x="418" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">May</text><text x="418" y="118" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">4,912</text></g>
-            <!-- Jun: 2025=7471 -->
-            <g><rect x="475" y="46.7" width="32" height="223.3" fill="#C8CDD7"/><text x="491" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Jun</text><text x="491" y="41" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">7,471</text></g>
-            <!-- Jul: 2025=7694 -->
-            <g><rect x="548" y="40.0" width="32" height="230.0" fill="#C8CDD7"/><text x="564" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Jul</text><text x="564" y="35" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">7,694</text></g>
-            <!-- Aug: 2025=7163 -->
-            <g><rect x="621" y="55.9" width="32" height="214.1" fill="#C8CDD7"/><text x="637" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Aug</text><text x="637" y="50" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">7,163</text></g>
-            <!-- Sep: 2025=7050 -->
-            <g><rect x="694" y="59.3" width="32" height="210.7" fill="#C8CDD7"/><text x="710" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Sep</text><text x="710" y="54" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">7,050</text></g>
-            <!-- Oct: 2025=5323 -->
-            <g><rect x="767" y="110.9" width="32" height="159.1" fill="#C8CDD7"/><text x="783" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Oct</text><text x="783" y="105" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">5,323</text></g>
-            <!-- Nov: 2025=4394 -->
-            <g><rect x="840" y="138.6" width="32" height="131.4" fill="#C8CDD7"/><text x="856" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Nov</text><text x="856" y="133" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">4,394</text></g>
-            <!-- Dec: 2025=3342 -->
-            <g><rect x="913" y="170.1" width="32" height="99.9" fill="#C8CDD7"/><text x="929" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Dec</text><text x="929" y="165" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">3,342</text></g>
-            <!-- Legend -->
-            <g transform="translate(50,310)">
-              <rect x="0" y="-9" width="11" height="11" fill="#C8CDD7"/><text x="16" y="0" font-family="Manrope" font-size="11" fill="#5A6377">2025 organic sessions</text>
-              <rect x="160" y="-9" width="11" height="11" fill="#5E3FBE"/><text x="176" y="0" font-family="Manrope" font-size="11" fill="#5A6377">2026 organic sessions</text>
-              <text x="340" y="0" font-family="Manrope" font-size="11" fill="#8C93A4">* Apr 2026 = run-rate from 21 days actual (2,611 sessions)</text>
-            </g>
-          </svg>
-        </div>
-      </div>
-      <div class="action-card anim d4" style="margin-top:var(--gap-sm);border-left-color:var(--ch-seo)">
-        <strong>2026 YTD organic sessions tracking below 2025</strong> — Jan −23.9%, Feb −14.3%, Mar −11.3%, Apr −15.0% (run-rate). Gap is widest in Jan, narrowing through the quarter. <strong>YoY revenue however is up</strong> (+15.5% in current period) — fewer sessions but higher conversion + AOV. <strong>Action:</strong> ramp organic content publishing in May–June to rebuild the session base before the seasonal climb; protect brand SERP real estate to halt CTR slide.
-      </div>
-    </div>
-  </div>
-  <div class="section-tag seo">SEO</div>
-  <div class="slide-num">36 / 42</div>
-</section>
-
-<!-- ════ 36. SEO — GA4 ORGANIC OVERVIEW (YoY) ════ -->
-<section class="slide">
-  <div class="slide-inner">
-    <div class="slide-header">
-      <div class="slide-eyebrow seo anim d1">SEO · GA4 Organic · 22 Mar – 21 Apr · YoY</div>
-      <h2 class="slide-title anim d2">Organic — Sessions, Conversions &amp; Revenue</h2>
-      <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.3rem">GA4 Organic Search channel only. 2026 vs same 31-day window in 2025.</div>
-    </div>
-    <div class="slide-content">
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap-sm);margin-bottom:var(--gap-sm)" class="anim d2">
-        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--ch-seo)">
-          <div style="font-size:var(--fs-label);letter-spacing:0.08em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">Organic Sessions</div>
-          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.2rem,2.1vw,1.7rem);color:var(--ch-seo);line-height:1">4,100</div>
-          <div style="font-size:var(--fs-label);color:var(--neg);font-weight:600;margin-top:0.2rem">−9.7% YoY (4,538)</div>
-        </div>
-        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--ch-seo)">
-          <div style="font-size:var(--fs-label);letter-spacing:0.08em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">Organic Conv. Events</div>
-          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.2rem,2.1vw,1.7rem);color:var(--text);line-height:1">7,887</div>
-          <div style="font-size:var(--fs-label);color:var(--pos);font-weight:600;margin-top:0.2rem">+13.3% YoY (6,959)</div>
-        </div>
-        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--ch-seo)">
-          <div style="font-size:var(--fs-label);letter-spacing:0.08em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">Organic Revenue</div>
-          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.2rem,2.1vw,1.7rem);color:var(--pos);line-height:1">$126,152</div>
-          <div style="font-size:var(--fs-label);color:var(--pos);font-weight:600;margin-top:0.2rem">+15.5% YoY ($109K)</div>
-        </div>
-        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--ch-seo)">
-          <div style="font-size:var(--fs-label);letter-spacing:0.08em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">Revenue / Session</div>
-          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.2rem,2.1vw,1.7rem);color:var(--text);line-height:1">$30.77</div>
-          <div style="font-size:var(--fs-label);color:var(--pos);font-weight:600;margin-top:0.2rem">+27.9% YoY ($24.07)</div>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:var(--gap);flex:1;min-height:0">
-        <div class="chart-card anim d3" style="padding:var(--gap)">
-          <div class="ch-sub">Organic Revenue · Last 6 months</div>
-          <div class="ch-title" style="color:var(--ch-seo)">$657K · Nov 2025 → Apr 2026</div>
-          <div class="ch-body" style="justify-content:center">
-            <svg viewBox="0 0 600 220" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;max-height:30vh">
-              <line x1="40" y1="20"  x2="580" y2="20"  stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
-              <line x1="40" y1="70"  x2="580" y2="70"  stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
-              <line x1="40" y1="120" x2="580" y2="120" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
-              <line x1="40" y1="170" x2="580" y2="170" stroke="#11192E" stroke-width="1"/>
-              <!-- max ~$122K → 150px height; scale 150/122 = 1.23 -->
-              <!-- Nov: $118.2K -->
-              <g><rect x="60"  y="24" width="60" height="146" fill="#5E3FBE" fill-opacity="0.78"/><text x="90"  y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Nov 25</text><text x="90"  y="19" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$118K</text></g>
-              <!-- Dec: $111.3K -->
-              <g><rect x="145" y="32" width="60" height="138" fill="#5E3FBE" fill-opacity="0.78"/><text x="175" y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Dec 25</text><text x="175" y="27" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$111K</text></g>
-              <!-- Jan: $120.0K -->
-              <g><rect x="230" y="22" width="60" height="148" fill="#5E3FBE" fill-opacity="0.78"/><text x="260" y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Jan 26</text><text x="260" y="17" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$120K</text></g>
-              <!-- Feb: $108.9K -->
-              <g><rect x="315" y="36" width="60" height="134" fill="#5E3FBE" fill-opacity="0.78"/><text x="345" y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Feb 26</text><text x="345" y="31" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$109K</text></g>
-              <!-- Mar: $114.4K -->
-              <g><rect x="400" y="29" width="60" height="141" fill="#5E3FBE"/><text x="430" y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Mar 26</text><text x="430" y="24" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$114K</text></g>
-              <!-- Apr: $85.5K (21d) → $122K run-rate -->
-              <g><rect x="485" y="20" width="60" height="150" fill="#5E3FBE" fill-opacity="0.55" stroke="#5E3FBE" stroke-width="2" stroke-dasharray="3,3"/><text x="515" y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Apr 26*</text><text x="515" y="15" font-family="Manrope" font-size="11" fill="#5E3FBE" text-anchor="middle" font-weight="700">$122K*</text></g>
-              <text x="40" y="212" font-family="Manrope" font-size="10" fill="#8C93A4">* Apr 2026 = run-rate from 21 days actual ($85.5K)</text>
-            </svg>
-          </div>
-        </div>
-        <div class="chart-card anim d4" style="padding:var(--gap)">
-          <div class="ch-sub">Top Brand Queries (GSC · 22 Mar – 21 Apr 2026)</div>
-          <div class="ch-body" style="justify-content:flex-start">
-            <table class="dt compact" style="font-size:var(--fs-label);margin-top:0.4rem">
-              <thead><tr><th>Query</th><th>Clicks</th><th>Imp.</th></tr></thead>
-              <tbody>
-                <tr><td>brady hotels central melbourne</td><td>205</td><td>2,519</td></tr>
-                <tr><td>brady hotel melbourne</td><td>177</td><td>1,910</td></tr>
-                <tr><td>brady hotels jones lane</td><td>176</td><td>1,915</td></tr>
-                <tr><td>brady hotels</td><td>111</td><td>748</td></tr>
-                <tr><td>brady apt hotel flinders street</td><td>109</td><td>1,900</td></tr>
-                <tr><td>brady apt hotel hardware lane</td><td>64</td><td>1,423</td></tr>
-                <tr><td>brady hotel jones lane</td><td>71</td><td>781</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      <div class="action-card anim d5" style="margin-top:var(--gap-sm);border-left-color:var(--ch-seo)">
-        <strong>Organic revenue +15.5% YoY</strong> on −9.7% sessions — Revenue/Session jumped from $24.07 to $30.77 (+27.9%). Conversion engine working harder per visit (better landing pages, price widgets, room availability UX). <strong>Risk:</strong> Brand position drifted from 3.2 → 5.0 (see prev slide) — fewer brand sessions ahead unless metadata + sitelinks are reclaimed. <strong>Action:</strong> hold the conversion gains and rebuild the session base before the seasonal climb (Jun–Sep).
-      </div>
-    </div>
-  </div>
-  <div class="section-tag seo">SEO</div>
-  <div class="slide-num">37 / 42</div>
-</section>
-
-<!-- ════ 37. SECTION DIVIDER ACTION PLAN ════ -->
-<section class="slide section-divider">
-  <div class="bracket tl"></div>
-  <div class="bracket br"></div>
-  <div>
-    <div class="sd-eyebrow action anim d1">Section Six · Priorities</div>
-    <div class="sd-num anim d2">06</div>
-    <div class="sd-title anim d3">What We Do Next</div>
-    <div class="sd-sub anim d4">Paid channels and SEO — May 2026 next steps and execution priorities.</div>
-  </div>
-  <div class="slide-num">38 / 42</div>
-</section>
-
-<!-- ════ 32. FULL YEAR FORECAST 2026 -->
-<section class="slide">
-  <div class="slide-inner">
-    <div class="slide-header">
-      <div class="slide-eyebrow action anim d1">FY 2026 · Actuals (Jan–Apr) + Forecast (May–Dec)</div>
-      <h2 class="slide-title anim d2">Full Year P&amp;L · Cost · Revenue · Agency · ROI · CoS</h2>
-    </div>
-    <div class="slide-content">
-      <table class="dt compact anim d2" style="font-size:var(--fs-label)">
-        <thead><tr>
-          <th>Month</th><th>Status</th><th>Media Cost</th><th>Revenue</th><th>Agency Fee</th><th>Total Inv.</th><th>ROI</th><th>CoS %</th>
-        </tr></thead>
-        <tbody>
-          <tr><td>Jan 2026</td><td><span class="ftag ftag-win">actual</span></td><td>$17,034</td><td>$376K</td><td>$5,400</td><td>$22,434</td><td class="pos">16.8×</td><td class="pos">5.9%</td></tr>
-          <tr><td>Feb 2026</td><td><span class="ftag ftag-win">actual</span></td><td>$12,806</td><td>$320K</td><td>$5,400</td><td>$18,206</td><td class="pos">17.6×</td><td class="pos">5.7%</td></tr>
-          <tr><td>Mar 2026</td><td><span class="ftag ftag-win">actual</span></td><td>$15,754</td><td>$385K</td><td>$5,400</td><td>$21,154</td><td class="pos">18.2×</td><td class="pos">5.5%</td></tr>
-          <tr><td>Apr 2026</td><td><span class="ftag ftag-win">actual</span></td><td>$14,649</td><td>$282K</td><td>$5,400</td><td>$20,049</td><td>14.1×</td><td>7.1%</td></tr>
-          <tr><td>May 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$17,000</td><td>$310K</td><td>$5,400</td><td>$22,400</td><td>13.8×</td><td>7.2%</td></tr>
-          <tr><td>Jun 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$18,500</td><td>$345K</td><td>$5,400</td><td>$23,900</td><td>14.4×</td><td>6.9%</td></tr>
-          <tr><td>Jul 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$20,500</td><td>$375K</td><td>$5,400</td><td>$25,900</td><td>14.5×</td><td>6.9%</td></tr>
-          <tr><td>Aug 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$19,200</td><td>$355K</td><td>$5,400</td><td>$24,600</td><td>14.4×</td><td>6.9%</td></tr>
-          <tr><td>Sep 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td class="pos">$22,000</td><td class="pos">$415K</td><td>$5,400</td><td>$27,400</td><td class="pos">15.1×</td><td class="pos">6.6%</td></tr>
-          <tr><td>Oct 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$21,500</td><td>$400K</td><td>$5,400</td><td>$26,900</td><td>14.9×</td><td>6.7%</td></tr>
-          <tr><td>Nov 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td class="pos">$25,000</td><td class="pos">$470K</td><td>$5,400</td><td>$30,400</td><td class="pos">15.5×</td><td class="pos">6.5%</td></tr>
-          <tr><td>Dec 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$19,500</td><td>$325K</td><td>$5,400</td><td>$24,900</td><td>13.1×</td><td>7.7%</td></tr>
-        </tbody>
-        <tfoot>
-          <tr><td>YTD 2026 (Jan–Apr · actual)</td><td>4 mo</td><td>$60,243</td><td>$1.36M</td><td>$21,600</td><td>$81,843</td><td class="pos">16.7×</td><td class="pos">6.0%</td></tr>
-          <tr><td>FY 2026 Forecast Total</td><td>12 mo</td><td>$223,443</td><td>$4.36M</td><td>$64,800</td><td>$288,243</td><td class="pos">15.1×</td><td class="pos">6.6%</td></tr>
-        </tfoot>
-      </table>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap-sm)">
-        <div class="action-card action anim d3"><strong>Agency Retainer (flat):</strong> Paid Search $2,000/mo · Metasearch $1,600/mo · Paid Social $1,800/mo. Combined <strong>$5,400/mo · $64,800/year</strong>. Separate from media spend.</div>
-        <div class="action-card anim d4"><strong>Definitions:</strong> ROI = Revenue ÷ Total Investment (Media + Agency). CoS = (Media + Agency) ÷ Revenue × 100. Industry benchmark: CoS 5–10% is healthy for hotels; below 5% is excellent.</div>
-      </div>
-    </div>
-  </div>
-  <div class="section-tag action">Forecast</div>
-  <div class="slide-num">39 / 42</div>
-</section>
-
-<!-- ════ 33. FORECAST PER HOTEL × CHANNEL MATRIX -->
-<section class="slide">
-  <div class="slide-inner">
-    <div class="slide-header">
-      <div class="slide-eyebrow action anim d1">FY 2026 · Forecast Distribution</div>
-      <h2 class="slide-title anim d2">Forecast per Hotel × Channel</h2>
-    </div>
-    <div class="slide-content">
-      <table class="dt compact anim d2">
-        <thead><tr>
-          <th>Hotel / Group</th><th>SEM</th><th>Metasearch</th><th>Social (att.)</th><th>Total Revenue</th><th>Media Cost</th><th>ROAS</th>
-        </tr></thead>
-        <tbody>
-          <tr><td>Brady Hotels Central Melbourne</td><td>$515K</td><td>$181K</td><td>$40K</td><td class="pos">$736K</td><td>$58K</td><td class="pos">12.7×</td></tr>
-          <tr><td>Brady Apt Hotel Hardware Lane</td><td>$478K</td><td>$205K</td><td>$61K</td><td class="pos">$744K</td><td>$60K</td><td class="pos">12.4×</td></tr>
-          <tr><td>Brady Apt Hotel Flinders Street</td><td>$315K</td><td>$156K</td><td>$67K</td><td>$538K</td><td>$50K</td><td>10.8×</td></tr>
-          <tr><td>Brady Hotels Jones Lane</td><td>$359K</td><td>$102K</td><td>$55K</td><td>$516K</td><td>$48K</td><td>10.8×</td></tr>
-          <tr><td>Brady Group (cross-portfolio)</td><td>$337K</td><td>$0</td><td>$82K</td><td>$419K</td><td>$77K</td><td class="neg">5.4×</td></tr>
-        </tbody>
-        <tfoot>
-          <tr><td>FY 2026 Total</td><td>$2,004K</td><td>$644K</td><td>$305K</td><td><strong>$2.95M</strong></td><td>$293K</td><td><strong>10.1×</strong></td></tr>
-        </tfoot>
-      </table>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap-sm)">
-        <div class="action-card anim d3"><strong>Top earners:</strong> Hardware Lane ($744K) and Brady Central ($736K) — both deliver 12×+ ROAS thanks to hotel-PMAX + Brand Search efficiency. <strong>Brady Group</strong> at 5.4× is the weak link — cross-portfolio Display RT + brand-broad PMAX dilute the average.</div>
-        <div class="action-card action anim d4"><strong>Reconciliation:</strong> Per-hotel × channel total ($2.95M) is a sub-set of the FY 2026 forecast ($4.36M) — the difference is incremental revenue that can't be cleanly attributed at hotel level (cross-portfolio assists, brand-search halo, organic spillover from paid awareness).</div>
-      </div>
-    </div>
-  </div>
-  <div class="section-tag action">Forecast</div>
-  <div class="slide-num">40 / 42</div>
-</section>
 
 <!-- ════ 34. CLOSING — TOP 5 PRIORITIES ════ -->
 <section class="slide">
@@ -2548,8 +2310,760 @@
     </div>
   </div>
   <div class="section-tag action">Action Plan</div>
-  <div class="slide-num">41 / 42</div>
-</section><!-- ════ SEO — WHAT WE DO NEXT ════ -->
+  <div class="slide-num">33 / 48</div>
+</section><!-- ════ 32. SECTION DIVIDER SEO ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow anim d1" style="color:var(--ch-seo-l)">Section Five · Organic Search</div>
+    <div class="sd-num anim d2">05</div>
+    <div class="sd-title anim d3">SEO &amp; Organic</div>
+    <div class="sd-sub anim d4">April 2026: 3,650 organic sessions · 203 transactions · $113K revenue · 4.6% CVR · 5 active landing pages · 369 AI mentions.</div>
+  </div>
+  <div class="slide-num">34 / 48</div>
+</section>
+
+<!-- ════ 34. SEO — BRAND vs GENERIC ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow seo anim d1">SEO · Brand vs Generic · GSC · YoY</div>
+      <h2 class="slide-title anim d2">Brand vs Generic — Where Clicks Come From</h2>
+      <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.3rem">Brand keywords contain 'brady', 'bradys', 'brandy', 'bradley'. Everything else is generic. Aggregates cover all queries returned by GSC.</div>
+    </div>
+    <div class="slide-content">
+      <div style="display:flex;gap:var(--gap-sm);align-items:center;margin-bottom:var(--gap-sm);font-size:var(--fs-small)" class="anim d2">
+        <span style="display:inline-flex;align-items:center;gap:0.4rem;background:var(--bg-soft);padding:0.3rem 0.7rem;border-radius:20px"><span style="width:8px;height:8px;border-radius:50%;background:var(--pos)"></span><strong>2026</strong> 22 Mar – 21 Apr 2026</span>
+        <span style="display:inline-flex;align-items:center;gap:0.4rem;background:var(--bg-soft);padding:0.3rem 0.7rem;border-radius:20px;color:var(--text-muted)"><span style="width:8px;height:8px;border-radius:50%;background:var(--text-light)"></span><strong>VS YoY</strong> 22 Mar – 21 Apr 2025</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:1;min-height:0">
+        <div class="chart-card anim d3" style="padding:var(--gap)">
+          <div style="display:inline-block;background:rgba(232,75,60,0.10);color:var(--grad-1);font-weight:700;font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;padding:0.3rem 0.7rem;border-radius:4px;margin-bottom:0.6rem">Brand</div>
+          <span style="float:right;font-size:var(--fs-small);color:var(--text-muted)">284 keywords (2026)</span>
+          <table class="dt compact" style="font-size:var(--fs-small)">
+            <thead><tr>
+              <th>Metric</th><th><span style="color:var(--pos);font-weight:700">2026</span><br><span style="font-weight:400;letter-spacing:0;color:var(--text-light);font-size:0.8em">22 Mar – 21 Apr</span></th><th>2025<br><span style="font-weight:400;letter-spacing:0;color:var(--text-light);font-size:0.8em">22 Mar – 21 Apr</span></th><th>YOY Δ</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>Clicks</td><td>1,542</td><td>2,051</td><td><span class="ftag ftag-loss">−24.8%</span></td></tr>
+              <tr><td>Impressions</td><td>21,944</td><td>21,155</td><td><span class="ftag ftag-win">+3.7%</span></td></tr>
+              <tr><td>Avg. position</td><td>5.0</td><td>3.2</td><td><span class="ftag ftag-loss">+1.8</span></td></tr>
+              <tr><td>CTR</td><td>7.03%</td><td>9.70%</td><td><span class="ftag ftag-loss">−2.67pp</span></td></tr>
+              <tr><td># Keywords</td><td>284</td><td>334</td><td><span class="ftag ftag-loss">−15.0%</span></td></tr>
+              <tr><td>% of total clicks</td><td>83.8%</td><td>92.3%</td><td><span class="ftag ftag-loss">−8.5pp</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="chart-card anim d4" style="padding:var(--gap)">
+          <div style="display:inline-block;background:rgba(94,63,190,0.10);color:var(--ch-seo);font-weight:700;font-size:var(--fs-label);letter-spacing:0.18em;text-transform:uppercase;padding:0.3rem 0.7rem;border-radius:4px;margin-bottom:0.6rem">Generic</div>
+          <span style="float:right;font-size:var(--fs-small);color:var(--text-muted)">5,349 keywords (2026)</span>
+          <table class="dt compact" style="font-size:var(--fs-small)">
+            <thead><tr>
+              <th>Metric</th><th><span style="color:var(--pos);font-weight:700">2026</span><br><span style="font-weight:400;letter-spacing:0;color:var(--text-light);font-size:0.8em">22 Mar – 21 Apr</span></th><th>2025<br><span style="font-weight:400;letter-spacing:0;color:var(--text-light);font-size:0.8em">22 Mar – 21 Apr</span></th><th>YOY Δ</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>Clicks</td><td>299</td><td>172</td><td><span class="ftag ftag-win">+73.8%</span></td></tr>
+              <tr><td>Impressions</td><td>71,053</td><td>128,563</td><td><span class="ftag ftag-loss">−44.7%</span></td></tr>
+              <tr><td>Avg. position</td><td>13.4</td><td>32.2</td><td><span class="ftag ftag-win">−18.8</span></td></tr>
+              <tr><td>CTR</td><td>0.42%</td><td>0.13%</td><td><span class="ftag ftag-win">+0.29pp</span></td></tr>
+              <tr><td># Keywords</td><td>5,349</td><td>8,028</td><td><span class="ftag ftag-loss">−33.4%</span></td></tr>
+              <tr><td>% of total clicks</td><td>16.2%</td><td>7.7%</td><td><span class="ftag ftag-win">+8.5pp</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="action-card anim d5" style="margin-top:var(--gap-sm);border-left-color:var(--ch-seo)">
+        <strong>Brand traffic down YoY (−24.8% clicks)</strong> — avg position drifted from 3.2 to 5.0 and CTR fell from 9.70% to 7.03%. Likely cause: more SERP features (sitelinks, maps, AI overviews) pushing organic listings down. <strong>Generic clicks +73.8% YoY</strong> with avg position improving from 32.2 → 13.4 — content investment (dining guides, long-stay pages) is working. Generic now drives 16.2% of organic clicks vs 7.7% a year ago. <strong>Action:</strong> Brand metadata + sitelinks audit to defend top-spot CTR; double down on the generic content engine that's clearly compounding.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag seo">SEO</div>
+  <div class="slide-num">35 / 48</div>
+</section>
+
+<!-- ════ 35. SEO — ORGANIC TRAFFIC YoY ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow seo anim d1">SEO · Organic Traffic · GA4 · YoY</div>
+      <h2 class="slide-title anim d2">Organic Search Traffic — 2026 vs 2025</h2>
+      <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.3rem">Monthly GA4 organic search sessions, 2026 YTD vs 2025 same months. Paid channels excluded.</div>
+    </div>
+    <div class="slide-content">
+      <div style="display:flex;gap:var(--gap-sm);align-items:center;margin-bottom:var(--gap-sm);font-size:var(--fs-small)" class="anim d2">
+        <span style="display:inline-flex;align-items:center;gap:0.4rem;background:var(--bg-soft);padding:0.3rem 0.7rem;border-radius:20px"><span style="width:8px;height:8px;border-radius:50%;background:var(--ch-seo)"></span><strong>2026</strong> Jan – Apr (YTD)</span>
+        <span style="display:inline-flex;align-items:center;gap:0.4rem;background:var(--bg-soft);padding:0.3rem 0.7rem;border-radius:20px;color:var(--text-muted)"><span style="width:8px;height:8px;border-radius:50%;background:#C8CDD7"></span><strong>2025</strong> Jan – Dec</span>
+      </div>
+      <div class="chart-card anim d3" style="padding:var(--gap)">
+        <div class="ch-body" style="justify-content:center">
+          <svg viewBox="0 0 1100 320" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;max-height:42vh">
+            <!-- y-axis grid lines -->
+            <line x1="40" y1="40"  x2="1080" y2="40"  stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
+            <line x1="40" y1="100" x2="1080" y2="100" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
+            <line x1="40" y1="160" x2="1080" y2="160" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
+            <line x1="40" y1="220" x2="1080" y2="220" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
+            <line x1="40" y1="270" x2="1080" y2="270" stroke="#11192E" stroke-width="1"/>
+            <!-- 12 months · GA4 organic sessions · max 7,694 (Jul 2025) → 230px height; scale 230/7694 = 0.02989 -->
+            <!-- Jan: 2025=5390, 2026=4103 -->
+            <g><rect x="50"  y="108.9" width="32" height="161.1" fill="#C8CDD7"/><rect x="86"  y="147.4" width="32" height="122.6" fill="#5E3FBE"/><text x="84" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Jan</text><text x="66" y="103" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">5,390</text><text x="102" y="142" font-family="Manrope" font-size="11" fill="#5E3FBE" text-anchor="middle" font-weight="600">4,103</text></g>
+            <!-- Feb: 2025=4735, 2026=4059 -->
+            <g><rect x="138" y="128.5" width="32" height="141.5" fill="#C8CDD7"/><rect x="174" y="148.7" width="32" height="121.3" fill="#5E3FBE"/><text x="172" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Feb</text><text x="154" y="123" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">4,735</text><text x="190" y="143" font-family="Manrope" font-size="11" fill="#5E3FBE" text-anchor="middle" font-weight="600">4,059</text></g>
+            <!-- Mar: 2025=5161, 2026=4576 -->
+            <g><rect x="226" y="115.7" width="32" height="154.3" fill="#C8CDD7"/><rect x="262" y="133.2" width="32" height="136.8" fill="#5E3FBE"/><text x="260" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Mar</text><text x="242" y="110" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">5,161</text><text x="278" y="128" font-family="Manrope" font-size="11" fill="#5E3FBE" text-anchor="middle" font-weight="600">4,576</text></g>
+            <!-- Apr: 2025=4388, 2026=3650 (full month actual, PDF report) -->
+            <g><rect x="314" y="138.8" width="32" height="131.2" fill="#C8CDD7"/><rect x="350" y="160.9" width="32" height="109.1" fill="#5E3FBE"/><text x="348" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Apr</text><text x="330" y="133" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">4,388</text><text x="366" y="155" font-family="Manrope" font-size="11" fill="#5E3FBE" text-anchor="middle" font-weight="600">3,650</text></g>
+            <!-- May: 2025=4912 -->
+            <g><rect x="402" y="123.2" width="32" height="146.8" fill="#C8CDD7"/><text x="418" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">May</text><text x="418" y="118" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">4,912</text></g>
+            <!-- Jun: 2025=7471 -->
+            <g><rect x="475" y="46.7" width="32" height="223.3" fill="#C8CDD7"/><text x="491" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Jun</text><text x="491" y="41" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">7,471</text></g>
+            <!-- Jul: 2025=7694 -->
+            <g><rect x="548" y="40.0" width="32" height="230.0" fill="#C8CDD7"/><text x="564" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Jul</text><text x="564" y="35" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">7,694</text></g>
+            <!-- Aug: 2025=7163 -->
+            <g><rect x="621" y="55.9" width="32" height="214.1" fill="#C8CDD7"/><text x="637" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Aug</text><text x="637" y="50" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">7,163</text></g>
+            <!-- Sep: 2025=7050 -->
+            <g><rect x="694" y="59.3" width="32" height="210.7" fill="#C8CDD7"/><text x="710" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Sep</text><text x="710" y="54" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">7,050</text></g>
+            <!-- Oct: 2025=5323 -->
+            <g><rect x="767" y="110.9" width="32" height="159.1" fill="#C8CDD7"/><text x="783" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Oct</text><text x="783" y="105" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">5,323</text></g>
+            <!-- Nov: 2025=4394 -->
+            <g><rect x="840" y="138.6" width="32" height="131.4" fill="#C8CDD7"/><text x="856" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Nov</text><text x="856" y="133" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">4,394</text></g>
+            <!-- Dec: 2025=3342 -->
+            <g><rect x="913" y="170.1" width="32" height="99.9" fill="#C8CDD7"/><text x="929" y="291" font-family="Manrope" font-size="13" fill="#5A6377" text-anchor="middle">Dec</text><text x="929" y="165" font-family="Manrope" font-size="11" fill="#8C93A4" text-anchor="middle">3,342</text></g>
+            <!-- Legend -->
+            <g transform="translate(50,310)">
+              <rect x="0" y="-9" width="11" height="11" fill="#C8CDD7"/><text x="16" y="0" font-family="Manrope" font-size="11" fill="#5A6377">2025 organic sessions</text>
+              <rect x="160" y="-9" width="11" height="11" fill="#5E3FBE"/><text x="176" y="0" font-family="Manrope" font-size="11" fill="#5A6377">2026 organic sessions</text>
+              <text x="340" y="0" font-family="Manrope" font-size="11" fill="#8C93A4">2026 data: Windsor.ai + GA4 · Full April actuals from PDF report</text>
+            </g>
+          </svg>
+        </div>
+      </div>
+      <div class="action-card anim d4" style="margin-top:var(--gap-sm);border-left-color:var(--ch-seo)">
+        <strong>2026 YTD organic sessions tracking below 2025</strong> — Jan −23.9%, Feb −14.3%, Mar −11.3%, Apr −16.8% (actual: 3,650 sessions). Gap is widest in Jan, narrowing through Q1. <strong>Revenue +10.5% YoY ($113K)</strong> despite fewer sessions — CVR 4.6% is strong for April, showing users are highly engaged. <strong>Action:</strong> ramp organic content publishing in May–June to rebuild the session base before the seasonal climb (Jun–Sep peak); defend brand SERP real estate.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag seo">SEO</div>
+  <div class="slide-num">36 / 48</div>
+</section>
+
+<!-- ════ 36. SEO — GA4 ORGANIC OVERVIEW (YoY) ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow seo anim d1">SEO · GA4 Organic · Full April 2026 · YoY</div>
+      <h2 class="slide-title anim d2">Organic — Sessions, Conversions &amp; Revenue</h2>
+      <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.3rem">GA4 Organic Search channel only. Full April 2026 vs April 2025. Source: Dijitally SEO Report Apr 2026.</div>
+    </div>
+    <div class="slide-content">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap-sm);margin-bottom:var(--gap-sm)" class="anim d2">
+        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--ch-seo)">
+          <div style="font-size:var(--fs-label);letter-spacing:0.08em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">Organic Sessions</div>
+          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.2rem,2.1vw,1.7rem);color:var(--ch-seo);line-height:1">3,650</div>
+          <div style="font-size:var(--fs-label);color:var(--neg);font-weight:600;margin-top:0.2rem">−16.8% YoY (4,388)</div>
+        </div>
+        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--ch-seo)">
+          <div style="font-size:var(--fs-label);letter-spacing:0.08em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">Transactions</div>
+          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.2rem,2.1vw,1.7rem);color:var(--text);line-height:1">203</div>
+          <div style="font-size:var(--fs-label);color:var(--pos);font-weight:600;margin-top:0.2rem">+13.4% YoY (179)</div>
+        </div>
+        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--ch-seo)">
+          <div style="font-size:var(--fs-label);letter-spacing:0.08em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">Organic Revenue</div>
+          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.2rem,2.1vw,1.7rem);color:var(--pos);line-height:1">$113,000</div>
+          <div style="font-size:var(--fs-label);color:var(--pos);font-weight:600;margin-top:0.2rem">+10.5% YoY ($102K)</div>
+        </div>
+        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--ch-seo)">
+          <div style="font-size:var(--fs-label);letter-spacing:0.08em;text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">Conv. Rate (CVR)</div>
+          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.2rem,2.1vw,1.7rem);color:var(--pos);line-height:1">4.6%</div>
+          <div style="font-size:var(--fs-label);color:var(--pos);font-weight:600;margin-top:0.2rem">Strong for April</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:var(--gap);flex:1;min-height:0">
+        <div class="chart-card anim d3" style="padding:var(--gap)">
+          <div class="ch-sub">Organic Revenue · Last 6 months</div>
+          <div class="ch-title" style="color:var(--ch-seo)">$685K · Nov 2025 → Apr 2026</div>
+          <div class="ch-body" style="justify-content:center">
+            <svg viewBox="0 0 600 220" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;max-height:30vh">
+              <line x1="40" y1="20"  x2="580" y2="20"  stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
+              <line x1="40" y1="70"  x2="580" y2="70"  stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
+              <line x1="40" y1="120" x2="580" y2="120" stroke="#E5E7EB" stroke-width="1" stroke-dasharray="2,3"/>
+              <line x1="40" y1="170" x2="580" y2="170" stroke="#11192E" stroke-width="1"/>
+              <!-- max ~$122K → 150px height; scale 150/122 = 1.23 -->
+              <!-- Nov: $118.2K -->
+              <g><rect x="60"  y="24" width="60" height="146" fill="#5E3FBE" fill-opacity="0.78"/><text x="90"  y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Nov 25</text><text x="90"  y="19" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$118K</text></g>
+              <!-- Dec: $111.3K -->
+              <g><rect x="145" y="32" width="60" height="138" fill="#5E3FBE" fill-opacity="0.78"/><text x="175" y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Dec 25</text><text x="175" y="27" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$111K</text></g>
+              <!-- Jan: $120.0K -->
+              <g><rect x="230" y="22" width="60" height="148" fill="#5E3FBE" fill-opacity="0.78"/><text x="260" y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Jan 26</text><text x="260" y="17" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$120K</text></g>
+              <!-- Feb: $108.9K -->
+              <g><rect x="315" y="36" width="60" height="134" fill="#5E3FBE" fill-opacity="0.78"/><text x="345" y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Feb 26</text><text x="345" y="31" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$109K</text></g>
+              <!-- Mar: $114.4K -->
+              <g><rect x="400" y="29" width="60" height="141" fill="#5E3FBE"/><text x="430" y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Mar 26</text><text x="430" y="24" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$114K</text></g>
+              <!-- Apr: $113K (full April actual, PDF report) -->
+              <g><rect x="485" y="31" width="60" height="139" fill="#5E3FBE"/><text x="515" y="190" font-family="Manrope" font-size="12" fill="#5A6377" text-anchor="middle">Apr 26</text><text x="515" y="26" font-family="Manrope" font-size="11" fill="#11192E" text-anchor="middle" font-weight="600">$113K</text></g>
+              <text x="40" y="212" font-family="Manrope" font-size="10" fill="#8C93A4">Source: Dijitally SEO Report April 2026 · Full month actuals</text>
+            </svg>
+          </div>
+        </div>
+        <div class="chart-card anim d4" style="padding:var(--gap)">
+          <div class="ch-sub">Top Brand Queries (GSC · 22 Mar – 21 Apr 2026)</div>
+          <div class="ch-body" style="justify-content:flex-start">
+            <table class="dt compact" style="font-size:var(--fs-label);margin-top:0.4rem">
+              <thead><tr><th>Query</th><th>Clicks</th><th>Imp.</th></tr></thead>
+              <tbody>
+                <tr><td>brady hotels central melbourne</td><td>205</td><td>2,519</td></tr>
+                <tr><td>brady hotel melbourne</td><td>177</td><td>1,910</td></tr>
+                <tr><td>brady hotels jones lane</td><td>176</td><td>1,915</td></tr>
+                <tr><td>brady hotels</td><td>111</td><td>748</td></tr>
+                <tr><td>brady apt hotel flinders street</td><td>109</td><td>1,900</td></tr>
+                <tr><td>brady apt hotel hardware lane</td><td>64</td><td>1,423</td></tr>
+                <tr><td>brady hotel jones lane</td><td>71</td><td>781</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="action-card anim d5" style="margin-top:var(--gap-sm);border-left-color:var(--ch-seo)">
+        <strong>Organic revenue +10.5% YoY ($113K)</strong> on −16.8% sessions — but CVR 4.6% is very strong for April, meaning fewer but more committed visitors. Transactions +13.4% YoY (203 vs 179). <strong>AI Search adding $4,104</strong> from 195 sessions at 3% CVR — a small but growing channel to watch. <strong>Risk:</strong> sessions tracking below 2025; action required to rebuild base before Jun–Sep seasonal peak.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag seo">SEO</div>
+  <div class="slide-num">37 / 48</div>
+</section>
+
+
+
+
+<!-- ════ SEO — LANDING PAGE: MARVEL STADIUM ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow seo anim d1">SEO · Landing Pages · April 2026 · Keyword Movements</div>
+      <h2 class="slide-title anim d2">Marvel Stadium — Keyword Rankings</h2>
+    </div>
+    <div class="slide-content">
+      
+      <div class="anim d2" style="background:linear-gradient(135deg,rgba(94,63,190,0.08),rgba(94,63,190,0.03));border:1px solid rgba(94,63,190,0.18);border-radius:10px;padding:0.85rem var(--gap);margin-bottom:var(--gap-sm);display:flex;align-items:center;gap:1rem">
+        <div style="font-size:2rem;flex-shrink:0">🏟️</div>
+        <div>
+          <div style="font-weight:700;font-size:var(--fs-body);color:var(--ch-seo)">+2 keywords moved into page 1 rankings · First keyword breaks into top 3</div>
+          <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.2rem">"marvel stadium hotels" jumped from position 7 → <strong style="color:var(--pos)">#3</strong> — a major milestone for the LP in a competitive accommodation-near-venue segment.</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 196px;gap:var(--gap);flex:1;min-height:0">
+        
+        <div class="chart-card anim d3" style="padding:var(--gap);overflow:auto">
+          <div class="ch-sub">Tracked Keyword Position Movements · April 2026</div>
+          <table class="dt" style="margin-top:0.6rem;width:100%;font-size:var(--fs-body)">
+            <thead><tr>
+              <th style="text-align:left">Keyword</th>
+              <th style="text-align:center;width:88px">Previous</th>
+              <th style="text-align:center;width:88px">Current</th>
+              <th style="text-align:center;width:105px">Movement</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td>marvel stadium hotels</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">7</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">3</strong></td>
+                <td style="text-align:center"><span class="ftag ftag-win">↑ +4 ⭐</span></td>
+              </tr>
+              <tr>
+                <td>accommodation melbourne near marvel stadium</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">8</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">5</strong></td>
+                <td style="text-align:center"><span class="ftag ftag-win">↑ +3</span></td>
+              </tr>
+              <tr>
+                <td>hotels near marvel stadium melbourne</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">7</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">6</strong></td>
+                <td style="text-align:center"><span class="ftag ftag-win">↑ +1</span></td>
+              </tr>
+              <tr>
+                <td>accommodation close to marvel stadium</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">9</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">8</strong></td>
+                <td style="text-align:center"><span class="ftag ftag-win">↑ +1</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)" class="anim d4">
+          
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);border-top:3px solid var(--ch-seo);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Status</div>
+            <div style="font-weight:700;font-size:var(--fs-body);color:var(--ch-seo)">Active</div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Best Position</div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1.9rem;color:var(--pos);line-height:1">#3</div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.25rem">marvel stadium hotels</div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Page 1 Terms</div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1.9rem;color:var(--pos);line-height:1">4</div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.25rem">All tracked terms in top 10</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag seo">SEO</div>
+  <div class="slide-num">38 / 48</div>
+</section>
+
+<!-- ════ SEO — LANDING PAGE: MCEC ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow seo anim d1">SEO · Landing Pages · April 2026 · Keyword Movements</div>
+      <h2 class="slide-title anim d2">Convention Centre (MCEC) — Keyword Rankings</h2>
+    </div>
+    <div class="slide-content">
+      
+      <div class="anim d2" style="background:linear-gradient(135deg,rgba(94,63,190,0.08),rgba(94,63,190,0.03));border:1px solid rgba(94,63,190,0.18);border-radius:10px;padding:0.85rem var(--gap);margin-bottom:var(--gap-sm);display:flex;align-items:center;gap:1rem">
+        <div style="font-size:2rem;flex-shrink:0">🏛️</div>
+        <div>
+          <div style="font-weight:700;font-size:var(--fs-body);color:var(--ch-seo)">+8 keywords moved into page 1 · 27 terms now ranking on first page</div>
+          <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.2rem">MCEC LP continued to build strong momentum in April — 27 total page 1 terms confirms significant authority in the convention accommodation niche.</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 196px;gap:var(--gap);flex:1;min-height:0">
+        
+        <div class="chart-card anim d3" style="padding:var(--gap);overflow:auto">
+          <div class="ch-sub">Tracked Keyword Position Movements · April 2026</div>
+          <table class="dt" style="margin-top:0.6rem;width:100%;font-size:var(--fs-body)">
+            <thead><tr>
+              <th style="text-align:left">Keyword</th>
+              <th style="text-align:center;width:88px">Previous</th>
+              <th style="text-align:center;width:88px">Current</th>
+              <th style="text-align:center;width:105px">Movement</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td>convention centre melbourne accommodation</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">N/A</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">6</strong></td>
+                <td style="text-align:center"><span style="background:rgba(94,63,190,0.13);color:var(--ch-seo);border:1px solid rgba(94,63,190,0.35);border-radius:4px;padding:0.15rem 0.5rem;font-size:var(--fs-label);font-weight:700;white-space:nowrap">★ NEW</span></td>
+              </tr>
+              <tr>
+                <td>melbourne convention centre hotels nearby</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">11</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">7</strong></td>
+                <td style="text-align:center"><span class="ftag ftag-win">↑ +4</span></td>
+              </tr>
+              <tr>
+                <td>accommodation near mcec melbourne</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">8</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">7</strong></td>
+                <td style="text-align:center"><span class="ftag ftag-win">↑ +1</span></td>
+              </tr>
+              <tr>
+                <td>hotels near melbourne convention and exhibition centre</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">10</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">9</strong></td>
+                <td style="text-align:center"><span class="ftag ftag-win">↑ +1</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)" class="anim d4">
+          
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);border-top:3px solid var(--ch-seo);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Status</div>
+            <div style="font-weight:700;font-size:var(--fs-body);color:var(--ch-seo)">Active</div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Page 1 Total</div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1.9rem;color:var(--pos);line-height:1">27</div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.25rem">Terms ranking positions #1–10</div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">This Month</div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1.9rem;color:var(--pos);line-height:1">+8</div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.25rem">New page 1 terms added</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag seo">SEO</div>
+  <div class="slide-num">39 / 48</div>
+</section>
+
+<!-- ════ SEO — LANDING PAGE: SERVICED APARTMENTS ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow seo anim d1">SEO · Landing Pages · April 2026 · Keyword Movements</div>
+      <h2 class="slide-title anim d2">Serviced Apartments — Keyword Rankings</h2>
+    </div>
+    <div class="slide-content">
+      
+      <div class="anim d2" style="background:linear-gradient(135deg,rgba(94,63,190,0.08),rgba(94,63,190,0.03));border:1px solid rgba(94,63,190,0.18);border-radius:10px;padding:0.85rem var(--gap);margin-bottom:var(--gap-sm);display:flex;align-items:center;gap:1rem">
+        <div style="font-size:2rem;flex-shrink:0">🏢</div>
+        <div>
+          <div style="font-weight:700;font-size:var(--fs-body);color:var(--ch-seo)">Improved 50% MoM · +2 keywords into page 1 · +9 onto page 2</div>
+          <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.2rem">Strong month-over-month acceleration — 2 new terms break onto page 1 and 9 more move onto page 2, signalling the page is building domain authority quickly.</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 196px;gap:var(--gap);flex:1;min-height:0">
+        
+        <div class="chart-card anim d3" style="padding:var(--gap);overflow:auto">
+          <div class="ch-sub">Tracked Keyword Position Movements · April 2026</div>
+          <table class="dt" style="margin-top:0.6rem;width:100%;font-size:var(--fs-body)">
+            <thead><tr>
+              <th style="text-align:left">Keyword</th>
+              <th style="text-align:center;width:88px">Previous</th>
+              <th style="text-align:center;width:88px">Current</th>
+              <th style="text-align:center;width:105px">Movement</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td>serviced apartments melbourne cbd</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">20</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">11</strong></td>
+                <td style="text-align:center"><span class="ftag ftag-win">↑ +9</span></td>
+              </tr>
+              <tr>
+                <td>service apt in melbourne</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">N/A</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">8</strong></td>
+                <td style="text-align:center"><span style="background:rgba(94,63,190,0.13);color:var(--ch-seo);border:1px solid rgba(94,63,190,0.35);border-radius:4px;padding:0.15rem 0.5rem;font-size:var(--fs-label);font-weight:700;white-space:nowrap">★ NEW</span></td>
+              </tr>
+              <tr>
+                <td>serviced apartments in melbourne city</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">N/A</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">13</strong></td>
+                <td style="text-align:center"><span style="background:rgba(94,63,190,0.13);color:var(--ch-seo);border:1px solid rgba(94,63,190,0.35);border-radius:4px;padding:0.15rem 0.5rem;font-size:var(--fs-label);font-weight:700;white-space:nowrap">★ NEW</span></td>
+              </tr>
+              <tr>
+                <td>accommodation melbourne cbd serviced apartments</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">N/A</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">12</strong></td>
+                <td style="text-align:center"><span style="background:rgba(94,63,190,0.13);color:var(--ch-seo);border:1px solid rgba(94,63,190,0.35);border-radius:4px;padding:0.15rem 0.5rem;font-size:var(--fs-label);font-weight:700;white-space:nowrap">★ NEW</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)" class="anim d4">
+          
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);border-top:3px solid var(--ch-seo);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Status</div>
+            <div style="font-weight:700;font-size:var(--fs-body);color:var(--ch-seo)">Active</div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">MoM Improvement</div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1.9rem;color:var(--pos);line-height:1">+50%</div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.25rem">Overall LP performance</div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Page 2 Terms</div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1.9rem;color:var(--pos);line-height:1">+9</div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.25rem">New terms entering page 2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag seo">SEO</div>
+  <div class="slide-num">40 / 48</div>
+</section>
+
+<!-- ════ SEO — LANDING PAGE: CROWN CASINO (NEW) ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow seo anim d1">SEO · Landing Pages · April 2026 · New LP Launch</div>
+      <h2 class="slide-title anim d2">Crown Casino — Keyword Rankings <span style="background:var(--pos);color:#fff;font-size:var(--fs-label);font-weight:700;padding:0.15rem 0.55rem;border-radius:4px;vertical-align:middle;margin-left:0.5rem">NEW</span></h2>
+    </div>
+    <div class="slide-content">
+      
+      <div class="anim d2" style="background:linear-gradient(135deg,rgba(94,63,190,0.08),rgba(94,63,190,0.03));border:1px solid rgba(94,63,190,0.18);border-radius:10px;padding:0.85rem var(--gap);margin-bottom:var(--gap-sm);display:flex;align-items:center;gap:1rem">
+        <div style="font-size:2rem;flex-shrink:0">🎰</div>
+        <div>
+          <div style="font-weight:700;font-size:var(--fs-body);color:var(--ch-seo)">Deployed start of April · Indexed quickly · 1 term page 1 · 8 terms page 2</div>
+          <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.2rem">Crown Casino LP launched early April and indexed rapidly — excellent relevancy signal for a brand-new page. Strong foundation to build on through May with internal linking support.</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 196px;gap:var(--gap);flex:1;min-height:0">
+        
+        <div class="chart-card anim d3" style="padding:var(--gap);overflow:auto">
+          <div class="ch-sub">Tracked Keyword Position Movements · April 2026</div>
+          <table class="dt" style="margin-top:0.6rem;width:100%;font-size:var(--fs-body)">
+            <thead><tr>
+              <th style="text-align:left">Keyword</th>
+              <th style="text-align:center;width:88px">Previous</th>
+              <th style="text-align:center;width:88px">Current</th>
+              <th style="text-align:center;width:105px">Movement</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td>accommodation close to crown casino melbourne</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">N/A</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">10</strong></td>
+                <td style="text-align:center"><span style="background:rgba(94,63,190,0.13);color:var(--ch-seo);border:1px solid rgba(94,63,190,0.35);border-radius:4px;padding:0.15rem 0.5rem;font-size:var(--fs-label);font-weight:700;white-space:nowrap">★ NEW</span></td>
+              </tr>
+              <tr>
+                <td>melbourne cbd accommodation near crown casino</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">N/A</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">11</strong></td>
+                <td style="text-align:center"><span style="background:rgba(94,63,190,0.13);color:var(--ch-seo);border:1px solid rgba(94,63,190,0.35);border-radius:4px;padding:0.15rem 0.5rem;font-size:var(--fs-label);font-weight:700;white-space:nowrap">★ NEW</span></td>
+              </tr>
+              <tr>
+                <td>hotel accommodation near crown casino melbourne</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">N/A</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">13</strong></td>
+                <td style="text-align:center"><span style="background:rgba(94,63,190,0.13);color:var(--ch-seo);border:1px solid rgba(94,63,190,0.35);border-radius:4px;padding:0.15rem 0.5rem;font-size:var(--fs-label);font-weight:700;white-space:nowrap">★ NEW</span></td>
+              </tr>
+              <tr>
+                <td>melbourne accommodation near casino</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">N/A</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">13</strong></td>
+                <td style="text-align:center"><span style="background:rgba(94,63,190,0.13);color:var(--ch-seo);border:1px solid rgba(94,63,190,0.35);border-radius:4px;padding:0.15rem 0.5rem;font-size:var(--fs-label);font-weight:700;white-space:nowrap">★ NEW</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)" class="anim d4">
+          
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);border-top:3px solid var(--pos);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Status</div>
+            <div style="font-weight:700;font-size:var(--fs-body);color:var(--pos)">New Launch</div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Deployed</div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1.9rem;color:var(--ch-seo);line-height:1">Apr</div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.25rem">Early April 2026</div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Page 1 Terms</div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1.9rem;color:var(--pos);line-height:1">1</div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.25rem">+ 8 on page 2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag seo">SEO</div>
+  <div class="slide-num">41 / 48</div>
+</section>
+
+<!-- ════ SEO — LANDING PAGE: PRINCES THEATER (NEW) ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow seo anim d1">SEO · Landing Pages · April 2026 · New LP Launch</div>
+      <h2 class="slide-title anim d2">Princes Theater — Keyword Rankings <span style="background:var(--pos);color:#fff;font-size:var(--fs-label);font-weight:700;padding:0.15rem 0.55rem;border-radius:4px;vertical-align:middle;margin-left:0.5rem">NEW</span></h2>
+    </div>
+    <div class="slide-content">
+      
+      <div class="anim d2" style="background:linear-gradient(135deg,rgba(94,63,190,0.08),rgba(94,63,190,0.03));border:1px solid rgba(94,63,190,0.18);border-radius:10px;padding:0.85rem var(--gap);margin-bottom:var(--gap-sm);display:flex;align-items:center;gap:1rem">
+        <div style="font-size:2rem;flex-shrink:0">🎭</div>
+        <div>
+          <div style="font-weight:700;font-size:var(--fs-body);color:var(--ch-seo)">Indexed late April · 2 target terms ranking on lower page 1 from day one</div>
+          <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.2rem">Princes Theater LP started getting indexed in late April and immediately ranks for 2 target terms on page 1 — strong early relevancy signal for a page only days old.</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 196px;gap:var(--gap);flex:1;min-height:0">
+        
+        <div class="chart-card anim d3" style="padding:var(--gap);overflow:auto">
+          <div class="ch-sub">Tracked Keyword Position Movements · April 2026</div>
+          <table class="dt" style="margin-top:0.6rem;width:100%;font-size:var(--fs-body)">
+            <thead><tr>
+              <th style="text-align:left">Keyword</th>
+              <th style="text-align:center;width:88px">Previous</th>
+              <th style="text-align:center;width:88px">Current</th>
+              <th style="text-align:center;width:105px">Movement</th>
+            </tr></thead>
+            <tbody>
+              <tr>
+                <td>accommodation near princess theatre</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">N/A</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">8</strong></td>
+                <td style="text-align:center"><span style="background:rgba(94,63,190,0.13);color:var(--ch-seo);border:1px solid rgba(94,63,190,0.35);border-radius:4px;padding:0.15rem 0.5rem;font-size:var(--fs-label);font-weight:700;white-space:nowrap">★ NEW</span></td>
+              </tr>
+              <tr>
+                <td>best hotels near princess theatre melbourne</td>
+                <td style="text-align:center"><span style="color:var(--text-muted)">N/A</span></td>
+                <td style="text-align:center"><strong style="color:var(--pos);font-size:1.05em">10</strong></td>
+                <td style="text-align:center"><span style="background:rgba(94,63,190,0.13);color:var(--ch-seo);border:1px solid rgba(94,63,190,0.35);border-radius:4px;padding:0.15rem 0.5rem;font-size:var(--fs-label);font-weight:700;white-space:nowrap">★ NEW</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)" class="anim d4">
+          
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);border-top:3px solid var(--pos);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Status</div>
+            <div style="font-weight:700;font-size:var(--fs-body);color:var(--pos)">New Launch</div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Deployed</div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1.9rem;color:var(--ch-seo);line-height:1">Late Apr</div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.25rem">April 2026</div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);text-align:center">
+            <div style="font-size:var(--fs-label);color:var(--text-light);font-weight:600;text-transform:uppercase;margin-bottom:0.3rem">Page 1 Terms</div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1.9rem;color:var(--pos);line-height:1">2</div>
+            <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.25rem">From day one of indexing</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag seo">SEO</div>
+  <div class="slide-num">42 / 48</div>
+</section>
+
+<!-- ════ SEO — OTHER RECENTLY LAUNCHED LPs ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow seo anim d1">SEO · Landing Pages · April 2026 · In Progress</div>
+      <h2 class="slide-title anim d2">Other Recently Launched Landing Pages</h2>
+    </div>
+    <div class="slide-content">
+      <div class="anim d2" style="background:linear-gradient(135deg,rgba(94,63,190,0.08),rgba(94,63,190,0.03));border:1px solid rgba(94,63,190,0.18);border-radius:10px;padding:0.85rem var(--gap);margin-bottom:var(--gap);display:flex;align-items:center;gap:1rem">
+        <div style="font-size:2rem;flex-shrink:0">🔍</div>
+        <div>
+          <div style="font-weight:700;font-size:var(--fs-body);color:var(--ch-seo)">All 4 pages indexed — not yet ranking for target keywords</div>
+          <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.2rem">We are monitoring these recently launched landing pages. To support performance we will implement an <strong>internal linking optimisation strategy</strong> to improve discoverability and strengthen semantic relevance, helping these pages gain traction in search results.</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:1;min-height:0">
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)" class="anim d3">
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);border-left:4px solid var(--ch-seo);display:flex;align-items:center;gap:0.8rem">
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(94,63,190,0.12);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">📍</div>
+            <div>
+              <div style="font-weight:700;font-size:var(--fs-body);color:var(--text)">Queen Victoria Market</div>
+              <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.1rem">/accommodation-near-queen-victoria-market/</div>
+              <div style="font-size:var(--fs-label);color:var(--text-light);margin-top:0.15rem">Indexed · Monitoring</div>
+            </div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);border-left:4px solid var(--ch-seo);display:flex;align-items:center;gap:0.8rem">
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(94,63,190,0.12);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🎭</div>
+            <div>
+              <div style="font-weight:700;font-size:var(--fs-body);color:var(--text)">Regent Theatre</div>
+              <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.1rem">/hotels-near-regent-theatre-melbourne/</div>
+              <div style="font-size:var(--fs-label);color:var(--text-light);margin-top:0.15rem">Indexed · Monitoring</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)" class="anim d4">
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);border-left:4px solid var(--ch-seo);display:flex;align-items:center;gap:0.8rem">
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(94,63,190,0.12);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">⭐</div>
+            <div>
+              <div style="font-weight:700;font-size:var(--fs-body);color:var(--text)">Four Star Hotels Melbourne</div>
+              <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.1rem">/four-star-hotels-melbourne/</div>
+              <div style="font-size:var(--fs-label);color:var(--text-light);margin-top:0.15rem">Indexed · Monitoring</div>
+            </div>
+          </div>
+          <div style="background:var(--bg-soft);border-radius:10px;padding:var(--gap-sm);border-left:4px solid var(--ch-seo);display:flex;align-items:center;gap:0.8rem">
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(94,63,190,0.12);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🏨</div>
+            <div>
+              <div style="font-weight:700;font-size:var(--fs-body);color:var(--text)">Apartment Hotels Melbourne</div>
+              <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.1rem">/apartment-hotels-melbourne/</div>
+              <div style="font-size:var(--fs-label);color:var(--text-light);margin-top:0.15rem">Indexed · Monitoring</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="action-card anim d5" style="margin-top:var(--gap-sm);border-left-color:var(--ch-seo)">
+        <strong>Next action:</strong> Internal linking optimisation strategy — connect existing high-authority pages to these new LPs to accelerate indexing signals, strengthen semantic relevance and push these pages into page 1 rankings in May/June.
+      </div>
+    </div>
+  </div>
+  <div class="section-tag seo">SEO</div>
+  <div class="slide-num">43 / 48</div>
+</section>
+<!-- ════ NEW. SEO — AI VISIBILITY ════ -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow seo anim d1">SEO · AI Visibility · April 2026 · LLM Search</div>
+      <h2 class="slide-title anim d2">AI Visibility — Brand Presence in LLM Search</h2>
+      <div style="font-size:var(--fs-small);color:var(--text-muted);margin-top:0.3rem">Brady Hotels is being picked up, mentioned and cited in AI/LLM responses for relevant Melbourne accommodation searches.</div>
+    </div>
+    <div class="slide-content">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:var(--gap-sm);margin-bottom:var(--gap)" class="anim d2">
+        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--ch-seo)">
+          <div style="font-size:var(--fs-label);text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">AI Mentions</div>
+          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.3rem,2.2vw,1.9rem);color:var(--ch-seo);line-height:1">369</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.2rem">Brand mentioned in AI responses</div>
+        </div>
+        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--ch-seo)">
+          <div style="font-size:var(--fs-label);text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">AI Citations</div>
+          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.3rem,2.2vw,1.9rem);color:var(--ch-seo);line-height:1">267</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.2rem">Direct links cited by LLMs</div>
+        </div>
+        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--pos)">
+          <div style="font-size:var(--fs-label);text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">AI Sessions</div>
+          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.3rem,2.2vw,1.9rem);color:var(--pos);line-height:1">195</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.2rem">Visitors from AI/LLM search</div>
+        </div>
+        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--pos)">
+          <div style="font-size:var(--fs-label);text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">AI Transactions</div>
+          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.3rem,2.2vw,1.9rem);color:var(--pos);line-height:1">6</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.2rem">Bookings from AI traffic</div>
+        </div>
+        <div style="background:var(--bg-soft);border-radius:8px;padding:0.7rem var(--gap-sm);border-top:3px solid var(--pos)">
+          <div style="font-size:var(--fs-label);text-transform:uppercase;color:var(--text-light);font-weight:600;margin-bottom:0.2rem">AI CVR</div>
+          <div style="font-family:var(--font-display);font-weight:700;font-size:clamp(1.3rem,2.2vw,1.9rem);color:var(--pos);line-height:1">3%</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.2rem">$4,104 revenue · strong CVR</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:1;min-height:0">
+        <div class="chart-card anim d3" style="padding:var(--gap)">
+          <div class="ch-sub">Search Types — Where Brady is Appearing in AI</div>
+          <div class="ch-body" style="flex-direction:column;justify-content:flex-start;gap:0.8rem;margin-top:0.5rem">
+            <div style="display:flex;align-items:flex-start;gap:0.8rem">
+              <div style="width:36px;height:36px;border-radius:8px;background:rgba(94,63,190,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.2rem">🏨</div>
+              <div>
+                <div style="font-weight:700;font-size:var(--fs-body);color:var(--text)">Group Accommodation</div>
+                <div style="font-size:var(--fs-small);color:var(--text-muted)">Brady Hotels appearing in LLM results for Melbourne group booking searches — group capacity, portfolio, and collection positioning working well.</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:0.8rem">
+              <div style="width:36px;height:36px;border-radius:8px;background:rgba(94,63,190,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.2rem">🛏️</div>
+              <div>
+                <div style="font-weight:700;font-size:var(--fs-body);color:var(--text)">Stay Types</div>
+                <div style="font-size:var(--fs-small);color:var(--text-muted)">Serviced apartments, long-stay, boutique hotel queries triggering Brady citations — content engine delivering AI-readable results.</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:flex-start;gap:0.8rem">
+              <div style="width:36px;height:36px;border-radius:8px;background:rgba(94,63,190,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.2rem">📍</div>
+              <div>
+                <div style="font-weight:700;font-size:var(--fs-body);color:var(--text)">Accommodation Near Points of Interest</div>
+                <div style="font-size:var(--fs-small);color:var(--text-muted)">Landing pages for Marvel Stadium, Crown Casino, MCEC, Princes Theater generating AI citations — hyper-local content strategy validated.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="chart-card anim d4" style="padding:var(--gap)">
+          <div class="ch-sub">Why This Matters</div>
+          <div class="ch-body" style="flex-direction:column;justify-content:flex-start;gap:0.7rem;margin-top:0.5rem">
+            <div class="action-card" style="border-left-color:var(--ch-seo);margin:0;padding:0.6rem 0.8rem">
+              <strong style="color:var(--ch-seo)">Signalling:</strong> AI crawlers understand Brady's content — structured data, clear location signals, and semantic content are working. 3% CVR from AI traffic is very strong.
+            </div>
+            <div class="action-card" style="border-left-color:var(--pos);margin:0;padding:0.6rem 0.8rem">
+              <strong style="color:var(--pos)">Opportunity:</strong> 267 citations → 195 sessions → 6 bookings = $4,104 revenue. AI channel is nascent but converting above industry average. Double down on FAQ, structured data, and long-form content.
+            </div>
+            <div class="action-card" style="border-left-color:var(--neutral);margin:0;padding:0.6rem 0.8rem">
+              <strong>Watch:</strong> AI Overviews are likely also reducing brand search CTR (position 5.0, CTR 7.03% vs 9.70% LY). Defensive brand SERP actions remain critical alongside the AI opportunity.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag seo">SEO</div>
+  <div class="slide-num">44 / 48</div>
+</section>
+
+<!-- ════ SEO — WHAT WE DO NEXT ════ -->
 <section class="slide">
   <div class="slide-inner">
     <div class="slide-header">
@@ -2557,40 +3071,43 @@
       <h2 class="slide-title anim d2">What We Do Next — SEO</h2>
     </div>
     <div class="slide-content">
-      <div style="display:flex;flex-direction:column;gap:var(--gap);flex:1;justify-content:center">
-        <div class="action-card anim d2" style="border-left-color:var(--ch-seo)">
-          <strong>① Brand SERP Defence</strong> — recover CTR lost to AI overviews &amp; sitelink crowding
-          <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-            <li>Audit title tags &amp; meta descriptions on all 4 hotel pages (brand CTR fell 9.70% → 7.03% YoY)</li>
-            <li>Expand Google Business Profiles — Photos, Posts, Q&amp;A — to own branded SERP real estate</li>
-            <li>Add Hotel + FAQPage schema markup to reclaim rich-result sitelinks</li>
-            <li>Weekly brand-position monitoring — target: avg position back to ≤3.5 by Jul 2026</li>
-          </ul>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:1;min-height:0">
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)">
+          <div class="action-card anim d2" style="border-left-color:var(--ch-seo)">
+            <strong>① New Landing Pages — In Progress</strong>
+            <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
+              <li><strong>Melbourne Business Hotels</strong> — copy in progress, targeting corporate segment</li>
+              <li><strong>Elizabeth Street Hotel</strong> — copy in progress, new location content build</li>
+              <li>Support with internal linking strategy on launch to accelerate indexing &amp; ranking</li>
+            </ul>
+          </div>
+          <div class="action-card anim d3" style="border-left-color:var(--ch-seo)">
+            <strong>② Re-Optimisation Review</strong>
+            <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
+              <li><strong>Flinders Street landing page review</strong> — only hotel page up +35% YoY; replicate its H1/H2 structure across Hardware Lane, Jones Lane &amp; Central</li>
+              <li>Hardware Lane (CTR 1.60%) — structured data &amp; OG image refresh priority</li>
+              <li>Central Melbourne (pos 3.4) — lift CTR from 3.96% toward 6%+</li>
+            </ul>
+          </div>
         </div>
-        <div class="action-card anim d3" style="border-left-color:var(--ch-seo)">
-          <strong>② Content Engine — Double Down</strong> — generic clicks already +73.8% YoY, keep compounding
-          <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-            <li>Publish 2× long-form pages per month: dining guides, events, long-stay, neighbourhood content</li>
-            <li>Target mid-funnel generic terms: "serviced apartments Melbourne CBD", "boutique hotels Melbourne"</li>
-            <li>Internal linking: content pages → hotel landing pages to push booking intent</li>
-            <li>Generic now 16.2% of organic clicks (was 7.7%) — set target of 25% by Dec 2026</li>
-          </ul>
-        </div>
-        <div class="action-card anim d4" style="border-left-color:var(--ch-seo)">
-          <strong>③ Hotel Page CTR &amp; On-Page Optimisation</strong>
-          <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-            <li>Hardware Lane (CTR 1.60%) + Jones Lane (CTR 4.03%) — structured data &amp; OG image refresh</li>
-            <li>Flinders Street: only hotel up +35% YoY — replicate its H1/H2 &amp; on-page structure across peers</li>
-            <li>Central Melbourne jumped to position 3.4 — now focus on lifting CTR from 3.96% toward 6%+</li>
-          </ul>
-        </div>
-        <div class="action-card action anim d5">
-          <strong>④ Rebuild Session Base Before Jun–Sep Seasonal Peak</strong>
-          <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-            <li>Sessions tracking −15% YoY in Apr — ramp content &amp; on-page updates in May before peak</li>
-            <li>2025 seasonal peak: 7,471–7,694 organic sessions/mo (Jun–Sep) — target to match or exceed</li>
-            <li>Revenue/Session at record $30.77 (+27.9% YoY) — maintain conversion quality while scaling volume</li>
-          </ul>
+        <div style="display:flex;flex-direction:column;gap:var(--gap-sm)">
+          <div class="action-card anim d4" style="border-left-color:var(--ch-seo)">
+            <strong>③ Brand SERP Defence</strong>
+            <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
+              <li>Audit title tags &amp; meta descriptions — brand CTR fell 9.70% → 7.03% YoY</li>
+              <li>Expand Google Business Profiles (Photos, Posts, Q&amp;A) + FAQPage schema markup</li>
+              <li>Target avg position back to ≤3.5 (currently 5.0) by Jul 2026</li>
+            </ul>
+          </div>
+          <div class="action-card action anim d5">
+            <strong>④ Monthly SEO Tasks</strong>
+            <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
+              <li><strong>Internal linking optimisation</strong> — content pages → hotel LPs for booking intent</li>
+              <li><strong>Health check</strong> on past landing pages (4 indexed but not yet ranking)</li>
+              <li><strong>Monthly technical SEO checks</strong> + fixes (Core Web Vitals, crawl errors)</li>
+              <li><strong>Citation audit</strong> + <strong>backlink reclamation audit</strong></li>
+            </ul>
+          </div>
         </div>
       </div>
       <div class="anim d6" style="margin-top:var(--gap);padding-top:var(--gap);border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end">
@@ -2606,8 +3123,95 @@
     </div>
   </div>
   <div class="section-tag seo">SEO</div>
-  <div class="slide-num">42 / 42</div>
+  <div class="slide-num">45 / 48</div>
 </section>
+<!-- ════ FULL YEAR RESULTS SECTION DIVIDER ════ -->
+<section class="slide section-divider">
+  <div class="bracket tl"></div>
+  <div class="bracket br"></div>
+  <div>
+    <div class="sd-eyebrow action anim d1">Full Year Results · 2026</div>
+    <div class="sd-num anim d2">06</div>
+    <div class="sd-title anim d3">Full Year Results</div>
+    <div class="sd-sub anim d4">Jan–Dec 2026 · Full year P&amp;L, forecast per hotel &amp; channel, and projected ROI.</div>
+  </div>
+  <div class="slide-num">46 / 48</div>
+</section>
+
+<!-- ════ 32. FULL YEAR FORECAST 2026 -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow action anim d1">FY 2026 · Actuals (Jan–Apr) + Forecast (May–Dec)</div>
+      <h2 class="slide-title anim d2">Full Year P&amp;L · Cost · Revenue · Agency · ROI · CoS</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2" style="font-size:var(--fs-label)">
+        <thead><tr>
+          <th>Month</th><th>Status</th><th>Media Cost</th><th>Revenue</th><th>Agency Fee</th><th>Total Inv.</th><th>ROI</th><th>CoS %</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Jan 2026</td><td><span class="ftag ftag-win">actual</span></td><td>$17,034</td><td>$376K</td><td>$5,400</td><td>$22,434</td><td class="pos">16.8×</td><td class="pos">5.9%</td></tr>
+          <tr><td>Feb 2026</td><td><span class="ftag ftag-win">actual</span></td><td>$12,806</td><td>$320K</td><td>$5,400</td><td>$18,206</td><td class="pos">17.6×</td><td class="pos">5.7%</td></tr>
+          <tr><td>Mar 2026</td><td><span class="ftag ftag-win">actual</span></td><td>$15,754</td><td>$385K</td><td>$5,400</td><td>$21,154</td><td class="pos">18.2×</td><td class="pos">5.5%</td></tr>
+          <tr><td>Apr 2026</td><td><span class="ftag ftag-win">actual</span></td><td>$14,649</td><td>$282K</td><td>$5,400</td><td>$20,049</td><td>14.1×</td><td>7.1%</td></tr>
+          <tr><td>May 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$17,000</td><td>$310K</td><td>$5,400</td><td>$22,400</td><td>13.8×</td><td>7.2%</td></tr>
+          <tr><td>Jun 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$18,500</td><td>$345K</td><td>$5,400</td><td>$23,900</td><td>14.4×</td><td>6.9%</td></tr>
+          <tr><td>Jul 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$20,500</td><td>$375K</td><td>$5,400</td><td>$25,900</td><td>14.5×</td><td>6.9%</td></tr>
+          <tr><td>Aug 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$19,200</td><td>$355K</td><td>$5,400</td><td>$24,600</td><td>14.4×</td><td>6.9%</td></tr>
+          <tr><td>Sep 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td class="pos">$22,000</td><td class="pos">$415K</td><td>$5,400</td><td>$27,400</td><td class="pos">15.1×</td><td class="pos">6.6%</td></tr>
+          <tr><td>Oct 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$21,500</td><td>$400K</td><td>$5,400</td><td>$26,900</td><td>14.9×</td><td>6.7%</td></tr>
+          <tr><td>Nov 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td class="pos">$25,000</td><td class="pos">$470K</td><td>$5,400</td><td>$30,400</td><td class="pos">15.5×</td><td class="pos">6.5%</td></tr>
+          <tr><td>Dec 2026</td><td><span class="ftag ftag-hold">forecast</span></td><td>$19,500</td><td>$325K</td><td>$5,400</td><td>$24,900</td><td>13.1×</td><td>7.7%</td></tr>
+        </tbody>
+        <tfoot>
+          <tr><td>YTD 2026 (Jan–Apr · actual)</td><td>4 mo</td><td>$60,243</td><td>$1.36M</td><td>$21,600</td><td>$81,843</td><td class="pos">16.7×</td><td class="pos">6.0%</td></tr>
+          <tr><td>FY 2026 Forecast Total</td><td>12 mo</td><td>$223,443</td><td>$4.36M</td><td>$64,800</td><td>$288,243</td><td class="pos">15.1×</td><td class="pos">6.6%</td></tr>
+        </tfoot>
+      </table>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap-sm)">
+        <div class="action-card action anim d3"><strong>Agency Retainer (flat):</strong> Paid Search $2,000/mo · Metasearch $1,600/mo · Paid Social $1,800/mo. Combined <strong>$5,400/mo · $64,800/year</strong>. Separate from media spend.</div>
+        <div class="action-card anim d4"><strong>Definitions:</strong> ROI = Revenue ÷ Total Investment (Media + Agency). CoS = (Media + Agency) ÷ Revenue × 100. Industry benchmark: CoS 5–10% is healthy for hotels; below 5% is excellent.</div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag action">Forecast</div>
+  <div class="slide-num">47 / 48</div>
+</section>
+
+<!-- ════ 33. FORECAST PER HOTEL × CHANNEL MATRIX -->
+<section class="slide">
+  <div class="slide-inner">
+    <div class="slide-header">
+      <div class="slide-eyebrow action anim d1">FY 2026 · Forecast Distribution</div>
+      <h2 class="slide-title anim d2">Forecast per Hotel × Channel</h2>
+    </div>
+    <div class="slide-content">
+      <table class="dt compact anim d2">
+        <thead><tr>
+          <th>Hotel / Group</th><th>SEM</th><th>Metasearch</th><th>Social (att.)</th><th>Total Revenue</th><th>Media Cost</th><th>ROAS</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Brady Hotels Central Melbourne</td><td>$515K</td><td>$181K</td><td>$40K</td><td class="pos">$736K</td><td>$58K</td><td class="pos">12.7×</td></tr>
+          <tr><td>Brady Apt Hotel Hardware Lane</td><td>$478K</td><td>$205K</td><td>$61K</td><td class="pos">$744K</td><td>$60K</td><td class="pos">12.4×</td></tr>
+          <tr><td>Brady Apt Hotel Flinders Street</td><td>$315K</td><td>$156K</td><td>$67K</td><td>$538K</td><td>$50K</td><td>10.8×</td></tr>
+          <tr><td>Brady Hotels Jones Lane</td><td>$359K</td><td>$102K</td><td>$55K</td><td>$516K</td><td>$48K</td><td>10.8×</td></tr>
+          <tr><td>Brady Group (cross-portfolio)</td><td>$337K</td><td>$0</td><td>$82K</td><td>$419K</td><td>$77K</td><td class="neg">5.4×</td></tr>
+        </tbody>
+        <tfoot>
+          <tr><td>FY 2026 Total</td><td>$2,004K</td><td>$644K</td><td>$305K</td><td><strong>$2.95M</strong></td><td>$293K</td><td><strong>10.1×</strong></td></tr>
+        </tfoot>
+      </table>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap-sm)">
+        <div class="action-card anim d3"><strong>Top earners:</strong> Hardware Lane ($744K) and Brady Central ($736K) — both deliver 12×+ ROAS thanks to hotel-PMAX + Brand Search efficiency. <strong>Brady Group</strong> at 5.4× is the weak link — cross-portfolio Display RT + brand-broad PMAX dilute the average.</div>
+        <div class="action-card action anim d4"><strong>Reconciliation:</strong> Per-hotel × channel total ($2.95M) is a sub-set of the FY 2026 forecast ($4.36M) — the difference is incremental revenue that can't be cleanly attributed at hotel level (cross-portfolio assists, brand-search halo, organic spillover from paid awareness).</div>
+      </div>
+    </div>
+  </div>
+  <div class="section-tag action">Forecast</div>
+  <div class="slide-num">48 / 48</div>
+</section>
+
 
 
 
@@ -2992,6 +3596,382 @@
     if(document.readyState==='complete'){generateGSlides();}
     else{window.addEventListener('load',generateGSlides);}
   }})();
+</script>
+<script>
+
+(function() {
+  var NOTES = {
+  1: "Good morning / afternoon. Today we're walking through Brady Hotels' complete April 2026 performance — the full month across SEM, Metasearch, Social, and Organic Search. April is a transition month in Melbourne — end of summer events, Easter weekend closing, the start of the autumn corporate calendar. What you'll see is that despite April being a softer demand month compared to Q1, the paid channels delivered strong efficiency: $379K revenue at 25.7× ROAS across all channels. More importantly, we'll cover where the underlying opportunities are and exactly what we're implementing in May to accelerate from this base. Let's get into it.",
+  2: "The report runs across six sections. We open with the portfolio overview — per-hotel results and channel mix — then deep-dive each paid channel: SEM, Metasearch, and Social. After each paid section you'll find the specific next steps for May. We then cover SEO and organic, which this month includes five active landing pages with keyword movement data and our AI visibility metrics for the first time. We close with the full-year financial picture — actuals through April and a forecast through December. Data timestamps are on each card: paid channel data complete to 30 April, SEO data to 28 April.",
+  3: "Section one. The portfolio overview grounds everything in the actual revenue opportunity across the four properties.",
+  4: "This slide is about context before performance. The four properties have an estimated $16.7M in full-capacity YTD revenue potential. Marketing is currently attributing $783K of that — a 4.7% blended marketing penetration. That number matters because the ceiling is high: modest improvements in efficiency have outsized revenue impact at this scale.\n\nHardware Lane at $310 ADR is the most valuable conversion per booking — and its paid performance this month reflects that. Central Melbourne at 146 rooms is the highest-volume property and the biggest opportunity to lift conversion rate. Jones Lane at 153 rooms is your largest property by room count — that scale should be generating more absolute revenue than it currently does, which connects directly to what we'll address in the action plan.",
+  5: "April across all channels combined: $368K attributed revenue from $14.6K spend — 25.2× blended ROAS. The most important story here isn't the totals, it's the efficiency gap between hotels.\n\nHardware Lane leads at $86K revenue. That comes from a combination of premium ADR and well-optimised campaigns. But Jones Lane and Central Melbourne are generating lower absolute revenue despite similar spend levels — that tells us room rate, inventory availability, or ad creative is limiting conversion at those properties specifically.\n\nBrady Group cross-portfolio at 21.3× looks softer — that's expected. Group campaigns are wider-funnel and attract different buyer intent with a longer conversion cycle. The $77K from group campaigns is largely incremental revenue that wouldn't have happened through individual hotel campaigns alone.",
+  6: "This slide shows where revenue is coming from and how efficiently each dollar is working. The headline isn't the revenue split — it's the ROAS differentiation across channels.\n\nMetasearch is your most efficient channel at 36.8× ROAS. That's not surprising — metasearch captures high-intent users already in rate-comparison mode. The constraint is scale: it's only contributing $64K because budget is capped at $1,750. There's a strong argument to push more money here.\n\nSEM at 28.1× is the workhorse channel — $212K revenue from $7.5K, operating at excellent efficiency and scale.\n\nSocial at 18.9× needs context: Meta's full-attribution model applies longer attribution windows, so the number is real but should be read alongside the other channels. Social's growing value is in audience building and brand recall — not just direct ROAS.\n\nThe key strategic question: should we rebalance budget from Social toward Metasearch where every dollar works harder? That's exactly what we address in the action plan.",
+  7: "Four months in: $1.34M attributed revenue from $59.5K spend — 22.6× blended ROAS. The seasonal pattern here is important to understand. January was the strongest month at $376K — Melbourne summer events, cricket, music festivals drive strong leisure demand. Revenue softened into April, which is normal — April is a transition month.\n\nCompared to 2025 full year at 30.8×, we're tracking at 22.6× YTD. That gap is mostly seasonal: 2025's back half captured AFL Grand Final which produces exceptional returns. What this chart tells me is that our H2 2026 activation plan needs to be locked in now — because AFL September is the single biggest revenue opportunity of the year and we need campaigns, creatives, and bids in place well before it arrives.",
+  8: "Google Ads. $7.5K spend, $212K revenue, 28.1× ROAS in April. I'll walk through why these numbers look the way they do and exactly what we're doing to grow from here.",
+  9: "The funnel framework matters because SEM isn't one campaign — it's a layered system where each campaign type has a specific job.\n\nAt the top, generic and PMax campaigns capture new audiences who've never heard of Brady. We're competing on relevance and rate for queries like 'hotels Melbourne CBD' or 'boutique hotel near Flinders Street'.\n\nIn the mid-funnel, event and membership campaigns target people with a specific reason to be in Melbourne — AFL, conferences, music events — and we connect Brady's location to that reason. This produces the highest ROAS from niche targeting.\n\nBrand search campaigns at the bottom defend against OTA hijacking — when someone searches 'Brady Hotels Melbourne', we want them landing directly on bradyhotels.com.au, not on Booking.com or Expedia.\n\nThe strategic opportunity we're chasing is moving more budget into mid-funnel event campaigns and international SEM — specifically Singapore and UK — where ROAS signals are extraordinary but spend is near zero.",
+  10: "Every hotel is operating above 27× ROAS in Google Ads — Flinders Street 32.3×, Central 31.1×, Hardware Lane 30.4×, Jones Lane 27.3×. That's exceptional performance at scale.\n\nWhy is Flinders Street the most efficient? Three reasons: apartment-hotel positioning wins on 'serviced apartment Melbourne' queries where bid competition is lower than standard hotel terms; its $270 ADR makes each booking very valuable; and the landing page converts well — which connects directly to the SEO work on the Flinders page.\n\nJones Lane at 27.3× is the softest. Its CPC at $0.94 is the highest in the portfolio — we're paying more per click. The action is auditing the keyword set and shifting budget toward lower-competition terms where Jones Lane's waterfront location gives us natural relevance advantage.\n\nThe Group at 22.6× serves a different purpose — group RFQ enquiries and membership sign-ups with a longer conversion cycle not fully captured in the 30-day window.",
+  11: "The breakdowns show exactly where to put budget next. Three signals stand out.\n\nFirst, Tablet at 33.7× ROAS — 20% better than Desktop, 35% better than Mobile. Tablets are typically used by people planning leisure travel at home in the evening — higher intent, larger booking value. We're underinvesting here. The action: 30% bid increase on tablet.\n\nSecond, international markets. Singapore 82.5×, Japan 308× on tiny spend, UK 64.9×. These are extraordinary signals that international travellers who find Brady are booking. They're tiny because we don't have dedicated budget or localised ad copy. A $300/month Singapore campaign is the immediate recommendation — one of the highest-confidence ROI moves in the plan.\n\nThird, New Zealand at 1.7× ROAS — destroying value. Every NZ dollar spent returns almost nothing. Pause NZ targeting immediately and redirect that budget to Singapore.",
+  12: "This is where we move from reporting to execution. The action plan is structured by priority: scale what's working, defend what's stable, cut what isn't.\n\nTop opportunity: Group PMAX at 49.7× ROAS on $250 spend is massively underfunded. Doubling the budget projects an additional $12.4K revenue from just $250 extra spend — one of the most certain ROI moves in the deck.\n\nHardware Lane PMax at 40.9× is next — +60% budget projects $8.4K additional revenue.\n\nOn the other side: nine markets with zero conversions paused (frees $135); both Display Retargeting campaigns paused (frees $440). That liberated budget goes directly into the scaling campaigns.\n\nNet outcome: projected $30K additional SEM revenue in May without proportionally increasing total spend. The efficiency of the reallocation does the work.",
+  13: "The YTD chart shows SEM spend coming down month-over-month — $9.3K in January to $7.5K in April — while revenue stays strong. That's efficiency improvement, not budget cuts. We've been trimming waste.\n\nThe ROAS comparison matters: 2025 full year was 44.3× at 2.3% CoS. 2026 YTD is 31.3× at 3.2% CoS. That gap is partly seasonal — 2025's AFL back half produced extraordinary SEM returns — and partly because 2026 has more diverse spend in campaigns that are still building efficiency.\n\nThe key message: H2 2026 is when the SEM program needs to be firing on all cylinders. AFL Grand Final in September is the peak opportunity. We need campaigns structured, creatives refreshed, and bids optimised in June — not September. That's a concrete project milestone.",
+  14: "Creative is the unseen lever in SEM performance. Most people think Google Ads is bids and targeting — and it is — but PMax campaigns are heavily influenced by asset quality. Google's ML allocates more impressions to campaigns with richer asset sets and higher quality scores.\n\nThe asset brief ensures every hotel has a complete library. Crucially, video is missing for several hotels right now. PMax campaigns with video get significantly better placement in YouTube and Display inventory — this is a meaningful performance gap.\n\nFor Q3 AFL, we need stadium-proximity creative emphasising walkability — Brady Hotels to Marvel Stadium in X minutes on foot. Those assets need to be in production in June for September readiness. Creative production lead time is the constraint, not ad spend.",
+  15: "The forecast is event-driven because Melbourne SEM demand isn't a flat curve — it spikes around major events. AFL Grand Final in September: $11.2K spend projecting $285K revenue. Spring Racing October: similarly elevated.\n\nMay is the immediate focus at $8.4K projecting $208K. That's slightly below April's absolute revenue because April had some Easter demand — but the efficiency is improving as we scale the right campaigns.\n\nThe embedded event strategy is the mechanism for this entire forecast: Mother's Day May, Melbourne Writers Festival August, AFL September, Spring Racing October. We're not reacting to events — we have campaign briefs and budget allocations ready before each one arrives. That's the competitive advantage.",
+  16: "Metasearch — Google Hotel Ads, Trivago, TripAdvisor. $1.6K spend, $53.6K revenue, 32.7× ROAS. Your highest-efficiency paid channel by a significant margin. The conversation now is why and how we grow it responsibly.",
+  17: "Metasearch is structurally different from SEM or Social — there's no top or mid-funnel here. Users arriving in metasearch have already decided to go to Melbourne and are comparing rates. The question is purely whether Brady Hotels' rate presentation wins.\n\nThat makes metasearch uniquely dependent on two factors partly outside our direct control: the rate being offered and the review score against competitors. The CPC bid determines how prominently Brady appears — but if the rate is uncompetitive or reviews are weaker, the click won't convert regardless of bid spend.\n\nWe're not yet active in the top-funnel metasearch placements — sponsored TripAdvisor listings, Trivago featured placements. That's a future phase. For now, we're maximising bottom-funnel performance where conversion rates are already strong across all four hotels.",
+  18: "Flinders Street stands out at 40× ROAS and 6.55% conversion rate. Why? The apartment format resonates strongly in metasearch — apartment guests typically have longer stays and higher booking values at $564 AOV. Apartment rates in Melbourne are also less saturated in metasearch than standard hotel inventory, meaning lower bid competition for equivalent placement.\n\nJones Lane is the outlier at $338 AOV — $145 below portfolio average. This is a rate strategy issue, not a marketing issue. The metasearch campaigns can't lift a rate that isn't competitive. The action here is a rate plan review specifically for Jones Lane: minimum stay restrictions, weekend rate optimisation, and direct booking rate alignment to Booking.com parity.\n\nHardware Lane at $17K absolute revenue is your highest metasearch contributor. With 34.5× ROAS there's clear headroom to increase spend and volume without sacrificing efficiency.",
+  19: "Two signals. First, Google Hotel Ads is driving 87% of metasearch revenue — TripAdvisor is at just 1%. TripAdvisor users typically have higher booking intent and review-awareness. Increasing TripAdvisor budget by $300/month is low-risk, high-upside — it's currently so underfunded it's not contributing meaningfully.\n\nSecond: free booking links are generating 43% of metasearch revenue. This is the zero-cost organic metasearch channel — Brady Hotels appearing in Google's free hotel listings. Improving the data quality of our hotel feeds — room types, rates, photos, cancellation policies kept current — improves free link performance without additional spend. This is one of the highest-leverage zero-cost improvements available.",
+  20: "The bidding strategy in plain terms. We're recommending targeted CPC increases for Flinders Street (+20%) and Jones Lane (+25%).\n\nFlinders Street: at 40× ROAS and 6.55% conversion, this hotel has proven it converts. Increasing the bid gets more impressions and clicks that will convert at the same rate — a pure volume play on a proven performer.\n\nJones Lane +25% despite the AOV concern: the conversion rate is actually strong at 6.05%, and the current CPC at $0.59 is the lowest in the portfolio. There's room to increase visibility and volume before needing to touch the rate strategy. Ideally we do both simultaneously — raise bids AND lift AOV — but the bid move is faster to implement this week.\n\nCentral and Hardware Lane we're holding — Central is a volume property already efficient; Hardware we're testing the weekend rate uplift first before adjusting bids.",
+  21: "Metasearch was only properly structured from January 2026. The YTD pattern shows variable month-to-month revenue — $51K January to $67K March — which reflects Melbourne's event-driven demand profile.\n\nThe March spike is attributable to Melbourne Convention Week which drove above-average MCEC-adjacent accommodation demand — exactly the audience our MCEC landing page now targets.\n\nThe 2025 comparison is important context: metasearch was running at 11.2× ROAS in H2 2025. We've taken that to 31.4× in 2026 by structuring the bids correctly. That's a significant channel maturation story in four months — and there's more improvement to come as we implement the bid adjustments and TripAdvisor expansion.",
+  22: "The metasearch forecast is deliberately conservative — 28-32× ROAS through the year. The AFL September spike is forecast at 35× because historically metasearch over-delivers during peak Melbourne events when demand outpaces supply and any hotel with a good rate wins the comparison almost automatically.\n\nThe CPC adjustments, TripAdvisor increase, and Singapore push we've outlined will lift actual numbers above these forecasts if implemented. These projections assume the status quo on bids — which we're changing this week. The upside is real and the downside is protected by the strong existing conversion rates.",
+  23: "Meta Ads — Facebook and Instagram. $5.4K spend in April, $103K attributed revenue, 18.9× ROAS. Social tells a different story from SEM and Metasearch — the dynamics behind the numbers are more nuanced. Let me walk through it.",
+  24: "The Social funnel is structured differently to SEM — and the funnel architecture explains why we manage it the way we do.\n\nThe bottom-funnel booking campaigns generate most of the direct revenue attribution, but they only work because mid and top funnel is warming audiences over time. Here's the key dynamic: Meta's algorithm needs an audience to work with. The more quality signals we feed it — video views, engagement, website visits — the better it identifies lookalike audiences who are likely to book.\n\nRight now we're heavy on mid and bottom funnel but light on top-funnel awareness. That's sustainable short-term but creates a lead generation deficit over 6-12 months as current audiences fatigue.\n\nThe recommendation: don't pull back on bottom-funnel — it's delivering revenue. Build the upper funnel in parallel with awareness video content at lower CPMs that expands the remarketing pool. This is a May-June structural project.",
+  25: "Jones Lane had the best Social ROAS this month at 25.5×. That's interesting because in SEM it's the softest performer. The reason: Jones Lane's Social campaigns have been running longer and Meta's algorithm has had more time to optimise for the specific audience profile that converts for that property.\n\nCentral Melbourne is the outlier at 10.5× — below portfolio average and well below what the other hotels are achieving. The cause isn't the property — it's the campaign targeting and creative. Central is a higher-volume, lower-ADR hotel and the current creative isn't differentiating it from the other properties. The action: replace underperforming creative and test new audience targeting for Central's segment — CBD corporate short-stay and leisure weekender are genuinely different audiences that need separate creative briefs.\n\nThe Group campaign at 19.5× is performing correctly — group bookings have a longer consideration cycle and 30-day attribution doesn't fully capture the RFQ-to-booking journey. The real value is in the downstream group revenue.",
+  26: "The audience data is one of the most actionable slides in the deck. F45-54 and F55-64 are your highest-performing segments. F65+ at 2.69% CTR is actually the best click-through performer in the portfolio. M18-24 is the worst by a wide margin at 0.78%.\n\nWhat this tells us about Brady Hotels' organic customer: you're attracting mature female travellers — couples getaways, milestone birthdays, girlfriends' weekends. The marketing resonates with them and we should lean in hard.\n\nPractical actions: build a lookalike audience from F45-64 converters; increase bids for F65+ by 30%; exclude M18-24 from all ad sets. That exclusion alone improves average CTR and gives the algorithm cleaner quality signals.\n\nOn device: 96% of Social revenue comes from mobile app. Desktop at 0.66% CTR versus mobile's 1.57% is a clear indicator — exclude desktop spend and redirect entirely to mobile where conversion is proven.",
+  27: "The membership campaign is a lead generation play, not a direct booking campaign — and that distinction matters for how we evaluate it.\n\n30 leads at $9.87 CPL is a healthy cost. The question is what happens downstream when those leads enter the CRM. This campaign's value is NOT measured in immediate bookings. It's measured in member LTV — the repeat bookings generated from members over 12-24 months. If each member books 2× per year at $350 average, the $9.87 CPL returns many times over.\n\nThe immediate action: ensure the lead handoff between Meta and the CRM is functioning correctly. Leads need to enter a nurture sequence within 24 hours — not sit in a static list. That handoff is the conversion lever that justifies continued investment in this campaign. Without it, the CPL is being wasted.",
+  28: "The Social action plan follows the same logic as SEM: scale what's working, hold what's stable, cut what isn't.\n\nThe Group daily sales campaign at 3.37% CTR is the standout — more than double the channel average. Meta's algorithm has found a highly resonant audience. The constraint is just budget. +25% spend with three fresh creative variants projects $5K incremental revenue.\n\nFor Central Melbourne — a complete creative refresh with a tight brief. Two distinct audience directions: CBD corporate midweek and leisure weekend. These are genuinely different people with different motivations, and one creative can't serve both well. Splitting into two ad sets is the structural fix.\n\nThe Autumn Sale creative is paused. Running Easter-season creative in May actively hurts CTR and wastes impression budget on irrelevant creative. Pausing frees that budget for the Group campaign scale-up.",
+  29: "Social's YTD pattern shows something important: January spend was flat but revenue was below Q2-Q4 2025 despite higher overall traffic. The Social campaigns have matured significantly by April — the algorithm has had four months to learn.\n\nThe 2025 comparison is partial — only from June 2025. But YTD 2026 ROAS at 4.8× is broadly in line with 2025's 5.0×. That's steady, not accelerating. The acceleration driver going forward is the F45-64 LAL audience we're building — once that audience matures in Q3, we expect a measurable ROAS improvement because we'll be reaching a more qualified pool with less wasted impressions.",
+  30: "Creative is where Social performance is made or broken — and the April data makes this undeniable.\n\nTwo clear signals: vertical video at 9:16 significantly outperforms static images on Reels and Stories. UGC-style video creative outperforms everything else. The 3.36% CTR from UGC video versus 1.19% from legacy static creative is a 2.8× performance difference on similar spend.\n\nThe practical implication: invest in short-form video production. The good news is this doesn't require expensive production. Authentic, smartphone-shot content performs better than studio photography in Meta's current algorithm. The hook matters — first 3 seconds determine whether someone keeps scrolling. 'This is what you see from your window at Hardware Lane' or 'This rate disappears Friday midnight' are the types of hooks that stop the scroll.",
+  31: "The Social forecast is the most growth-oriented of the three channels. We're projecting spend to increase from $5.4K in April to $7.5K in July during school holiday peak — and attributed revenue growing correspondingly.\n\nSchool holidays in July are the critical Social opportunity — families and couples looking for Melbourne experiences, AFL season starting, winter weekenders. The creative needs to be ready in June: hotel lifestyle, local Melbourne experience, 'Melbourne winter with a warm room' narrative. The campaign briefs are already drafted — production is the next step.",
+  32: "This is the proof point for the entire creative strategy. The before/after data is unambiguous.\n\nThe new Saver Rate creative launched April 1st: 2.60% CTR. The legacy Book Direct creative it replaced: 1.19% CTR. The same budget, more than double the clicks. UGC video at 3.36% CTR is 2.8× the legacy performance.\n\nThe message is simple: creative quality is the highest-leverage variable in Meta performance right now. The targeting is good. The audience is right. The bidding is efficient. What moves the needle further is better creative. That's why the creative refresh and video production pipeline is at the top of the Social action plan.\n\nEvery week we run stale creative, we're leaving click-through performance on the table. The refresh cadence should be every 6-8 weeks minimum.",
+  33: "Pulling the paid channel action plan together. Three channels, three sets of moves, all with projected revenue impact.\n\nSEM: the biggest opportunities this week are scaling Group PMAX — which is returning 49.7× — and launching a Singapore market campaign. The budget released from pausing zero-conversion markets and display retargeting pays for most of the scale-up. Projected: $30K incremental SEM revenue in May.\n\nMetasearch: Flinders Street and Jones Lane bid increases, plus TripAdvisor budget activation. The combination of bid changes and feed optimisation will lift both volume and efficiency. Projected: $8.4K incremental metasearch revenue in May.\n\nSocial: Central Melbourne creative refresh and the F45-64 LAL audience build are the two structural changes that will bend the ROAS curve upward over Q2-Q3. These take 2-3 weeks to show measurable results as Meta's algorithm relearns.\n\nCombined: approximately $50K in incremental paid revenue projected for May from these specific changes, without proportional increases in total spend.",
+  34: "Organic search. April 2026 summary: 3,650 sessions, 203 transactions, $113K organic revenue, 4.6% conversion rate. Five active landing pages. Let me walk through what's driving these numbers, what the risks are, and what we're building next.",
+  35: "This slide reveals one of the most important dynamics in Brady Hotels' organic performance — and it requires careful interpretation.\n\nBrand searches — people searching 'Brady Hotels Melbourne' or 'Brady apt hotel' — generated 1,542 clicks. But average position dropped from 3.2 to 5.0, and CTR fell from 9.70% to 7.03%. That's significant brand SERP degradation.\n\nWhy? Two likely causes. AI Overviews are now appearing above regular search results for branded hotel queries — pushing everything down the page and reducing CTR across the board. And the growth of metasearch sitelinks in branded search results means some branded clicks are going to Google Hotel Ads instead of organic listings.\n\nThe implication: people who know Brady Hotels and are actively searching for you are being intercepted before reaching the organic listing. This is why brand SERP defence is a priority — schema markup, Business Profile expansion, and title tag optimisation all help reclaim those clicks.\n\nThe generic side is genuinely good news. Generic impressions grew significantly YoY — more people are seeing Brady Hotels in non-branded searches. That's the landing page program working. The impressions growth is the leading indicator that ranked traffic growth follows in Q3.",
+  36: "Organic sessions in April: 3,650 — down 16.8% from 4,388 in April 2025. Every 2026 month tracks below the equivalent 2025 month.\n\nHere's why this doesn't concern me as much as it might first appear. 2025's organic growth was driven by content expansion — new pages getting indexed and starting to rank, setting a high watermark. In 2026, we're building the next layer of that infrastructure: five new landing pages, Melbourne Business Hotels and Elizabeth Street in progress.\n\nThe comparison will flip when those pages start ranking in earnest. The MCEC page already has 27 terms on page 1. Marvel Stadium hit position #3. These pages are generating incremental traffic that didn't exist in 2025 at all. The full impact of the 2026 content build won't show in the YoY chart until Q3-Q4 — that's when the sessions line crosses back above 2025 levels.",
+  37: "The headline that matters: $113K organic revenue in April 2026, up 10.5% from $102K last April. Revenue growing despite sessions declining. That means conversion rate improved materially — and 4.6% CVR is exceptional for organic hotel traffic.\n\nIndustry average for hotel websites is typically 1.5-2.5% organic CVR. Brady's organic visitors are arriving via branded and high-intent generic terms and converting at nearly double the industry rate. That's a quality-of-traffic story: the people who find Brady Hotels organically already have strong purchase intent.\n\nThe six-month revenue trend — ranging $109K-$120K per month — is remarkable consistency. This organic channel doesn't spike and crash with events. It compounds steadily through the year, making it the most predictable revenue stream in the marketing mix.\n\nOne note on the brand queries table: 'brady hotels central melbourne' generating 2,519 impressions with 205 clicks shows strong brand awareness for that property. Structured data and an optimised Google Business Profile for Central Melbourne could convert more of those impressions into clicks.",
+  38: "Marvel Stadium is one of our most commercially important LPs. Events at Marvel draw tens of thousands of people to the Docklands area, and Brady Hotels' proximity makes us genuinely competitive for that accommodation search intent.\n\nPosition #3 for 'marvel stadium hotels' is a breakthrough. Positions 1-3 on Google capture approximately 60% of all clicks for a query. At position #7 previously, we were getting a small fraction of that traffic. Moving from 7 to 3 likely represents a 3-4× increase in traffic volume for that single keyword alone.\n\nWhy did rankings improve? The combination of page authority building over time, internal linking from other Brady pages, and high-quality content matching user intent. This is the compound effect of the SEO strategy working correctly.\n\nNext focus for this page: CTR optimisation. Now that we're at #3, we can improve click-through by refining the title tag and meta description to be more compelling than the #1 and #2 results. We also start targeting additional Marvel Stadium queries we haven't captured yet — expanding the content on the page to cover events calendar, walking distance to Marvel, and nearby dining.",
+  39: "27 terms on the first page is a significant milestone for the MCEC landing page. Convention Centre accommodation is an extremely valuable search segment — convention attendees have fixed dates, can't be flexible on location, and have employer-approved travel budgets. They're high-value, high-intent bookers.\n\nThe 'convention centre melbourne accommodation' entering from N/A to position #6 is particularly significant — this is a high-volume query and breaking page 1 at position 6 is a major threshold. Our immediate optimisation: refresh the H1 and H2 structure to better match this query, build FAQ content around MCEC event dates and booking-lead-time guidance, and add structured data markup.\n\nThe MCEC LP is on trajectory to become one of our highest-revenue organic pages within 3-6 months. The 27 page 1 terms confirm it has genuine authority in this niche — the next phase is deepening that authority by expanding the content to cover specific conventions, events, and the MCEC booking cycle.",
+  40: "50% MoM improvement for the Serviced Apartments LP. The Serviced Apartments category is different from venue-proximity LPs — it targets a stay-type intent rather than an event or location. Searchers here are typically on extended stays: corporate relocations, project workers, families in town for medical or other long-stay reasons. High AOV bookings with multiple nights.\n\nThe jump of 'serviced apartments melbourne cbd' from position 20 to position 11 — nine positions in one month — is exceptional. That's not random fluctuation; that's the page gaining authority rapidly. Three new keywords entering from N/A to positions 8-13 confirms semantic relevance is broadening as well.\n\nThis acceleration pattern follows a well-understood SEO dynamic: once a page crosses from page 2 to page 1 on core terms, it gets more clicks, which signals relevance to Google, which lifts it further. We're approaching that inflection point. The expected outcome: within 60 days this page joins MCEC and Marvel Stadium as a consistent page 1 performer.",
+  41: "New in April — Crown Casino LP launched at the start of the month. Four keywords entering from N/A to positions 10-13, plus one term on page 1 and eight on page 2 after just 30 days. That's an excellent start for a brand-new page.\n\nCrown is one of Melbourne's biggest entertainment precincts. Crown itself has hotels but they're premium-priced — meaning budget-to-mid market accommodation near Crown is a genuine and underserved search category. We're filling that gap.\n\nWhy did this page index and rank quickly? Domain authority of bradyhotels.com.au gives new pages a reasonable initial trust signal. And the content clearly signals relevance — it covers Brady Hotels' proximity to Crown with the specificity that matches user intent for these queries.\n\nThe critical next step is internal linking. Adding links to the Crown Casino LP from the homepage, hotel pages, and any location-mention blog posts passes authority signals that accelerate movement from page 2 to page 1 faster than waiting for organic authority accumulation.",
+  42: "Princes Theater LP — indexed in late April, days old, and already showing two page 1 rankings at positions 8 and 10. That's an immediate signal that the page content is highly relevant to these search queries.\n\nThe Regent and Princes Theatre precinct generates accommodation demand around show seasons — Broadway musicals, touring productions. These audiences book in advance and are often from interstate, making them high-value multi-night stays.\n\nFor a page this new, the approach is monitor, not optimise. Let the page accumulate authority naturally through May, then reassess in June. If it maintains or improves page 1 positions, we move into active optimisation — expanding content, building internal links, and targeting additional queries. If positions drop, we investigate and reinforce.\n\nThe internal linking strategy is especially critical here — because the page just launched, it hasn't had time to build inbound link equity. Every link from another Brady page is disproportionately valuable at this early stage.",
+  43: "Four pages indexed, not yet ranking: Queen Victoria Market, Regent Theatre, Four Star Hotels Melbourne, Apartment Hotels Melbourne. This is completely normal for new pages — timeline from indexing to ranking on competitive terms is typically 3-6 months.\n\nThe question is how we accelerate that timeline without waiting passively. Internal linking optimisation is the answer. Connecting these pages from the homepage, hotel-specific pages, and existing content articles passes authority signals and helps Google understand their relevance. This costs nothing in media spend — it's structural optimisation that delivers compound returns.\n\nWe'll also conduct a content review in May: checking H1 and H2 structure, keyword density, and FAQ sections for each page. The goal is to ensure Google has everything it needs to understand what each page is about and why it should rank for the target queries.",
+  44: "This is a new section of the report reflecting a genuine shift in how people discover accommodation. AI-powered search — ChatGPT, Google AI Overviews, Perplexity — is now being used to research where to stay.\n\nBrady Hotels generated 369 AI mentions and 267 AI citations in April. 195 sessions came from AI referrals, resulting in 6 bookings and $4,104 revenue at a 3% conversion rate. That 3% CVR is exceptionally strong for a new channel — industry average for AI referral traffic is typically under 1%.\n\nWhy is Brady appearing in AI results? Because our content strategy is working. AI systems extract information from pages that are clear, well-structured, and semantically rich. The landing pages for Marvel Stadium, Crown Casino, MCEC — these contain exactly the kind of specific, location-relevant content that AI surfaces when someone asks 'what hotels are near Crown Casino Melbourne'.\n\nThe strategic implication: investing in content quality and structured data isn't just for traditional SEO anymore — it's also your AI visibility strategy. The same content that ranks in Google gets cited by AI assistants. This is why the landing page program is doubly valuable.\n\nThe watch item: AI Overviews are likely also reducing CTR on branded search terms, as we saw in the Brand vs Generic slide. We need to build AI visibility while simultaneously defending traditional organic positions.",
+  45: "The SEO next steps are structured around four clear priorities.\n\nFirst, the two new landing pages in progress — Melbourne Business Hotels and Elizabeth Street Hotel. Business Hotels targets the corporate extended-stay segment: high AOV, repeat booking potential, and a segment we're not currently capturing organically. Elizabeth Street is a new property expansion and needs organic presence from day one of opening.\n\nSecond, re-optimisation of existing hotel pages. Flinders Street LP is up 35% YoY — the only hotel page growing. We want to reverse-engineer its H1/H2 structure and replicate it across Hardware Lane, Jones Lane, and Central Melbourne. This is a content efficiency play: find what's working and systematise it across the portfolio.\n\nThird, brand SERP defence. CTR dropped from 9.70% to 7.03% on branded queries. We're auditing title tags and meta descriptions for all hotel pages, expanding Google Business Profiles with posts, photos, and Q&A, and adding FAQPage schema markup. These changes make Brady Hotels more prominent and clickable when people search for us by name.\n\nFourth, the monthly operational programme: internal linking for new LPs, health check on the four indexed-but-not-ranking pages, citation audit, and backlink reclamation. These are the consistent compound-interest activities that make SEO work over a 12-month horizon.",
+  46: "We've now covered the full April performance across all channels. Let me give you the full-year picture — what's actual through April and what we're projecting through December 2026.",
+  47: "The full-year P&L shows the financial trajectory of the entire programme. January through April are actuals. May through December are forecasts based on event calendars and the campaign changes we're implementing today.\n\nApril's ROI at 14.1× looks softer than Q1 — that's seasonal, not structural. April is Melbourne's weakest demand month and revenue softened accordingly. Q3 is where the model projects the strongest returns: August through October averaging 14-16× ROI, driven by AFL Grand Final weekend — historically Brady Hotels' highest revenue month of the year.\n\nThe agency fee at $5,400/month is fixed and represents strong value at these revenue levels. Total investment for the year is projected at $313K — media plus agency — returning $3.86M in attributed revenue at a 12.3× full-year ROAS.\n\nOne number to watch: May's projected $310K revenue. The action plan we've outlined today — Group PMAX scaling, Singapore launch, Social creative refresh, Metasearch bid increases — is not yet baked into these forecasts. Executing cleanly on those moves puts May revenue closer to $340-360K. The forecast is the conservative floor.",
+  48: "The per-hotel, per-channel forecast shows where full-year revenue is concentrated and why.\n\nHardware Lane and Central Melbourne are your two largest revenue generators at $744K and $736K projected full-year — both driven primarily by SEM where their rates and locations compete most effectively.\n\nThe Metasearch column for Hardware Lane at $205K is notable — highest metasearch forecast in the portfolio, achievable because the $310 ADR generates very high-value bookings from guests who use price comparison tools specifically when seeking premium serviced apartments.\n\nThe Brady Group social forecast at $82K is the largest social revenue contributor. This reinforces why the Group campaign is the highest priority for budget scaling — it's driving cross-portfolio revenue that no individual hotel campaign generates.\n\nFlinders Street and Jones Lane at 10.8× full-year ROAS are slightly below portfolio average — both have clear upside through the rate and bid optimisation actions we've outlined today.\n\nFull year projection: $2.95M in total attributed revenue at $293K total media cost — a 10.1× full-year portfolio ROAS. This programme is delivering. The question isn't whether it's working — it's how fast we can responsibly scale it. Thank you.",
+};
+
+  // ── inject CSS ──────────────────────────────────────────────────────────
+  var style = document.createElement('style');
+  style.textContent = document.getElementById('speaker-notes-css').textContent;
+  document.head.appendChild(style);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SHARED HELPERS
+  // ══════════════════════════════════════════════════════════════════════════
+  function getCurrentSlide() {
+    var slides = document.querySelectorAll('.slide');
+    var best = null, bestDist = Infinity;
+    slides.forEach(function(s) {
+      var r = s.getBoundingClientRect();
+      var cx = r.left + r.width / 2;
+      var cy = r.top  + r.height / 2;
+      var d  = Math.abs(cx - window.innerWidth / 2) + Math.abs(cy - window.innerHeight / 2);
+      if (d < bestDist) { bestDist = d; best = s; }
+    });
+    return best;
+  }
+  function getSlideNum(slide) {
+    if (!slide) return 1;
+    var el = slide.querySelector('.slide-num');
+    if (!el) return 1;
+    var m = el.textContent.match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : 1;
+  }
+  function commentKey(n) { return 'brady_comment_slide_' + n; }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // NOTES POPUP WINDOW  (N key — opens a real separate browser window)
+  // ══════════════════════════════════════════════════════════════════════════
+  var notesWin = null;
+
+  var POPUP_HTML = [
+    '<!DOCTYPE html>',
+    '<html lang="en"><head>',
+    '<meta charset="utf-8">',
+    '<title>Speaker Notes — Brady Hotels × April 2026</title>',
+    '<style>',
+    '  *{margin:0;padding:0;box-sizing:border-box}',
+    '  html,body{height:100%;background:#0b1022;color:#e8eaf0;',
+    '    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}',
+    '  #header{',
+    '    display:flex;align-items:center;gap:12px;',
+    '    padding:10px 20px 9px;',
+    '    background:rgba(94,63,190,0.18);',
+    '    border-bottom:2px solid #5e3fbe;',
+    '    flex-shrink:0',
+    '  }',
+    '  #slide-badge{',
+    '    background:#5e3fbe;color:#fff;',
+    '    font-size:11px;font-weight:700;letter-spacing:.06em;',
+    '    padding:3px 10px;border-radius:20px;white-space:nowrap',
+    '  }',
+    '  #slide-title{',
+    '    font-size:12px;font-weight:600;color:rgba(255,255,255,.55);',
+    '    flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis',
+    '  }',
+    '  #conn-dot{',
+    '    width:8px;height:8px;border-radius:50%;',
+    '    background:#2eb8a6;flex-shrink:0;',
+    '    box-shadow:0 0 6px #2eb8a6',
+    '  }',
+    '  #conn-dot.waiting{background:#555;box-shadow:none}',
+    '  #body-wrap{',
+    '    height:calc(100vh - 44px);overflow-y:auto;',
+    '    padding:22px 28px 28px',
+    '  }',
+    '  #waiting{',
+    '    text-align:center;padding-top:80px;',
+    '    color:rgba(255,255,255,.25);font-size:14px',
+    '  }',
+    '  #waiting svg{display:block;margin:0 auto 16px;opacity:.2}',
+    '  #script-wrap{display:none}',
+    '  .para{',
+    '    font-size:15px;line-height:1.75;',
+    '    color:#dde1f0;margin-bottom:1.1em',
+    '  }',
+    '  .para:last-child{margin-bottom:0}',
+    '  .para b{color:#fff}',
+    '  /* scrollbar */',
+    '  #body-wrap::-webkit-scrollbar{width:5px}',
+    '  #body-wrap::-webkit-scrollbar-track{background:transparent}',
+    '  #body-wrap::-webkit-scrollbar-thumb{background:#2a2f4a;border-radius:4px}',
+    '  /* slide-in animation */',
+    '  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}',
+    '  .animate{animation:fadeUp .25s ease both}',
+    '</style>',
+    '</head><body>',
+    '<div id="header">',
+    '  <div id="slide-badge">Slide — / 48</div>',
+    '  <div id="slide-title">Waiting for presentation…</div>',
+    '  <div id="conn-dot" class="waiting" title="Synced with deck"></div>',
+    '</div>',
+    '<div id="body-wrap">',
+    '  <div id="waiting">',
+    '    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">',
+    '      <circle cx="24" cy="24" r="20" stroke="white" stroke-width="2.5"/>',
+    '      <path d="M24 14v10l6 6" stroke="white" stroke-width="2.5" stroke-linecap="round"/>',
+    '    </svg>',
+    '    Switch to the next slide to sync speaker notes.',
+    '  </div>',
+    '  <div id="script-wrap"></div>',
+    '</div>',
+    '<script>',
+    // renderNote: shared display function
+    '  function renderNote(n,text){',
+    '    document.getElementById("slide-badge").textContent=',
+    '      "Slide "+String(n).padStart(2,"0")+" / 48";',
+    '    document.getElementById("conn-dot").classList.remove("waiting");',
+    '    document.getElementById("waiting").style.display="none";',
+    '    var w=document.getElementById("script-wrap");',
+    '    w.style.display="block";',
+    '    var paras=(text||"").split(/\\n\\n+/);',
+    '    w.innerHTML=paras.map(function(p){',
+    '      return "<div class=\\"para animate\\">"+p.trim().replace(/\\n/g,"<br>")+"</div>";',
+    '    }).join("");',
+    '    document.getElementById("body-wrap").scrollTop=0;',
+    '  }',
+    // Channel 1: localStorage (written by main window on every slide change)
+    '  function fromStorage(){',
+    '    try{var d=JSON.parse(localStorage.getItem("brady_slide_data")||"null");',
+    '      if(d&&d.n)renderNote(d.n,d.text);}catch(e){}',
+    '  }',
+    // Channel 2: storage event (main window triggers, popup updates instantly)
+    '  window.addEventListener("storage",function(e){',
+    '    if(e.key==="brady_slide_data")fromStorage();',
+    '  });',
+    // Channel 3: postMessage fallback
+    '  window.addEventListener("message",function(e){',
+    '    if(e.data&&e.data.type==="notes-slide")renderNote(e.data.n,e.data.text);',
+    '  });',
+    // On load: call opener callback → it writes to localStorage → we read it
+    '  window.addEventListener("load",function(){',
+    '    try{',
+    '      if(window.opener&&window.opener.bradySendNotes)window.opener.bradySendNotes();',
+    '      else fromStorage();',
+    '    }catch(e){fromStorage();}',
+    '  });',
+    '<\/script>',
+    '</body></html>'
+  ].join('\n');
+
+  function notesOpen() { return notesWin && !notesWin.closed; }
+
+  // Exposed so the popup can call back once its load event fires
+  window.bradySendNotes = function() {
+    var n    = getSlideNum(getCurrentSlide());
+    var text = NOTES[n] || 'No notes for this slide.';
+    // PRIMARY: write to localStorage — popup reads this instantly
+    try { localStorage.setItem('brady_slide_data', JSON.stringify({ n: n, text: text })); } catch(e) {}
+    // SECONDARY: postMessage (works when same-origin popup is already loaded)
+    if (notesOpen()) {
+      try { notesWin.postMessage({ type: 'notes-slide', n: n, text: text }, '*'); } catch(e) {}
+    }
+  };
+
+  function notesUpdate() {
+    if (!notesOpen()) return;
+    window.bradySendNotes();
+  }
+
+  function openNotesWindow() {
+    var features = 'width=840,height=660,resizable=yes,scrollbars=yes,' +
+                   'menubar=no,toolbar=no,location=no,status=no';
+    notesWin = window.open('', 'brady_speaker_notes', features);
+    if (!notesWin) {
+      alert('Popup blocked! Please allow popups for this page, then press N again.');
+      return;
+    }
+    // Pre-write current slide to localStorage BEFORE the popup loads
+    // so it has data the moment its load event fires
+    window.bradySendNotes();
+    notesWin.document.open();
+    notesWin.document.write(POPUP_HTML);
+    notesWin.document.close();
+  }
+
+  function toggleNotes() {
+    if (notesOpen()) {
+      notesWin.close();
+    } else {
+      openNotesWindow();
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // COMMENTS PANEL  ("+" FAB → editable footer)
+  // ══════════════════════════════════════════════════════════════════════════
+  var commPanel = document.createElement('div');
+  commPanel.id = 'comments-panel';
+  commPanel.innerHTML =
+    '<div id="comments-header">' +
+      '<span id="comments-title">💬 Slide Comment</span>' +
+      '<span id="comments-slide-label">Slide 01</span>' +
+      '<span id="comments-save-indicator">✓ Saved</span>' +
+      '<button id="comments-close" title="Close">✕</button>' +
+    '</div>' +
+    '<textarea id="comments-textarea" placeholder="Add a comment for this slide… (auto-saved on close)"></textarea>';
+  document.body.appendChild(commPanel);
+
+  var fab = document.createElement('button');
+  fab.id    = 'comments-fab';
+  fab.title = 'Add slide comment';
+  fab.textContent = '+';
+  document.body.appendChild(fab);
+
+  var commOpen = false;
+  var commCurrentSlide = 1;
+  var saveTimer;
+
+  function fabDotUpdate(n) {
+    var existing = localStorage.getItem(commentKey(n));
+    if (existing && existing.trim()) {
+      fab.classList.add('has-comment');
+    } else {
+      fab.classList.remove('has-comment');
+    }
+  }
+
+  function openComments() {
+    var n = getSlideNum(getCurrentSlide());
+    commCurrentSlide = n;
+    document.getElementById('comments-slide-label').textContent =
+      'Slide ' + String(n).padStart(2,'0') + ' / 48';
+    var ta = document.getElementById('comments-textarea');
+    ta.value = localStorage.getItem(commentKey(n)) || '';
+    hideSaveIndicator();
+    commPanel.classList.add('open');
+    fab.classList.add('active');
+    commOpen = true;
+    setTimeout(function() { ta.focus(); }, 280);
+  }
+
+  function saveComment() {
+    var ta = document.getElementById('comments-textarea');
+    var val = ta.value;
+    if (val.trim()) {
+      localStorage.setItem(commentKey(commCurrentSlide), val);
+    } else {
+      localStorage.removeItem(commentKey(commCurrentSlide));
+    }
+    showSaveIndicator();
+    fabDotUpdate(commCurrentSlide);
+  }
+
+  function closeComments() {
+    saveComment();
+    commPanel.classList.remove('open');
+    fab.classList.remove('active');
+    commOpen = false;
+  }
+
+  function showSaveIndicator() {
+    var ind = document.getElementById('comments-save-indicator');
+    ind.classList.add('show');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function() { ind.classList.remove('show'); }, 1800);
+  }
+  function hideSaveIndicator() {
+    document.getElementById('comments-save-indicator').classList.remove('show');
+  }
+
+  // auto-save on textarea input (debounced)
+  var autoSaveTimer;
+  document.getElementById('comments-textarea').addEventListener('input', function() {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(function() {
+      var ta = document.getElementById('comments-textarea');
+      var val = ta.value;
+      if (val.trim()) {
+        localStorage.setItem(commentKey(commCurrentSlide), val);
+      } else {
+        localStorage.removeItem(commentKey(commCurrentSlide));
+      }
+      fabDotUpdate(commCurrentSlide);
+      showSaveIndicator();
+    }, 800);
+  });
+
+  fab.addEventListener('click', function() {
+    if (commOpen) closeComments(); else openComments();
+  });
+  document.getElementById('comments-close').addEventListener('click', closeComments);
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // KEYBOARD & SCROLL EVENTS
+  // ══════════════════════════════════════════════════════════════════════════
+  document.addEventListener('keydown', function(e) {
+    var tag = e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'n' || e.key === 'N') toggleNotes();
+    if (e.key === 'Escape') { if (commOpen) closeComments(); }
+  });
+
+  // update notes content when slide changes
+  var scrollTimer;
+  function onSlideChange() {
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(function() {
+      notesUpdate();
+      // update FAB dot for current slide
+      fabDotUpdate(getSlideNum(getCurrentSlide()));
+    }, 180);
+  }
+  window.addEventListener('scroll', onSlideChange, true);
+  document.addEventListener('keyup', function(e) {
+    if (['ArrowRight','ArrowLeft','ArrowDown','ArrowUp','PageDown','PageUp'].indexOf(e.key) !== -1) {
+      setTimeout(function() {
+        notesUpdate();
+        fabDotUpdate(getSlideNum(getCurrentSlide()));
+      }, 120);
+    }
+  });
+
+  // init FAB dot on load
+  setTimeout(function() { fabDotUpdate(1); }, 400);
+
+})();
+
 </script>
 </body>
 </html>

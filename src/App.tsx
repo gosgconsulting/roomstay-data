@@ -22,6 +22,7 @@ import CustomReportsPage from "./pages/CustomReportsPage";
 import CustomReportViewPage from "./pages/CustomReportViewPage";
 import SlidesPage from "./pages/SlidesPage";
 import SlideViewerPage from "./pages/SlideViewerPage";
+import ScriptPage from "./pages/ScriptPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
         <Routes>
           {/* Public routes */}
           <Route path="/auth" element={<Auth />} />
+          <Route path="/script/:slideId" element={<ScriptPage />} />
           <Route path="/shared/:slug" element={<SharedReport />} />
           <Route path="/shared/:slug/studio" element={<SlideViewPage />} />
           <Route path="/shared/:slug/report" element={<SharedCustomReportPage />} />
