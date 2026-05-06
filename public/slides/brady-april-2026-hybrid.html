@@ -3378,9 +3378,15 @@
         void slide.offsetWidth;
         await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
 
+        // foreignObjectRendering uses the browser's native SVG foreignObject
+        // text engine, preserving exact word-spacing/kerning instead of
+        // html2canvas's own approximated text renderer (which collapses
+        // spaces at line wraps and inline-element boundaries).
         var canvas = await html2canvas(slide, {
           scale: 2,
           useCORS: true,
+          allowTaint: false,
+          foreignObjectRendering: true,
           backgroundColor: '#FFFFFF',
           width: 1280,
           height: 720,
@@ -3520,7 +3526,9 @@
         hs.textContent = PPTX_SELECTORS.join(', ') + ' { color: rgba(0,0,0,0) !important; -webkit-text-fill-color: rgba(0,0,0,0) !important; text-shadow: none !important; }';
         document.head.appendChild(hs);
         var canvas = await html2canvas(slides[i], {
-          scale: 2, useCORS: true, backgroundColor: '#FFFFFF',
+          scale: 2, useCORS: true, allowTaint: false,
+          foreignObjectRendering: true,
+          backgroundColor: '#FFFFFF',
           width: 1280, height: 720, windowWidth: 1280, windowHeight: 720, logging: false
         });
         var rm = document.getElementById('__pptx-no-text'); if (rm) rm.remove();
@@ -3642,7 +3650,8 @@
         var hs=document.createElement('style'); hs.id='__gs-no-text';
         hs.textContent=GSLIDES_SELECTORS.join(', ') + ' { color: rgba(0,0,0,0) !important; -webkit-text-fill-color: rgba(0,0,0,0) !important; text-shadow: none !important; }';
         document.head.appendChild(hs);
-        var canvas=await html2canvas(slides[i],{scale:2,useCORS:true,backgroundColor:'#FFFFFF',
+        var canvas=await html2canvas(slides[i],{scale:2,useCORS:true,allowTaint:false,
+          foreignObjectRendering:true,backgroundColor:'#FFFFFF',
           width:1280,height:720,windowWidth:1280,windowHeight:720,logging:false});
         var rm=document.getElementById('__gs-no-text'); if(rm) rm.remove();
         var pptSlide=pptx.addSlide();
