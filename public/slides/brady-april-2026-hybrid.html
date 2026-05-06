@@ -482,12 +482,26 @@
     body.pdf-mode .sd-sub { font-size: 20.5px !important; }
     body.pdf-mode .slide-title { font-size: 38.4px !important; }
     body.pdf-mode .toc-title { font-size: 19.2px !important; }
-    /* SVG charts: explicit pixel max-height to defeat min(50vh,…) shrinkage */
-    body.pdf-mode svg[viewBox] {
+    /* Large line/area trend charts — explicit pixel max-height defeats
+       min(50vh,…) shrinkage. Scoped narrowly so it does NOT affect small
+       fixed-size SVGs like the 80x80 donut indicators. */
+    body.pdf-mode svg[viewBox="0 0 920 320"] {
       max-height: 320px !important;
       max-width: 100% !important;
       width: 100% !important;
       height: auto !important;
+    }
+    body.pdf-mode svg[viewBox="0 0 600 220"] {
+      max-height: 220px !important;
+      max-width: 100% !important;
+      width: 100% !important;
+      height: auto !important;
+    }
+    /* Donut indicators stay at their declared 80x80 — never stretch. */
+    body.pdf-mode svg[viewBox="0 0 80 80"] {
+      width: 80px !important;
+      height: 80px !important;
+      flex-shrink: 0 !important;
     }
     /* Any remaining inline clamp() / vw font-sizes inside metric tiles */
     body.pdf-mode [style*="clamp("] { font-size: revert; }
