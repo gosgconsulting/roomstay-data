@@ -651,7 +651,10 @@
         print-color-adjust: exact !important;
         opacity: 1 !important;
       }
-      .slide:last-child {
+      /* Remove page-break-after on the last slide so we don't end with a
+         trailing blank page. Use :last-of-type because the body's last
+         child is a <script>, not a .slide — :last-child wouldn't match. */
+      section.slide:last-of-type {
         page-break-after: auto !important;
         break-after: auto !important;
       }
