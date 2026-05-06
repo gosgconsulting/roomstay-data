@@ -3329,18 +3329,27 @@
 
       // 3b. Preload every <img> on the deck so the screenshots embedded on
       //     image-heavy slides (e.g. AI Visibility) are fully decoded before
-      //     html2canvas reads them. Captures the slide as one rasterised
-      //     image, so PNG/JPG sources stay as images in the final PDF.
+      //     capture. html-to-image converts <img> -> data URL by fetching
+      //     each src; if the image isn't already in the browser cache, the
+      //     fetch can race the capture.
       var allImgs = Array.prototype.slice.call(document.querySelectorAll('img'));
       await Promise.all(allImgs.map(function (img) {
         if (img.complete && img.naturalWidth > 0) return Promise.resolve();
         return new Promise(function (resolve) {
           img.addEventListener('load', resolve, { once: true });
           img.addEventListener('error', resolve, { once: true });
-          // Safety timeout in case an image never resolves
           setTimeout(resolve, 4000);
         });
       }));
+
+      // 3c. Pre-compute the font-embed CSS once for the deck. This embeds
+      //     Manrope + Syne as base64 data URIs so foreignObject SVGs render
+      //     with correct typography on every slide instead of loading them
+      //     47 times.
+      var sharedFontCSS = '';
+      try {
+        sharedFontCSS = await window.htmlToImage.getFontEmbedCSS(document.body);
+      } catch (fe) { sharedFontCSS = ''; }
 
       document.querySelectorAll('.slide').forEach(function (s) { void s.offsetWidth; });
       await new Promise(function (r) { setTimeout(r, 900); });
@@ -3380,34 +3389,34 @@
         void slide.offsetWidth;
         await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
 
-        // Primary: html-to-image library — uses the browser's native
-        // foreignObject text rasteriser, so word-spacing, kerning, line wraps
-        // and inline-element boundaries (e.g. <strong> -> regular text) all
-        // render exactly as they appear on screen. html2canvas's own
-        // approximated text renderer (used by foreignObjectRendering: true
-        // when it falls back) was producing 'wordsstucktogether' even with
-        // letter-spacing/kerning overrides.
+        // Primary: html-to-image — uses native foreignObject text rendering
+        // so word-spacing/kerning/line-wraps match the screen exactly. We
+        // call toCanvas (not toJpeg directly) to get more control + a
+        // reliable JPEG conversion path.
+        //
+        // Config notes:
+        //   • cacheBust:false — DO NOT append ?<ts> to image URLs, that
+        //     breaks local PNG/JPG references.
+        //   • fontEmbedCSS — pre-computed once, embeds Manrope/Syne as
+        //     base64 so the foreignObject renders with real fonts.
+        //   • skipAutoScale:true — keeps our own 1280x720 sizing.
+        //   • No inline style override — let pdf-mode CSS handle layout.
         var imgData = null;
         try {
-          imgData = await window.htmlToImage.toJpeg(slide, {
-            quality: 0.92,
+          var canvasHti = await window.htmlToImage.toCanvas(slide, {
             pixelRatio: 2,
             width: 1280,
             height: 720,
             backgroundColor: '#FFFFFF',
-            cacheBust: true,
+            cacheBust: false,
             skipAutoScale: true,
-            style: {
-              width: '1280px',
-              height: '720px',
-              transform: 'none',
-              transformOrigin: 'top left'
-            }
+            fontEmbedCSS: sharedFontCSS
           });
+          imgData = canvasHti.toDataURL('image/jpeg', 0.92);
         } catch (htiErr) {
           // Fallback to html2canvas only if html-to-image throws (rare —
-          // typically only for cross-origin font issues). Text fidelity will
-          // be lower but at least the slide gets captured.
+          // typically only for cross-origin font / SVG issues). Text fidelity
+          // will be lower but at least the slide gets captured.
           var canvas = await html2canvas(slide, {
             scale: 2, useCORS: true, allowTaint: false,
             foreignObjectRendering: true, backgroundColor: '#FFFFFF',
