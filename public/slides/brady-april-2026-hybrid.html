@@ -3360,6 +3360,57 @@
         compress: true
       });
 
+      // 5b. Helper: walk every text node inside a slide and return a list of
+      //     {text, x, y, fs, bold} entries in PDF-point coordinates. We use
+      //     this to draw an INVISIBLE text layer over the rasterised JPEG so
+      //     copy-paste / search extracts real text — bypassing OCR (which is
+      //     what was producing 'Bottomis strongest(brand…' artifacts when the
+      //     PDF was image-only).
+      //     1280 CSS px slide -> 960 pt PDF page  ⇒ scale factor 0.75 for
+      //     positions and font sizes.
+      var SCALE = 0.75;
+      function extractTextLayer(slideEl) {
+        var sr = slideEl.getBoundingClientRect();
+        var entries = [];
+        var walker = document.createTreeWalker(slideEl, NodeFilter.SHOW_TEXT, null, false);
+        var node;
+        while ((node = walker.nextNode())) {
+          var raw = node.nodeValue;
+          if (!raw) continue;
+          var trimmed = raw.replace(/\s+/g, ' ');
+          if (!trimmed.trim()) continue;
+          var parent = node.parentElement;
+          if (!parent) continue;
+          var st = window.getComputedStyle(parent);
+          if (st.display === 'none' || st.visibility === 'hidden' || parseFloat(st.opacity) < 0.05) continue;
+          var range = document.createRange();
+          try {
+            range.selectNodeContents(node);
+            var rects = range.getClientRects();
+            if (!rects || !rects.length) continue;
+            var fontPx = parseFloat(st.fontSize) || 14;
+            var weight = parseInt(st.fontWeight, 10) || 400;
+            var bold = weight >= 600;
+            for (var k = 0; k < rects.length; k++) {
+              var r = rects[k];
+              if (r.width < 1 || r.height < 1) continue;
+              var dx = r.left - sr.left;
+              var dy = r.top - sr.top;
+              if (dx < 0 || dy < 0 || dx > sr.width || dy > sr.height) continue;
+              entries.push({
+                t: trimmed,
+                x: dx * SCALE,
+                y: (dy + fontPx * 0.85) * SCALE, // baseline ≈ 85% of em
+                fs: fontPx * SCALE,
+                bold: bold
+              });
+              break; // one box per text node is enough; full string still selectable
+            }
+          } catch (e) {}
+        }
+        return entries;
+      }
+
       // 6. Capture each slide and add as a PDF page
       for (var i = 0; i < total; i++) {
         var slide = slides[i];
@@ -3394,6 +3445,21 @@
         var imgData = canvas.toDataURL('image/jpeg', 0.92);
         if (i > 0) pdf.addPage([960, 540], 'landscape');
         pdf.addImage(imgData, 'JPEG', 0, 0, 960, 540, undefined, 'FAST');
+
+        // INVISIBLE TEXT LAYER — extract DOM text positions and draw them on
+        // top of the JPEG with renderingMode='invisible'. The user sees the
+        // JPEG; copy-paste / search extracts the real text with proper
+        // word-spacing.
+        var textEntries = extractTextLayer(slide);
+        for (var t = 0; t < textEntries.length; t++) {
+          var te = textEntries[t];
+          if (te.fs < 4) continue;
+          try {
+            pdf.setFont('helvetica', te.bold ? 'bold' : 'normal');
+            pdf.setFontSize(te.fs);
+            pdf.text(te.t, te.x, te.y, { renderingMode: 'invisible', baseline: 'alphabetic' });
+          } catch (e) { /* ignore single-string failures */ }
+        }
       }
 
       // 7. Final progress + download
