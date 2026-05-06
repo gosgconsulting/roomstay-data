@@ -918,79 +918,79 @@
     <div class="slide-content">
       <table class="dt anim d2" style="margin-bottom:var(--gap)">
         <thead><tr>
-          <th>Channel</th><th>Spend</th><th>Revenue</th><th>ROAS</th><th>CoS %</th><th>Clicks</th><th>Bookings</th>
+          <th>Channel</th><th>Cost</th><th>Revenue</th><th>ROAS</th><th>CoS %</th><th>Bookings</th><th>Clicks</th><th>CR</th><th>AOV</th>
         </tr></thead>
         <tbody>
           <tr>
             <td><span style="color:var(--ch-sem);font-weight:700">● SEM</span></td>
-            <td>$7,542</td><td>$212K</td><td class="pos">28.1×</td><td class="pos">3.6%</td><td>11,721</td><td>424</td>
+            <td>$7,542</td><td>$215,165</td><td class="pos">28.5×</td><td class="pos">3.5%</td><td>434</td><td>11,721</td><td>3.70%</td><td>$496</td>
           </tr>
           <tr>
             <td><span style="color:var(--ch-meta);font-weight:700">● Metasearch</span></td>
-            <td>$1,879</td><td>$66K</td><td class="pos">35.2×</td><td class="pos">2.8%</td><td>2,100</td><td>130</td>
+            <td>$1,879</td><td>$66,152</td><td class="pos">35.2×</td><td class="pos">2.8%</td><td>130</td><td>2,100</td><td class="pos">6.19%</td><td>$509</td>
           </tr>
           <tr>
             <td><span style="color:var(--ch-social);font-weight:700">● Social <span style="font-weight:400;color:var(--text-muted)">(att.)</span></span></td>
-            <td>$5,452</td><td>$103K</td><td class="pos">18.9×</td><td class="pos">5.3%</td><td>6,382</td><td>205</td>
+            <td>$5,453</td><td>$102,972</td><td class="pos">18.9×</td><td>5.3%</td><td>205</td><td>5,048</td><td>4.06%</td><td>$502</td>
           </tr>
         </tbody>
         <tfoot><tr>
-          <td>Total</td><td>$14,873</td><td>$381K</td><td class="pos">25.6×</td><td class="pos">3.9%</td><td>20,203</td><td>759</td>
+          <td>Total</td><td>$14,874</td><td>$384,289</td><td class="pos">25.8×</td><td class="pos">3.9%</td><td>769</td><td>18,869</td><td class="pos">4.08%</td><td>$500</td>
         </tr></tfoot>
       </table>
       <div class="chart-grid-3">
         <!-- CLICKS DONUT -->
         <div class="chart-card anim d3">
           <div class="ch-sub">Clicks Share</div>
-          <div class="ch-title">SEM 58% · Social 32%</div>
+          <div class="ch-title">SEM 62% · Social 27%</div>
           <div class="ch-body" style="display:flex;align-items:center;gap:1rem">
-            <!-- Donut: SEM 58.0% · Social 31.6% · Meta 10.4% (C=201.06 @ r=32) -->
+            <!-- Donut: SEM 62.1% · Social 26.8% · Meta 11.1% (C=201.06 @ r=32) -->
             <svg viewBox="0 0 80 80" width="80" height="80" style="flex-shrink:0;display:block">
-              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-sem)" stroke-width="16" stroke-dasharray="116.62 201.06" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
-              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-social)" stroke-width="16" stroke-dasharray="63.53 201.06" stroke-dashoffset="-116.62" transform="rotate(-90 40 40)"/>
-              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-meta)" stroke-width="16" stroke-dasharray="20.91 201.06" stroke-dashoffset="-180.15" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-sem)" stroke-width="16" stroke-dasharray="124.86 201.06" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-social)" stroke-width="16" stroke-dasharray="53.88 201.06" stroke-dashoffset="-124.86" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-meta)" stroke-width="16" stroke-dasharray="22.32 201.06" stroke-dashoffset="-178.74" transform="rotate(-90 40 40)"/>
             </svg>
             <div style="font-size:var(--fs-label);line-height:2;flex:1">
-              <div><span style="color:var(--ch-sem)">■</span> SEM <strong>58.0%</strong></div>
-              <div><span style="color:var(--ch-social)">■</span> Social <strong>31.6%</strong></div>
-              <div><span style="color:var(--ch-meta)">■</span> Metasearch <strong>10.4%</strong></div>
+              <div><span style="color:var(--ch-sem)">■</span> SEM <strong>62.1%</strong></div>
+              <div><span style="color:var(--ch-social)">■</span> Social <strong>26.8%</strong></div>
+              <div><span style="color:var(--ch-meta)">■</span> Metasearch <strong>11.1%</strong></div>
             </div>
           </div>
-          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.5rem">20,203 total clicks</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.5rem">18,869 total clicks</div>
         </div>
         <!-- REVENUE DONUT -->
         <div class="chart-card anim d4">
           <div class="ch-sub">Revenue Share</div>
           <div class="ch-title">SEM 56% · Social 27%</div>
           <div class="ch-body" style="display:flex;align-items:center;gap:1rem">
-            <!-- Donut: SEM 55.6% · Meta 17.3% · Social 27.0% (C=201.06 @ r=32) -->
+            <!-- Donut: SEM 56.0% · Meta 17.2% · Social 26.8% (C=201.06 @ r=32) -->
             <svg viewBox="0 0 80 80" width="80" height="80" style="flex-shrink:0;display:block">
-              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-sem)" stroke-width="16" stroke-dasharray="111.79 201.06" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
-              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-meta)" stroke-width="16" stroke-dasharray="34.78 201.06" stroke-dashoffset="-111.79" transform="rotate(-90 40 40)"/>
-              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-social)" stroke-width="16" stroke-dasharray="54.29 201.06" stroke-dashoffset="-146.57" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-sem)" stroke-width="16" stroke-dasharray="112.59 201.06" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-meta)" stroke-width="16" stroke-dasharray="34.58 201.06" stroke-dashoffset="-112.59" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-social)" stroke-width="16" stroke-dasharray="53.88 201.06" stroke-dashoffset="-147.18" transform="rotate(-90 40 40)"/>
             </svg>
             <div style="font-size:var(--fs-label);line-height:2;flex:1">
-              <div><span style="color:var(--ch-sem)">■</span> SEM <strong>55.6%</strong></div>
-              <div><span style="color:var(--ch-meta)">■</span> Metasearch <strong>17.3%</strong></div>
-              <div><span style="color:var(--ch-social)">■</span> Social <strong>27.0%</strong></div>
+              <div><span style="color:var(--ch-sem)">■</span> SEM <strong>56.0%</strong></div>
+              <div><span style="color:var(--ch-meta)">■</span> Metasearch <strong>17.2%</strong></div>
+              <div><span style="color:var(--ch-social)">■</span> Social <strong>26.8%</strong></div>
             </div>
           </div>
-          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.5rem">$381K total attributed</div>
+          <div style="font-size:var(--fs-label);color:var(--text-muted);margin-top:0.5rem">$384K total attributed</div>
         </div>
         <!-- ROAS DONUT -->
         <div class="chart-card anim d5">
           <div class="ch-sub">ROAS Efficiency</div>
-          <div class="ch-title">Meta 35.2× · SEM 28.1× · Social 18.9×</div>
+          <div class="ch-title">Meta 35.2× · SEM 28.5× · Social 18.9×</div>
           <div class="ch-body" style="display:flex;align-items:center;gap:1rem">
-            <!-- Donut: Meta 42.8% · SEM 34.2% · Social 23.0% (C=201.06 @ r=32) -->
+            <!-- Donut: Meta 42.6% · SEM 34.5% · Social 22.9% (C=201.06 @ r=32) -->
             <svg viewBox="0 0 80 80" width="80" height="80" style="flex-shrink:0;display:block">
-              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-meta)" stroke-width="16" stroke-dasharray="86.05 201.06" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
-              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-sem)" stroke-width="16" stroke-dasharray="68.76 201.06" stroke-dashoffset="-86.05" transform="rotate(-90 40 40)"/>
-              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-social)" stroke-width="16" stroke-dasharray="46.24 201.06" stroke-dashoffset="-154.81" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-meta)" stroke-width="16" stroke-dasharray="85.65 201.06" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-sem)" stroke-width="16" stroke-dasharray="69.37 201.06" stroke-dashoffset="-85.65" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-social)" stroke-width="16" stroke-dasharray="46.04 201.06" stroke-dashoffset="-155.02" transform="rotate(-90 40 40)"/>
             </svg>
             <div style="font-size:var(--fs-label);line-height:2;flex:1">
               <div><span style="color:var(--ch-meta)">■</span> Metasearch <strong>35.2×</strong></div>
-              <div><span style="color:var(--ch-sem)">■</span> SEM <strong>28.1×</strong></div>
+              <div><span style="color:var(--ch-sem)">■</span> SEM <strong>28.5×</strong></div>
               <div><span style="color:var(--ch-social)">■</span> Social <strong>18.9×</strong></div>
             </div>
           </div>
@@ -998,7 +998,7 @@
         </div>
       </div>
       <div class="action-card anim d6" style="margin-top:var(--gap-sm)">
-        <strong>Most efficient:</strong> Metasearch 35.2× ROAS · 2.8% CoS — best per-dollar return. <strong>SEM</strong> $212K (56%) · <strong>Social</strong> $103K (27%) — $381K total revenue · 25.6× blended ROAS. Social bookings 205 confirmed.
+        <strong>Most efficient:</strong> Metasearch 35.2× ROAS · 2.8% CoS — best per-dollar return. <strong>SEM</strong> $215K (56%) · <strong>Social</strong> $103K (27%) — $384K total revenue · 25.8× blended ROAS. Social bookings 205 confirmed.
       </div>
     </div>
   </div>
