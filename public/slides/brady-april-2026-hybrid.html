@@ -337,7 +337,16 @@
       flex: 1; display: flex; flex-direction: column;
       justify-content: center; min-height: 0;
     }
-    .chart-card svg { width: 100%; height: auto; max-height: min(38vh, 270px); }
+    /* Wide trend / area charts (920x320 viewBox) — fill the card width.
+       Small fixed-size donut SVGs (80x80) are excluded so they keep their
+       declared dimensions and don't stretch to fill the card. */
+    .chart-card svg[viewBox="0 0 920 320"] { width: 100%; height: auto; max-height: min(38vh, 270px); }
+    .chart-card svg[viewBox="0 0 600 220"] { width: 100%; height: auto; max-height: min(30vh, 220px); }
+    .chart-card svg[viewBox="0 0 80 80"] {
+      width: 80px !important; height: 80px !important;
+      max-width: 80px; max-height: 80px;
+      flex-shrink: 0; display: block;
+    }
     /* HORIZONTAL BAR CHART */
     .hbar { display: flex; flex-direction: column; gap: 0.6rem; }
     .hbar-row { font-size: var(--fs-small); }
