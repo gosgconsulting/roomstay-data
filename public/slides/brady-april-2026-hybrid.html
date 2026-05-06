@@ -34,21 +34,31 @@
       --pos: #1B7A3E; --pos-l: #2DA655; --neg: #DC2626; --neg-l: #EF4444; --neutral: #6B7280;
       --font-display: 'Syne', system-ui, sans-serif;
       --font-body: 'Manrope', system-ui, sans-serif;
-      --fs-display: clamp(2rem, 5vw, 3.8rem);
-      --fs-h1: clamp(1.4rem, 3.2vw, 2.4rem);
-      --fs-h2: clamp(1.1rem, 2.4vw, 1.8rem);
-      --fs-h3: clamp(0.9rem, 1.7vw, 1.2rem);
-      --fs-body: clamp(0.72rem, 1.2vw, 0.92rem);
-      --fs-small: clamp(0.62rem, 0.95vw, 0.76rem);
-      --fs-label: clamp(0.56rem, 0.8vw, 0.68rem);
-      --pad: clamp(1.4rem, 3.5vw, 3.5rem);
-      --gap: clamp(0.6rem, 1.4vw, 1.4rem);
-      --gap-sm: clamp(0.3rem, 0.7vw, 0.7rem);
+      /* Fixed-size slide tokens. The deck always renders at 1280×720 — these
+         are the (former) clamp() max values now flattened to deterministic
+         pixels. Layout is identical on every screen and identical to the
+         exported PDF. */
+      --fs-display: 60.8px;
+      --fs-h1: 38.4px;
+      --fs-h2: 28.8px;
+      --fs-h3: 19.2px;
+      --fs-body: 14.7px;
+      --fs-small: 12.2px;
+      --fs-label: 10.9px;
+      --pad: 44.8px;
+      --gap: 17.9px;
+      --gap-sm: 8.96px;
+      --slide-scale: 1;
     }
+    /* ── FIXED-SIZE SLIDE ARCHITECTURE ─────────────────────────────────
+       The slide is a viewport-sized container that centers a fixed
+       1280×720 inner frame. The inner frame is scaled to fit the viewport
+       via --slide-scale (set by JS on resize). All content inside the
+       frame is laid out at exactly 1280×720 — never responsive. */
     .slide {
       width: 100vw; height: 100vh; height: 100dvh;
       overflow: hidden; scroll-snap-align: start;
-      display: flex; flex-direction: column;
+      display: flex; align-items: center; justify-content: center;
       position: relative; background: var(--white); color: var(--text);
       font-family: var(--font-body); font-weight: 400;
     }
@@ -131,13 +141,29 @@
     }
     .slide.section-divider .slide-title, .slide#s1 .slide-title { color: var(--white); }
     .slide-header { margin-bottom: var(--gap); flex-shrink: 0; }
+    /* The fixed-size slide frame. Width/height are absolute pixels so every
+       child element computes its layout against the same canvas regardless
+       of the user's viewport. transform: scale() resizes the visual output
+       to fit; the LAYOUT computation never changes. */
     .slide-inner {
-      flex: 1; display: flex; flex-direction: column;
+      width: 1280px;
+      height: 720px;
+      flex: none;
+      display: flex; flex-direction: column;
       padding: var(--pad);
       padding-left: calc(var(--pad) + 0.6rem);
-      padding-bottom: clamp(2.2rem, 4vw, 4rem);
+      padding-bottom: 56px;
       overflow: hidden;
+      transform: scale(var(--slide-scale, 1));
+      transform-origin: center center;
+      box-sizing: border-box;
     }
+    /* Cover slide (#s1) and section-divider slides have their content
+       directly under <section class="slide"> (no .slide-inner). They use
+       absolute/center alignment with fixed font-sizes, so they look
+       consistent at any viewport ≥ ~1024px. No fixed-size frame needed —
+       their layouts don't have the 3-column-grid density issues that
+       data slides have. */
     .slide-content {
       flex: 1; display: flex; flex-direction: column;
       justify-content: center; overflow: hidden; min-height: 0;
@@ -436,14 +462,11 @@
     }
     .kpi-select:focus { border-color: var(--ch-meta); }
 
-    @media (max-height: 720px) {
-      :root { --pad: clamp(0.9rem, 2.4vw, 2rem); --gap: clamp(0.4rem, 1vw, 0.9rem); }
-    }
+    /* Removed: responsive media queries that mutated --pad/--gap and
+       collapsed chart-grid-3 to 1 column. Layout is now always 1280×720
+       fixed; the scale transform on .slide-inner handles fit-to-viewport.
+       Hide nav-dots on very short viewports (purely UX, not layout): */
     @media (max-height: 600px) { #nav-dots { display: none; } }
-    @media (max-width: 760px) {
-      .toc-grid, .chart-grid-3, .chart-grid-2,
-      .funnel-grid { grid-template-columns: 1fr; }
-    }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
         animation-duration: 0.01ms !important;
@@ -489,38 +512,31 @@
       transform: none !important;
       transition: none !important;
     }
-    /* Flatten the inline clamp() / vw rules used in metric cards, cover slide,
-       SEO numbers, section dividers and SVG charts so html2canvas renders the
-       same pixel sizes every time. */
-    body.pdf-mode .cover-title { font-size: 96px !important; line-height: 1.05 !important; }
-    body.pdf-mode .cover-sub { font-size: 27.2px !important; }
-    body.pdf-mode .cover-eyebrow { font-size: 14.7px !important; }
-    body.pdf-mode .cover-meta { gap: 38.4px !important; }
-    body.pdf-mode .sd-num { font-size: 153.6px !important; }
-    body.pdf-mode .sd-title { font-size: 38.4px !important; }
-    body.pdf-mode .sd-sub { font-size: 20.5px !important; }
-    body.pdf-mode .slide-title { font-size: 38.4px !important; }
-    body.pdf-mode .toc-title { font-size: 19.2px !important; }
-    /* Large line/area trend charts — explicit pixel max-height defeats
-       min(50vh,…) shrinkage. Scoped narrowly so it does NOT affect small
-       fixed-size SVGs like the 80x80 donut indicators. */
-    body.pdf-mode svg[viewBox="0 0 920 320"] {
+    /* Flat font-sizes for cover, section-divider, slide-title and TOC.
+       (Was previously scoped to body.pdf-mode only — promoted to global
+       so on-screen and PDF render identically.) */
+    .cover-title { font-size: 96px !important; line-height: 1.05 !important; }
+    .cover-sub { font-size: 27.2px !important; }
+    .cover-eyebrow { font-size: 14.7px !important; }
+    .cover-meta { gap: 38.4px !important; }
+    .sd-num { font-size: 153.6px !important; }
+    .sd-title { font-size: 38.4px !important; }
+    .sd-sub { font-size: 20.5px !important; }
+    .slide-title { font-size: 38.4px !important; }
+    .toc-title { font-size: 19.2px !important; }
+    /* Large line/area trend charts — fixed max-height in px so they
+       don't depend on viewport. Promoted from pdf-mode to global. */
+    svg[viewBox="0 0 920 320"] {
       max-height: 320px !important;
       max-width: 100% !important;
       width: 100% !important;
       height: auto !important;
     }
-    body.pdf-mode svg[viewBox="0 0 600 220"] {
+    svg[viewBox="0 0 600 220"] {
       max-height: 220px !important;
       max-width: 100% !important;
       width: 100% !important;
       height: auto !important;
-    }
-    /* Donut indicators stay at their declared 80x80 — never stretch. */
-    body.pdf-mode svg[viewBox="0 0 80 80"] {
-      width: 80px !important;
-      height: 80px !important;
-      flex-shrink: 0 !important;
     }
     /* Defuse html2canvas text-rendering quirks: ligatures, kerning, fractional
        letter-spacing and aggressive subpixel rendering can cause word-spacing
@@ -565,13 +581,14 @@
       overflow-wrap: anywhere;
       word-break: break-word;
     }
-    /* Any remaining inline clamp() / vw font-sizes inside metric tiles */
-    body.pdf-mode [style*="clamp("] { font-size: revert; }
-    body.pdf-mode .slide [style*="font-size:clamp(1.3rem"],
-    body.pdf-mode .slide [style*="font-size:clamp(1.2rem"] { font-size: 27.2px !important; }
-    body.pdf-mode .slide [style*="font-size:clamp(1.1rem"] { font-size: 24px !important; }
-    body.pdf-mode .slide [style*="font-size:clamp(1rem"] { font-size: 19.2px !important; }
-    body.pdf-mode .slide [style*="font-size:clamp(0.9rem"] { font-size: 17.6px !important; }
+    /* Inline clamp() / vw font-sizes in metric tiles — overridden globally
+       so they're deterministic regardless of viewport. (Was previously
+       scoped to body.pdf-mode only.) */
+    .slide [style*="font-size:clamp(1.3rem"],
+    .slide [style*="font-size:clamp(1.2rem"] { font-size: 27.2px !important; }
+    .slide [style*="font-size:clamp(1.1rem"] { font-size: 24px !important; }
+    .slide [style*="font-size:clamp(1rem"] { font-size: 19.2px !important; }
+    .slide [style*="font-size:clamp(0.9rem"] { font-size: 17.6px !important; }
     /* Loading overlay shown during PDF generation */
     .pdf-overlay {
       position: fixed; inset: 0;
@@ -664,6 +681,14 @@
         transform: none !important;
         transition: none !important;
       }
+      /* Clear the scale transform on .slide-inner — print renders the
+         slide at its native 1280×720 (= 13.333in × 7.5in @ 96 dpi) and
+         each slide gets its own page. */
+      .slide-inner {
+        transform: none !important;
+        --slide-scale: 1 !important;
+      }
+      :root, html, body { --slide-scale: 1 !important; }
       .slide .slide-tail,
       .slide-num,
       .slide::after { z-index: 50; }
@@ -3294,6 +3319,26 @@
 
 <script>
 (function () {
+  // ── FIXED-SIZE SCALE-TO-FIT ────────────────────────────────────────
+  // The deck always renders at 1280×720 internally. This computes a scale
+  // factor on every resize so .slide-inner shrinks/grows to fit the user's
+  // viewport while preserving the exact 1280×720 layout. PDF/print uses no
+  // scale (the @media print rule sets transform: none on .slide-inner).
+  function updateSlideScale() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    // Use the smaller of the two ratios to ensure the whole slide fits.
+    // Cap at 1 so the slide never scales UP past its native 1280×720.
+    const scale = Math.min(w / 1280, h / 720, 1);
+    document.documentElement.style.setProperty('--slide-scale', scale);
+  }
+  window.addEventListener('resize', updateSlideScale);
+  // Also recompute when fonts finish loading (in case it shifted layout)
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(updateSlideScale).catch(function(){});
+  }
+  updateSlideScale();
+
   const slides = Array.from(document.querySelectorAll('.slide'));
   const dotsEl = document.getElementById('nav-dots');
   const progressEl = document.getElementById('progress-bar');
