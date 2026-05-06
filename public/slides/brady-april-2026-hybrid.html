@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- html-to-image: native foreignObject text rendering for pixel-perfect PDF export -->
+  <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -3374,29 +3376,46 @@
         if (bar) bar.style.width = (((i) / total) * 100) + '%';
 
         // Force reflow on the slide-to-be-captured and yield a frame so the
-        // engine can re-rasterise SVG / table layouts before html2canvas reads.
+        // engine can re-rasterise SVG / table layouts before capture.
         void slide.offsetWidth;
         await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
 
-        // foreignObjectRendering uses the browser's native SVG foreignObject
-        // text engine, preserving exact word-spacing/kerning instead of
-        // html2canvas's own approximated text renderer (which collapses
-        // spaces at line wraps and inline-element boundaries).
-        var canvas = await html2canvas(slide, {
-          scale: 2,
-          useCORS: true,
-          allowTaint: false,
-          foreignObjectRendering: true,
-          backgroundColor: '#FFFFFF',
-          width: 1280,
-          height: 720,
-          windowWidth: 1280,
-          windowHeight: 720,
-          scrollX: 0,
-          scrollY: 0,
-          logging: false
-        });
-        var imgData = canvas.toDataURL('image/jpeg', 0.92);
+        // Primary: html-to-image library — uses the browser's native
+        // foreignObject text rasteriser, so word-spacing, kerning, line wraps
+        // and inline-element boundaries (e.g. <strong> -> regular text) all
+        // render exactly as they appear on screen. html2canvas's own
+        // approximated text renderer (used by foreignObjectRendering: true
+        // when it falls back) was producing 'wordsstucktogether' even with
+        // letter-spacing/kerning overrides.
+        var imgData = null;
+        try {
+          imgData = await window.htmlToImage.toJpeg(slide, {
+            quality: 0.92,
+            pixelRatio: 2,
+            width: 1280,
+            height: 720,
+            backgroundColor: '#FFFFFF',
+            cacheBust: true,
+            skipAutoScale: true,
+            style: {
+              width: '1280px',
+              height: '720px',
+              transform: 'none',
+              transformOrigin: 'top left'
+            }
+          });
+        } catch (htiErr) {
+          // Fallback to html2canvas only if html-to-image throws (rare —
+          // typically only for cross-origin font issues). Text fidelity will
+          // be lower but at least the slide gets captured.
+          var canvas = await html2canvas(slide, {
+            scale: 2, useCORS: true, allowTaint: false,
+            foreignObjectRendering: true, backgroundColor: '#FFFFFF',
+            width: 1280, height: 720, windowWidth: 1280, windowHeight: 720,
+            scrollX: 0, scrollY: 0, logging: false
+          });
+          imgData = canvas.toDataURL('image/jpeg', 0.92);
+        }
         if (i > 0) pdf.addPage([960, 540], 'landscape');
         pdf.addImage(imgData, 'JPEG', 0, 0, 960, 540, undefined, 'FAST');
       }
