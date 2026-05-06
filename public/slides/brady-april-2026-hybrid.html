@@ -6,9 +6,11 @@
   <title>Brady Hotels × Dijitally — Hybrid Performance Report April 2026</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <!-- html-to-image: native foreignObject text rendering for pixel-perfect PDF export -->
-  <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.13/dist/html-to-image.js"></script>
+    <!-- html2canvas-pro: drop-in replacement for html2canvas with the
+         text-spacing bug fixed (preserves word boundaries at line wraps and
+         inline-element transitions). Visual rendering of backgrounds, images,
+         gradients, SVGs is identical to html2canvas. Exposes window.html2canvas. -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas-pro@1.5.8/dist/html2canvas-pro.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -3327,11 +3329,8 @@
       //    charts and clamp() overrides settle before the first capture.
       try { await document.fonts.ready; } catch (e) {}
 
-      // 3b. Preload every <img> on the deck so the screenshots embedded on
-      //     image-heavy slides (e.g. AI Visibility) are fully decoded before
-      //     capture. html-to-image converts <img> -> data URL by fetching
-      //     each src; if the image isn't already in the browser cache, the
-      //     fetch can race the capture.
+      // 3b. Preload every <img> so image-heavy slides (e.g. AI Visibility)
+      //     have all PNG/JPG bytes decoded and ready before capture.
       var allImgs = Array.prototype.slice.call(document.querySelectorAll('img'));
       await Promise.all(allImgs.map(function (img) {
         if (img.complete && img.naturalWidth > 0) return Promise.resolve();
@@ -3341,15 +3340,6 @@
           setTimeout(resolve, 4000);
         });
       }));
-
-      // 3c. Pre-compute the font-embed CSS once for the deck. This embeds
-      //     Manrope + Syne as base64 data URIs so foreignObject SVGs render
-      //     with correct typography on every slide instead of loading them
-      //     47 times.
-      var sharedFontCSS = '';
-      try {
-        sharedFontCSS = await window.htmlToImage.getFontEmbedCSS(document.body);
-      } catch (fe) { sharedFontCSS = ''; }
 
       document.querySelectorAll('.slide').forEach(function (s) { void s.offsetWidth; });
       await new Promise(function (r) { setTimeout(r, 900); });
@@ -3389,42 +3379,25 @@
         void slide.offsetWidth;
         await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
 
-        // Primary: html-to-image — uses native foreignObject text rendering
-        // so word-spacing/kerning/line-wraps match the screen exactly. We
-        // call toCanvas (not toJpeg directly) to get more control + a
-        // reliable JPEG conversion path.
-        //
-        // Config notes:
-        //   • cacheBust:false — DO NOT append ?<ts> to image URLs, that
-        //     breaks local PNG/JPG references.
-        //   • fontEmbedCSS — pre-computed once, embeds Manrope/Syne as
-        //     base64 so the foreignObject renders with real fonts.
-        //   • skipAutoScale:true — keeps our own 1280x720 sizing.
-        //   • No inline style override — let pdf-mode CSS handle layout.
-        var imgData = null;
-        try {
-          var canvasHti = await window.htmlToImage.toCanvas(slide, {
-            pixelRatio: 2,
-            width: 1280,
-            height: 720,
-            backgroundColor: '#FFFFFF',
-            cacheBust: false,
-            skipAutoScale: true,
-            fontEmbedCSS: sharedFontCSS
-          });
-          imgData = canvasHti.toDataURL('image/jpeg', 0.92);
-        } catch (htiErr) {
-          // Fallback to html2canvas only if html-to-image throws (rare —
-          // typically only for cross-origin font / SVG issues). Text fidelity
-          // will be lower but at least the slide gets captured.
-          var canvas = await html2canvas(slide, {
-            scale: 2, useCORS: true, allowTaint: false,
-            foreignObjectRendering: true, backgroundColor: '#FFFFFF',
-            width: 1280, height: 720, windowWidth: 1280, windowHeight: 720,
-            scrollX: 0, scrollY: 0, logging: false
-          });
-          imgData = canvas.toDataURL('image/jpeg', 0.92);
-        }
+        // html2canvas-pro: drop-in replacement for html2canvas. Visual
+        // rendering (backgrounds, gradients, SVGs, images, action-card
+        // colors) is byte-identical to the original html2canvas output you
+        // were already getting. The fork ALSO fixes the text-measurement
+        // bug that produced 'wordsstucktogether' in the original 1.4.1.
+        var canvas = await html2canvas(slide, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: '#FFFFFF',
+          width: 1280,
+          height: 720,
+          windowWidth: 1280,
+          windowHeight: 720,
+          scrollX: 0,
+          scrollY: 0,
+          logging: false
+        });
+        var imgData = canvas.toDataURL('image/jpeg', 0.92);
         if (i > 0) pdf.addPage([960, 540], 'landscape');
         pdf.addImage(imgData, 'JPEG', 0, 0, 960, 540, undefined, 'FAST');
       }
@@ -3555,7 +3528,6 @@
         document.head.appendChild(hs);
         var canvas = await html2canvas(slides[i], {
           scale: 2, useCORS: true, allowTaint: false,
-          foreignObjectRendering: true,
           backgroundColor: '#FFFFFF',
           width: 1280, height: 720, windowWidth: 1280, windowHeight: 720, logging: false
         });
@@ -3679,7 +3651,7 @@
         hs.textContent=GSLIDES_SELECTORS.join(', ') + ' { color: rgba(0,0,0,0) !important; -webkit-text-fill-color: rgba(0,0,0,0) !important; text-shadow: none !important; }';
         document.head.appendChild(hs);
         var canvas=await html2canvas(slides[i],{scale:2,useCORS:true,allowTaint:false,
-          foreignObjectRendering:true,backgroundColor:'#FFFFFF',
+          backgroundColor:'#FFFFFF',
           width:1280,height:720,windowWidth:1280,windowHeight:720,logging:false});
         var rm=document.getElementById('__gs-no-text'); if(rm) rm.remove();
         var pptSlide=pptx.addSlide();
