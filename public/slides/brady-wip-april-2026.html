@@ -2344,7 +2344,6 @@
 
 <!-- jsPDF + html2canvas + PptxGenJS for #pdf and #pptx hash -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 
 <script>
@@ -2410,68 +2409,40 @@
 
   slides[0].classList.add('visible');
 
-  // PDF generation on #pdf or #print
+  // === AUTO-PDF MODE (native browser print) ===
   if (window.location.hash === '#pdf' || window.location.hash === '#print') {
-    var generatePDF = async function () {
+    var triggerPrint = async function () {
       document.querySelectorAll('.slide').forEach(function (s) { s.classList.add('visible'); });
       document.body.classList.add('pdf-mode');
-
-      var overlay = document.createElement('div');
-      overlay.className = 'pdf-overlay';
-      overlay.innerHTML =
-        '<div class="pdf-title">Generating PDF…</div>' +
-        '<div class="pdf-progress" id="__pdfProgress">Preparing slides…</div>' +
-        '<div class="pdf-bar"><div class="pdf-bar-fill" id="__pdfBar" style="width:0%"></div></div>';
-      document.body.appendChild(overlay);
-
       try { await document.fonts.ready; } catch (e) {}
-      await new Promise(function (r) { setTimeout(r, 500); });
-
-      var slideEls = Array.prototype.slice.call(document.querySelectorAll('.slide'));
-      var t = slideEls.length;
-
-      var titleText = (document.title || 'slides')
+      var allImgs = Array.prototype.slice.call(document.querySelectorAll('img'));
+      await Promise.all(allImgs.map(function (img) {
+        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+        return new Promise(function (resolve) {
+          img.addEventListener('load', resolve, { once: true });
+          img.addEventListener('error', resolve, { once: true });
+          setTimeout(resolve, 4000);
+        });
+      }));
+      document.querySelectorAll('.slide').forEach(function (s) { void s.offsetWidth; });
+      await new Promise(function (r) { setTimeout(r, 600); });
+      var origTitle = document.title;
+      var clean = (origTitle || 'slides')
         .replace(/×/g, 'x').replace(/[—–]/g, '-').replace(/[·•]/g, '-')
         .replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
-      var filename = (titleText || 'slides') + '.pdf';
-
-      var jsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-      var pdf = new jsPDF({
-        orientation: 'landscape', unit: 'pt', format: [960, 540], compress: true
-      });
-
-      for (var i = 0; i < t; i++) {
-        var slide = slideEls[i];
-        var prog = document.getElementById('__pdfProgress');
-        var bar = document.getElementById('__pdfBar');
-        if (prog) prog.textContent = 'Rendering slide ' + (i + 1) + ' of ' + t + '…';
-        if (bar) bar.style.width = (((i) / t) * 100) + '%';
-
-        var canvas = await html2canvas(slide, {
-          scale: 2, useCORS: true, backgroundColor: '#FFFFFF',
-          width: 1280, height: 720,
-          windowWidth: 1280, windowHeight: 720,
-          logging: false
-        });
-        var imgData = canvas.toDataURL('image/jpeg', 0.92);
-        if (i > 0) pdf.addPage([960, 540], 'landscape');
-        pdf.addImage(imgData, 'JPEG', 0, 0, 960, 540, undefined, 'FAST');
-      }
-
-      var bar2 = document.getElementById('__pdfBar');
-      var prog2 = document.getElementById('__pdfProgress');
-      if (bar2) bar2.style.width = '100%';
-      if (prog2) prog2.textContent = 'Saving PDF…';
-
-      pdf.save(filename);
-      setTimeout(function () { try { window.close(); } catch (e) {} }, 1200);
+      document.title = clean || 'slides';
+      try { window.print(); } catch (e) { console.error('[print]', e); }
+      var afterPrint = function () {
+        document.title = origTitle;
+        window.removeEventListener('afterprint', afterPrint);
+        setTimeout(function () { try { window.close(); } catch (e) {} }, 400);
+      };
+      window.addEventListener('afterprint', afterPrint);
+      setTimeout(function () { document.title = origTitle; }, 60000);
     };
-
-    if (document.readyState === 'complete') { generatePDF(); }
-    else { window.addEventListener('load', generatePDF); }
+    if (document.readyState === 'complete') { triggerPrint(); }
+    else { window.addEventListener('load', triggerPrint); }
   }
-
-
 
   // === AUTO-PPTX MODE ===
   // Per-slide: scroll into view → extract only title/eyebrow/footer/notes text →
