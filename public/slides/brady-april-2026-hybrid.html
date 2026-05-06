@@ -902,10 +902,12 @@
           <div class="ch-sub">Clicks Share</div>
           <div class="ch-title">SEM 59% · Social 32%</div>
           <div class="ch-body" style="display:flex;align-items:center;gap:1rem">
-            <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-              <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient(var(--ch-sem) 0% 58.8%,var(--ch-social) 58.8% 90.8%,var(--ch-meta) 90.8% 100%)"></div>
-              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;border-radius:50%;background:#fff"></div>
-            </div>
+            <!-- Donut: SEM 58.8% · Social 32.0% · Meta 9.2% (C=201.06 @ r=32) -->
+            <svg viewBox="0 0 80 80" width="80" height="80" style="flex-shrink:0;display:block">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-sem)" stroke-width="16" stroke-dasharray="118.22 201.06" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-social)" stroke-width="16" stroke-dasharray="64.34 201.06" stroke-dashoffset="-118.22" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-meta)" stroke-width="16" stroke-dasharray="18.50 201.06" stroke-dashoffset="-182.56" transform="rotate(-90 40 40)"/>
+            </svg>
             <div style="font-size:var(--fs-label);line-height:2;flex:1">
               <div><span style="color:var(--ch-sem)">■</span> SEM <strong>58.7%</strong></div>
               <div><span style="color:var(--ch-social)">■</span> Social <strong>31.6%</strong></div>
@@ -919,10 +921,12 @@
           <div class="ch-sub">Revenue Share</div>
           <div class="ch-title">SEM 56% · Social 27%</div>
           <div class="ch-body" style="display:flex;align-items:center;gap:1rem">
-            <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-              <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient(var(--ch-sem) 0% 55.9%,var(--ch-meta) 55.9% 72.8%,var(--ch-social) 72.8% 100%)"></div>
-              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;border-radius:50%;background:#fff"></div>
-            </div>
+            <!-- Donut: SEM 55.9% · Meta 16.9% · Social 27.2% (C=201.06 @ r=32) -->
+            <svg viewBox="0 0 80 80" width="80" height="80" style="flex-shrink:0;display:block">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-sem)" stroke-width="16" stroke-dasharray="112.39 201.06" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-meta)" stroke-width="16" stroke-dasharray="33.98 201.06" stroke-dashoffset="-112.39" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-social)" stroke-width="16" stroke-dasharray="54.69 201.06" stroke-dashoffset="-146.37" transform="rotate(-90 40 40)"/>
+            </svg>
             <div style="font-size:var(--fs-label);line-height:2;flex:1">
               <div><span style="color:var(--ch-sem)">■</span> SEM <strong>55.9%</strong></div>
               <div><span style="color:var(--ch-meta)">■</span> Metasearch <strong>16.9%</strong></div>
@@ -936,10 +940,12 @@
           <div class="ch-sub">ROAS Efficiency</div>
           <div class="ch-title">Meta 36.8× · SEM 28.1× · Social 18.9×</div>
           <div class="ch-body" style="display:flex;align-items:center;gap:1rem">
-            <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-              <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient(var(--ch-meta) 0% 43.9%,var(--ch-sem) 43.9% 77.4%,var(--ch-social) 77.4% 100%)"></div>
-              <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:48px;height:48px;border-radius:50%;background:#fff"></div>
-            </div>
+            <!-- Donut: Meta 43.9% · SEM 33.5% · Social 22.6% (C=201.06 @ r=32) -->
+            <svg viewBox="0 0 80 80" width="80" height="80" style="flex-shrink:0;display:block">
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-meta)" stroke-width="16" stroke-dasharray="88.27 201.06" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-sem)" stroke-width="16" stroke-dasharray="67.36 201.06" stroke-dashoffset="-88.27" transform="rotate(-90 40 40)"/>
+              <circle cx="40" cy="40" r="32" fill="none" stroke="var(--ch-social)" stroke-width="16" stroke-dasharray="45.44 201.06" stroke-dashoffset="-155.62" transform="rotate(-90 40 40)"/>
+            </svg>
             <div style="font-size:var(--fs-label);line-height:2;flex:1">
               <div><span style="color:var(--ch-meta)">■</span> Metasearch <strong>36.8×</strong></div>
               <div><span style="color:var(--ch-sem)">■</span> SEM <strong>28.1×</strong></div>
@@ -3268,6 +3274,22 @@
       // 3. Wait for fonts + force layout recompute on every slide so SVG
       //    charts and clamp() overrides settle before the first capture.
       try { await document.fonts.ready; } catch (e) {}
+
+      // 3b. Preload every <img> on the deck so the screenshots embedded on
+      //     image-heavy slides (e.g. AI Visibility) are fully decoded before
+      //     html2canvas reads them. Captures the slide as one rasterised
+      //     image, so PNG/JPG sources stay as images in the final PDF.
+      var allImgs = Array.prototype.slice.call(document.querySelectorAll('img'));
+      await Promise.all(allImgs.map(function (img) {
+        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+        return new Promise(function (resolve) {
+          img.addEventListener('load', resolve, { once: true });
+          img.addEventListener('error', resolve, { once: true });
+          // Safety timeout in case an image never resolves
+          setTimeout(resolve, 4000);
+        });
+      }));
+
       document.querySelectorAll('.slide').forEach(function (s) { void s.offsetWidth; });
       await new Promise(function (r) { setTimeout(r, 900); });
 
