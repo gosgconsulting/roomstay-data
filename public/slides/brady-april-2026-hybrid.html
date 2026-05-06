@@ -301,6 +301,10 @@
       background: var(--bg-soft); border-left: 3px solid var(--ch-sem);
       border-radius: 0 6px 6px 0; padding: 0.6rem var(--gap);
       font-size: var(--fs-small); color: var(--text); line-height: 1.55;
+      /* Narrative text uses &nbsp; for every space (so html2canvas can't
+         drop them during PDF/PPT export). overflow-wrap:anywhere lets the
+         browser still break lines mid-string when needed. */
+      overflow-wrap: anywhere; word-break: break-word; hyphens: none;
     }
     .action-card.meta { border-left-color: var(--ch-meta); }
     .action-card.social { border-left-color: var(--ch-social); }
@@ -549,6 +553,15 @@
     body.pdf-mode .ch-title {
       letter-spacing: normal !important;
       word-spacing: normal !important;
+    }
+    /* Long-form narrative containers use &nbsp; for every space at source
+       (so html2canvas can't drop them). Without an explicit wrap rule the
+       all-non-breaking text can overflow the card. overflow-wrap:anywhere
+       lets the browser break lines wherever needed. */
+    .action-card,
+    .anim.d5 {
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
     /* Any remaining inline clamp() / vw font-sizes inside metric tiles */
     body.pdf-mode [style*="clamp("] { font-size: revert; }
@@ -878,10 +891,10 @@
         </tr></tfoot>
       </table>
       <div class="action-card anim d4" style="margin-top:var(--gap)">
-        <strong>Paid marketing penetration: 9.9% blended share</strong>&nbsp;—&nbsp;paid channels&nbsp;(SEM + Metasearch + Social, excluding SEO)&nbsp;drove ~$1.65M of an estimated $16.7M YTD revenue ceiling&nbsp;(554 rooms&nbsp;×&nbsp;120 days&nbsp;×&nbsp;ADR @ 100% occupancy).&nbsp;<strong>Brady Central</strong>&nbsp;leads at 9.4% paid share.&nbsp;<strong>Hardware Lane</strong>&nbsp;trails at 6.7%&nbsp;—&nbsp;biggest revenue ceiling but lowest paid penetration; opportunity to scale.&nbsp;<strong>Brady Group</strong>&nbsp;cross-portfolio campaigns add $338K not allocated to a single property.
+        <strong>Paid&nbsp;marketing&nbsp;penetration:&nbsp;9.9%&nbsp;blended&nbsp;share</strong>&nbsp;—&nbsp;paid&nbsp;channels&nbsp;(SEM&nbsp;+&nbsp;Metasearch&nbsp;+&nbsp;Social,&nbsp;excluding&nbsp;SEO)&nbsp;drove&nbsp;~$1.65M&nbsp;of&nbsp;an&nbsp;estimated&nbsp;$16.7M&nbsp;YTD&nbsp;revenue&nbsp;ceiling&nbsp;(554&nbsp;rooms&nbsp;×&nbsp;120&nbsp;days&nbsp;×&nbsp;ADR&nbsp;@&nbsp;100%&nbsp;occupancy).&nbsp;<strong>Brady&nbsp;Central</strong>&nbsp;leads&nbsp;at&nbsp;9.4%&nbsp;paid&nbsp;share.&nbsp;<strong>Hardware&nbsp;Lane</strong>&nbsp;trails&nbsp;at&nbsp;6.7%&nbsp;—&nbsp;biggest&nbsp;revenue&nbsp;ceiling&nbsp;but&nbsp;lowest&nbsp;paid&nbsp;penetration;&nbsp;opportunity&nbsp;to&nbsp;scale.&nbsp;<strong>Brady&nbsp;Group</strong>&nbsp;cross-portfolio&nbsp;campaigns&nbsp;add&nbsp;$338K&nbsp;not&nbsp;allocated&nbsp;to&nbsp;a&nbsp;single&nbsp;property.
       </div>
       <div class="anim d5" style="margin-top:var(--gap-sm);font-size:var(--fs-label);color:var(--text-muted);line-height:1.6">
-        <strong style="color:var(--text)">Sources:</strong>&nbsp;Room counts — bradyhotels.com.au property pages &amp; OTA listings (Booking.com, Expedia): Central Melbourne 146, Hardware Lane 147, Flinders Street 108, Jones Lane 153. ADR — Brady Hotels PMS actuals, YTD Jan–Apr 2026 blended average rate.
+        <strong style="color:var(--text)">Sources:</strong>&nbsp;Room&nbsp;counts&nbsp;—&nbsp;bradyhotels.com.au&nbsp;property&nbsp;pages&nbsp;&amp;&nbsp;OTA&nbsp;listings&nbsp;(Booking.com,&nbsp;Expedia):&nbsp;Central&nbsp;Melbourne&nbsp;146,&nbsp;Hardware&nbsp;Lane&nbsp;147,&nbsp;Flinders&nbsp;Street&nbsp;108,&nbsp;Jones&nbsp;Lane&nbsp;153.&nbsp;ADR&nbsp;—&nbsp;Brady&nbsp;Hotels&nbsp;PMS&nbsp;actuals,&nbsp;YTD&nbsp;Jan–Apr&nbsp;2026&nbsp;blended&nbsp;average&nbsp;rate.
       </div>
     </div>
   </div>
@@ -913,7 +926,7 @@
         </tr></tfoot>
       </table>
       <div class="action-card anim d4" style="margin-top:var(--gap)">
-        <strong>Top revenue:</strong>&nbsp;Hardware Lane $86K&nbsp;(27.9×) + Central $72K&nbsp;(25.0×)&nbsp;lead all hotels. All hotels 21–28×&nbsp;ROAS across SEM + Social + Metasearch. Blended&nbsp;<strong>25.2×&nbsp;ROAS</strong>&nbsp;on $14.6K spend → $368K revenue.
+        <strong>Top&nbsp;revenue:</strong>&nbsp;Hardware&nbsp;Lane&nbsp;$86K&nbsp;(27.9×)&nbsp;+&nbsp;Central&nbsp;$72K&nbsp;(25.0×)&nbsp;lead&nbsp;all&nbsp;hotels.&nbsp;All&nbsp;hotels&nbsp;21–28×&nbsp;ROAS&nbsp;across&nbsp;SEM&nbsp;+&nbsp;Social&nbsp;+&nbsp;Metasearch.&nbsp;Blended&nbsp;<strong>25.2×&nbsp;ROAS</strong>&nbsp;on&nbsp;$14.6K&nbsp;spend&nbsp;→&nbsp;$368K&nbsp;revenue.
       </div>
     </div>
   </div>
@@ -1011,7 +1024,7 @@
         </div>
       </div>
       <div class="action-card anim d6" style="margin-top:var(--gap-sm)">
-        <strong>Most efficient:</strong>&nbsp;Metasearch 35.2×&nbsp;ROAS&nbsp;·&nbsp;2.8% CoS&nbsp;—&nbsp;best per-dollar return.&nbsp;<strong>SEM</strong>&nbsp;$215K&nbsp;(56%)&nbsp;·&nbsp;<strong>Social</strong>&nbsp;$103K&nbsp;(27%)&nbsp;—&nbsp;$384K total revenue&nbsp;·&nbsp;25.8×&nbsp;blended ROAS. Social bookings 205 confirmed.
+        <strong>Most&nbsp;efficient:</strong>&nbsp;Metasearch&nbsp;35.2×&nbsp;ROAS&nbsp;·&nbsp;2.8%&nbsp;CoS&nbsp;—&nbsp;best&nbsp;per-dollar&nbsp;return.&nbsp;<strong>SEM</strong>&nbsp;$215K&nbsp;(56%)&nbsp;·&nbsp;<strong>Social</strong>&nbsp;$103K&nbsp;(27%)&nbsp;—&nbsp;$384K&nbsp;total&nbsp;revenue&nbsp;·&nbsp;25.8×&nbsp;blended&nbsp;ROAS.&nbsp;Social&nbsp;bookings&nbsp;205&nbsp;confirmed.
       </div>
     </div>
   </div>
@@ -1186,7 +1199,7 @@
       </div>
 
       <div class="action-card anim d5">
-        <strong>Current state:</strong>&nbsp;Bottom is strongest&nbsp;(brand PMAX 28–49×&nbsp;ROAS per hotel). Mid: event + group campaigns active. Top: display + generic&nbsp;—&nbsp;review performance and pause underperformers below 15×&nbsp;ROAS.
+        <strong>Current&nbsp;state:</strong>&nbsp;Bottom&nbsp;is&nbsp;strongest&nbsp;(brand&nbsp;PMAX&nbsp;28–49×&nbsp;ROAS&nbsp;per&nbsp;hotel).&nbsp;Mid:&nbsp;event&nbsp;+&nbsp;group&nbsp;campaigns&nbsp;active.&nbsp;Top:&nbsp;display&nbsp;+&nbsp;generic&nbsp;—&nbsp;review&nbsp;performance&nbsp;and&nbsp;pause&nbsp;underperformers&nbsp;below&nbsp;15×&nbsp;ROAS.
       </div>
     </div>
   </div>
@@ -1214,7 +1227,7 @@
         <tfoot><tr><td>Total</td><td>$7,542</td><td>$211,757</td><td class="pos">28.1×</td><td class="pos">3.6%</td><td>423.8</td><td>11,721</td><td>$0.64</td></tr></tfoot>
       </table>
       <div class="action-card anim d4" style="margin-top:var(--gap)">
-        <strong>All hotels 27–32×&nbsp;ROAS</strong>&nbsp;—&nbsp;Flinders Street 32.3×&nbsp;+ Central 31.1×&nbsp;+ Hardware Lane 30.4×&nbsp;+ Jones 27.3×&nbsp;all at scale.&nbsp;<strong>Brady Group 22.6×</strong>&nbsp;—&nbsp;Display Retargeting&nbsp;($291 combined spend, near-zero conversions)&nbsp;flagged for pause; rest is solid brand + PMAX.
+        <strong>All&nbsp;hotels&nbsp;27–32×&nbsp;ROAS</strong>&nbsp;—&nbsp;Flinders&nbsp;Street&nbsp;32.3×&nbsp;+&nbsp;Central&nbsp;31.1×&nbsp;+&nbsp;Hardware&nbsp;Lane&nbsp;30.4×&nbsp;+&nbsp;Jones&nbsp;27.3×&nbsp;all&nbsp;at&nbsp;scale.&nbsp;<strong>Brady&nbsp;Group&nbsp;22.6×</strong>&nbsp;—&nbsp;Display&nbsp;Retargeting&nbsp;($291&nbsp;combined&nbsp;spend,&nbsp;near-zero&nbsp;conversions)&nbsp;flagged&nbsp;for&nbsp;pause;&nbsp;rest&nbsp;is&nbsp;solid&nbsp;brand&nbsp;+&nbsp;PMAX.
       </div>
     </div>
   </div>
@@ -1460,7 +1473,7 @@
             </tbody>
           </table>
           <div class="action-card" style="margin-top:0.3rem">
-            <strong>Production timeline&nbsp;(May):</strong>&nbsp;Wk 1&nbsp;—&nbsp;brief copywriter + photographer&nbsp;·&nbsp;Wk 2&nbsp;—&nbsp;capture per hotel&nbsp;·&nbsp;Wk 3&nbsp;—&nbsp;upload to PMAX, launch SG&nbsp;·&nbsp;Wk 4&nbsp;—&nbsp;performance review.
+            <strong>Production&nbsp;timeline&nbsp;(May):</strong>&nbsp;Wk&nbsp;1&nbsp;—&nbsp;brief&nbsp;copywriter&nbsp;+&nbsp;photographer&nbsp;·&nbsp;Wk&nbsp;2&nbsp;—&nbsp;capture&nbsp;per&nbsp;hotel&nbsp;·&nbsp;Wk&nbsp;3&nbsp;—&nbsp;upload&nbsp;to&nbsp;PMAX,&nbsp;launch&nbsp;SG&nbsp;·&nbsp;Wk&nbsp;4&nbsp;—&nbsp;performance&nbsp;review.
           </div>
         </div>
       </div>
@@ -1500,7 +1513,7 @@
         </tr></tfoot>
       </table>
       <div class="action-card anim d4" style="margin-top:var(--gap-sm)">
-        <strong>Peak month:</strong>&nbsp;November&nbsp;(Melbourne Cup)&nbsp;—&nbsp;Brady Central + Hardware Lane CBD properties get +50% budget. Aug 2025 had data tracking gap&nbsp;(low rev)&nbsp;—&nbsp;will monitor pixel firing closely.
+        <strong>Peak&nbsp;month:</strong>&nbsp;November&nbsp;(Melbourne&nbsp;Cup)&nbsp;—&nbsp;Brady&nbsp;Central&nbsp;+&nbsp;Hardware&nbsp;Lane&nbsp;CBD&nbsp;properties&nbsp;get&nbsp;+50%&nbsp;budget.&nbsp;Aug&nbsp;2025&nbsp;had&nbsp;data&nbsp;tracking&nbsp;gap&nbsp;(low&nbsp;rev)&nbsp;—&nbsp;will&nbsp;monitor&nbsp;pixel&nbsp;firing&nbsp;closely.
       </div>
     </div>
   </div>
@@ -1563,10 +1576,10 @@
 
       <div class="chart-grid-2 anim d4" style="margin-top:var(--gap-sm)">
         <div class="action-card meta">
-          <strong>Key lever&nbsp;—&nbsp;Rate parity:</strong>&nbsp;Metasearch only wins when hotel rates match&nbsp;(or beat)&nbsp;OTA rates. Any rate disparity immediately loses the click to Booking.com / Expedia.
+          <strong>Key&nbsp;lever&nbsp;—&nbsp;Rate&nbsp;parity:</strong>&nbsp;Metasearch&nbsp;only&nbsp;wins&nbsp;when&nbsp;hotel&nbsp;rates&nbsp;match&nbsp;(or&nbsp;beat)&nbsp;OTA&nbsp;rates.&nbsp;Any&nbsp;rate&nbsp;disparity&nbsp;immediately&nbsp;loses&nbsp;the&nbsp;click&nbsp;to&nbsp;Booking.com&nbsp;/&nbsp;Expedia.
         </div>
         <div class="action-card meta">
-          <strong>Key lever&nbsp;—&nbsp;CPC bidding:</strong>&nbsp;Higher CPC = better placement = more impressions. Budget capped at ~$2K/month&nbsp;(max potential reached)&nbsp;—&nbsp;grow revenue through rate + CR improvement.
+          <strong>Key&nbsp;lever&nbsp;—&nbsp;CPC&nbsp;bidding:</strong>&nbsp;Higher&nbsp;CPC&nbsp;=&nbsp;better&nbsp;placement&nbsp;=&nbsp;more&nbsp;impressions.&nbsp;Budget&nbsp;capped&nbsp;at&nbsp;~$2K/month&nbsp;(max&nbsp;potential&nbsp;reached)&nbsp;—&nbsp;grow&nbsp;revenue&nbsp;through&nbsp;rate&nbsp;+&nbsp;CR&nbsp;improvement.
         </div>
       </div>
     </div>
@@ -1595,7 +1608,7 @@
         <tfoot><tr><td>Total</td><td>$1,879</td><td>$66,152</td><td class="pos">35.2×</td><td class="pos">2.8%</td><td>130</td><td>2,100</td><td>6.19%</td><td>$509</td></tr></tfoot>
       </table>
       <div class="action-card meta anim d4" style="margin-top:var(--gap)">
-        <strong>Top efficiency:</strong>&nbsp;Flinders Street at 43.6×&nbsp;/ 6.86% CR.&nbsp;<strong>Volume:</strong>&nbsp;Hardware Lane at $20K revenue.&nbsp;<strong>Pricing concern:</strong>&nbsp;Jones Lane AOV $340 trails CBD peers&nbsp;—&nbsp;review rate plans.
+        <strong>Top&nbsp;efficiency:</strong>&nbsp;Flinders&nbsp;Street&nbsp;at&nbsp;43.6×&nbsp;/&nbsp;6.86%&nbsp;CR.&nbsp;<strong>Volume:</strong>&nbsp;Hardware&nbsp;Lane&nbsp;at&nbsp;$20K&nbsp;revenue.&nbsp;<strong>Pricing&nbsp;concern:</strong>&nbsp;Jones&nbsp;Lane&nbsp;AOV&nbsp;$340&nbsp;trails&nbsp;CBD&nbsp;peers&nbsp;—&nbsp;review&nbsp;rate&nbsp;plans.
       </div>
     </div>
   </div>
@@ -1746,8 +1759,8 @@
         </tr></tfoot>
       </table>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap-sm)">
-        <div class="action-card meta anim d3"><strong>Channel actions:</strong>&nbsp;Test Tripadvisor +$300 budget&nbsp;(currently $12). Push Singapore market on top hotels&nbsp;(96×&nbsp;ROAS).</div>
-        <div class="action-card meta anim d4"><strong>Pricing audit:</strong>&nbsp;Jones Lane rate plan review priority&nbsp;—&nbsp;unlocking AOV from $338 → $450 doubles revenue impact.</div>
+        <div class="action-card meta anim d3"><strong>Channel&nbsp;actions:</strong>&nbsp;Test&nbsp;Tripadvisor&nbsp;+$300&nbsp;budget&nbsp;(currently&nbsp;$12).&nbsp;Push&nbsp;Singapore&nbsp;market&nbsp;on&nbsp;top&nbsp;hotels&nbsp;(96×&nbsp;ROAS).</div>
+        <div class="action-card meta anim d4"><strong>Pricing&nbsp;audit:</strong>&nbsp;Jones&nbsp;Lane&nbsp;rate&nbsp;plan&nbsp;review&nbsp;priority&nbsp;—&nbsp;unlocking&nbsp;AOV&nbsp;from&nbsp;$338&nbsp;→&nbsp;$450&nbsp;doubles&nbsp;revenue&nbsp;impact.</div>
       </div>
     </div>
   </div>
@@ -1879,7 +1892,7 @@
         </tr></tfoot>
       </table>
       <div class="action-card meta anim d4" style="margin-top:var(--gap-sm)">
-        <strong>Budget steady at ~$2K/month</strong>&nbsp;—&nbsp;already at maximum bidding potential on key placements. Revenue growth driven by seasonal demand, CPC bid optimisation, and rate parity.&nbsp;<strong>Peak months:</strong>&nbsp;Sep&nbsp;(AFL) + Nov&nbsp;(Melbourne Cup)&nbsp;deliver highest ROAS on same budget.
+        <strong>Budget&nbsp;steady&nbsp;at&nbsp;~$2K/month</strong>&nbsp;—&nbsp;already&nbsp;at&nbsp;maximum&nbsp;bidding&nbsp;potential&nbsp;on&nbsp;key&nbsp;placements.&nbsp;Revenue&nbsp;growth&nbsp;driven&nbsp;by&nbsp;seasonal&nbsp;demand,&nbsp;CPC&nbsp;bid&nbsp;optimisation,&nbsp;and&nbsp;rate&nbsp;parity.&nbsp;<strong>Peak&nbsp;months:</strong>&nbsp;Sep&nbsp;(AFL)&nbsp;+&nbsp;Nov&nbsp;(Melbourne&nbsp;Cup)&nbsp;deliver&nbsp;highest&nbsp;ROAS&nbsp;on&nbsp;same&nbsp;budget.
       </div>
     </div>
   </div>
@@ -1956,7 +1969,7 @@
       </div>
 
       <div class="action-card social anim d5">
-        <strong>Current mix:</strong>&nbsp;Bottom funnel strongest&nbsp;(Hardware &amp; Flinders sales at 5×+ ROAS). Mid-funnel heavy&nbsp;—&nbsp;good for group &amp; events. Top funnel thin.&nbsp;<strong>Action:</strong>&nbsp;Strengthen bottom-funnel hotel-specific campaigns, throttle underperforming mid-funnel promos.
+        <strong>Current&nbsp;mix:</strong>&nbsp;Bottom&nbsp;funnel&nbsp;strongest&nbsp;(Hardware&nbsp;&amp;&nbsp;Flinders&nbsp;sales&nbsp;at&nbsp;5×+&nbsp;ROAS).&nbsp;Mid-funnel&nbsp;heavy&nbsp;—&nbsp;good&nbsp;for&nbsp;group&nbsp;&amp;&nbsp;events.&nbsp;Top&nbsp;funnel&nbsp;thin.&nbsp;<strong>Action:</strong>&nbsp;Strengthen&nbsp;bottom-funnel&nbsp;hotel-specific&nbsp;campaigns,&nbsp;throttle&nbsp;underperforming&nbsp;mid-funnel&nbsp;promos.
       </div>
     </div>
   </div>
@@ -1986,7 +1999,7 @@
         <tfoot><tr><td>Total</td><td>$5,452</td><td>$102,972</td><td>205</td><td class="pos">18.9×</td><td class="pos">5.3%</td><td>6,382</td><td>1.59%</td><td>$0.85</td></tr></tfoot>
       </table>
       <div class="action-card social anim d4" style="margin-top:var(--gap)">
-        Revenue = Meta full-attribution&nbsp;(click + view). Seasonal promos&nbsp;(Autumn Sale + Easter)&nbsp;attributed to respective hotel.&nbsp;<strong>Jones Lane leads ROAS at 25.5×</strong>&nbsp;·&nbsp;Hardware 21.5×&nbsp;—&nbsp;both strong. Central Melbourne 10.5×&nbsp;needs campaign review. Members: 30 leads&nbsp;·&nbsp;$9.87 CPL&nbsp;—&nbsp;see next slide.
+        Revenue&nbsp;=&nbsp;Meta&nbsp;full-attribution&nbsp;(click&nbsp;+&nbsp;view).&nbsp;Seasonal&nbsp;promos&nbsp;(Autumn&nbsp;Sale&nbsp;+&nbsp;Easter)&nbsp;attributed&nbsp;to&nbsp;respective&nbsp;hotel.&nbsp;<strong>Jones&nbsp;Lane&nbsp;leads&nbsp;ROAS&nbsp;at&nbsp;25.5×</strong>&nbsp;·&nbsp;Hardware&nbsp;21.5×&nbsp;—&nbsp;both&nbsp;strong.&nbsp;Central&nbsp;Melbourne&nbsp;10.5×&nbsp;needs&nbsp;campaign&nbsp;review.&nbsp;Members:&nbsp;30&nbsp;leads&nbsp;·&nbsp;$9.87&nbsp;CPL&nbsp;—&nbsp;see&nbsp;next&nbsp;slide.
       </div>
     </div>
   </div>
@@ -2277,7 +2290,7 @@
             </tbody>
           </table>
           <div class="action-card social" style="margin-top:0.3rem">
-            <strong>Production timeline&nbsp;(May):</strong>&nbsp;Wk 1&nbsp;—&nbsp;capture 5 hero stills + 3 video shoots&nbsp;·&nbsp;Wk 2&nbsp;—&nbsp;edit per-format variants&nbsp;·&nbsp;Wk 3&nbsp;—&nbsp;launch refreshed Sales campaigns&nbsp;·&nbsp;Wk 4&nbsp;—&nbsp;review CTR, kill bottom 30%.
+            <strong>Production&nbsp;timeline&nbsp;(May):</strong>&nbsp;Wk&nbsp;1&nbsp;—&nbsp;capture&nbsp;5&nbsp;hero&nbsp;stills&nbsp;+&nbsp;3&nbsp;video&nbsp;shoots&nbsp;·&nbsp;Wk&nbsp;2&nbsp;—&nbsp;edit&nbsp;per-format&nbsp;variants&nbsp;·&nbsp;Wk&nbsp;3&nbsp;—&nbsp;launch&nbsp;refreshed&nbsp;Sales&nbsp;campaigns&nbsp;·&nbsp;Wk&nbsp;4&nbsp;—&nbsp;review&nbsp;CTR,&nbsp;kill&nbsp;bottom&nbsp;30%.
           </div>
         </div>
       </div>
@@ -2317,7 +2330,7 @@
         </tr></tfoot>
       </table>
       <div class="action-card social anim d4" style="margin-top:var(--gap-sm)">
-        <strong>Peak month:</strong>&nbsp;November&nbsp;(Melbourne Cup)&nbsp;—&nbsp;Brady Central + Hardware Cup-themed creative.&nbsp;<strong>September Spring Carnival</strong>&nbsp;ramp begins prep early-Sep.
+        <strong>Peak&nbsp;month:</strong>&nbsp;November&nbsp;(Melbourne&nbsp;Cup)&nbsp;—&nbsp;Brady&nbsp;Central&nbsp;+&nbsp;Hardware&nbsp;Cup-themed&nbsp;creative.&nbsp;<strong>September&nbsp;Spring&nbsp;Carnival</strong>&nbsp;ramp&nbsp;begins&nbsp;prep&nbsp;early-Sep.
       </div>
     </div>
   </div>
@@ -2346,8 +2359,8 @@
         </tbody>
       </table>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-sm);margin-top:var(--gap)">
-        <div class="action-card win anim d3" style="border-left-color:var(--pos)"><strong>Headline win:</strong>&nbsp;The "Saver Rate" theme launched on&nbsp;<strong>1 April 2026</strong>&nbsp;replaced 32 legacy ads. CTR more than doubled&nbsp;(1.19% → 2.60%,&nbsp;<strong>+118%</strong>). All 4 hotels saw uplift between +85%&nbsp;(Flinders)&nbsp;and +176%&nbsp;(Central). Best single ad:&nbsp;<em>Retarget&nbsp;—&nbsp;Hardware Lane&nbsp;—&nbsp;Saver Rate</em>&nbsp;at 3.65% CTR.</div>
-        <div class="action-card loss anim d4" style="border-left-color:var(--neg)"><strong>Format winner:</strong>&nbsp;UGC Video&nbsp;(9:16 vertical)&nbsp;at&nbsp;<strong>3.36% CTR</strong>&nbsp;—&nbsp;6×&nbsp;the Autumn Sale Static Story&nbsp;(0.43%). Production-cheap, performance-rich.&nbsp;<strong>Action:</strong>&nbsp;brief 5–8 new UGC creators in May, replace static creative across Group Sales Daily.</div>
+        <div class="action-card win anim d3" style="border-left-color:var(--pos)"><strong>Headline&nbsp;win:</strong>&nbsp;The&nbsp;"Saver&nbsp;Rate"&nbsp;theme&nbsp;launched&nbsp;on&nbsp;<strong>1&nbsp;April&nbsp;2026</strong>&nbsp;replaced&nbsp;32&nbsp;legacy&nbsp;ads.&nbsp;CTR&nbsp;more&nbsp;than&nbsp;doubled&nbsp;(1.19%&nbsp;→&nbsp;2.60%,&nbsp;<strong>+118%</strong>).&nbsp;All&nbsp;4&nbsp;hotels&nbsp;saw&nbsp;uplift&nbsp;between&nbsp;+85%&nbsp;(Flinders)&nbsp;and&nbsp;+176%&nbsp;(Central).&nbsp;Best&nbsp;single&nbsp;ad:&nbsp;<em>Retarget&nbsp;—&nbsp;Hardware&nbsp;Lane&nbsp;—&nbsp;Saver&nbsp;Rate</em>&nbsp;at&nbsp;3.65%&nbsp;CTR.</div>
+        <div class="action-card loss anim d4" style="border-left-color:var(--neg)"><strong>Format&nbsp;winner:</strong>&nbsp;UGC&nbsp;Video&nbsp;(9:16&nbsp;vertical)&nbsp;at&nbsp;<strong>3.36%&nbsp;CTR</strong>&nbsp;—&nbsp;6×&nbsp;the&nbsp;Autumn&nbsp;Sale&nbsp;Static&nbsp;Story&nbsp;(0.43%).&nbsp;Production-cheap,&nbsp;performance-rich.&nbsp;<strong>Action:</strong>&nbsp;brief&nbsp;5–8&nbsp;new&nbsp;UGC&nbsp;creators&nbsp;in&nbsp;May,&nbsp;replace&nbsp;static&nbsp;creative&nbsp;across&nbsp;Group&nbsp;Sales&nbsp;Daily.</div>
       </div>
     </div>
   </div>
@@ -2369,7 +2382,7 @@
         <!-- LEFT COLUMN -->
         <div style="display:flex;flex-direction:column;gap:var(--gap-sm)">
           <div class="action-card anim d2" style="flex:1">
-            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-sem);font-weight:700;margin-bottom:0.35rem">① SEM <span style="font-weight:400;color:var(--text-muted)">—&nbsp;proj.&nbsp;<span class="pos" style="font-weight:600">+$30K rev</span></span></div>
+            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-sem);font-weight:700;margin-bottom:0.35rem">①&nbsp;SEM <span style="font-weight:400;color:var(--text-muted)">—&nbsp;proj.&nbsp;<span class="pos" style="font-weight:600">+$30K&nbsp;rev</span></span></div>
             <ul style="margin:0;padding:0 0 0 1.1rem;list-style:disc;line-height:1.65;color:var(--text);font-size:var(--fs-small)">
               <li>Pause 9 zero-conv. markets ($135 saved)</li>
               <li>Pause both Display Retargeting ($440 saved)</li>
@@ -2379,7 +2392,7 @@
             </ul>
           </div>
           <div class="action-card meta anim d3" style="flex:1">
-            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-meta);font-weight:700;margin-bottom:0.35rem">② Metasearch <span style="font-weight:400;color:var(--text-muted)">—&nbsp;proj.&nbsp;<span class="pos" style="font-weight:600">+$8.4K rev</span></span></div>
+            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-meta);font-weight:700;margin-bottom:0.35rem">②&nbsp;Metasearch <span style="font-weight:400;color:var(--text-muted)">—&nbsp;proj.&nbsp;<span class="pos" style="font-weight:600">+$8.4K&nbsp;rev</span></span></div>
             <ul style="margin:0;padding:0 0 0 1.1rem;list-style:disc;line-height:1.65;color:var(--text);font-size:var(--fs-small)">
               <li>CPC: Flinders +20%, Jones Lane +25%, others hold</li>
               <li>Tripadvisor +$300 (underspending at $12)</li>
@@ -2391,7 +2404,7 @@
         <!-- RIGHT COLUMN -->
         <div style="display:flex;flex-direction:column;gap:var(--gap-sm)">
           <div class="action-card social anim d4" style="flex:1">
-            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-social);font-weight:700;margin-bottom:0.35rem">③ Social <span style="font-weight:400;color:var(--text-muted)">—&nbsp;$103K April base&nbsp;·&nbsp;proj.&nbsp;<span class="pos" style="font-weight:600">+$15K May</span></span></div>
+            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-social);font-weight:700;margin-bottom:0.35rem">③&nbsp;Social <span style="font-weight:400;color:var(--text-muted)">—&nbsp;$103K&nbsp;April&nbsp;base&nbsp;·&nbsp;proj.&nbsp;<span class="pos" style="font-weight:600">+$15K&nbsp;May</span></span></div>
             <ul style="margin:0;padding:0 0 0 1.1rem;list-style:disc;line-height:1.65;color:var(--text);font-size:var(--fs-small)">
               <li>Pause Autumn Sale promos + Awareness + Marketplace ($864 saved)</li>
               <li>Build F45–64 LAL audiences from CRM</li>
@@ -2401,7 +2414,7 @@
             </ul>
           </div>
           <div class="action-card action anim d5" style="flex:1">
-            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-action);font-weight:700;margin-bottom:0.35rem">④ Pricing &amp; Internationalisation</div>
+            <div style="font-size:var(--fs-label);letter-spacing:0.12em;text-transform:uppercase;color:var(--ch-action);font-weight:700;margin-bottom:0.35rem">④&nbsp;Pricing&nbsp;&amp;&nbsp;Internationalisation</div>
             <ul style="margin:0;padding:0 0 0 1.1rem;list-style:disc;line-height:1.65;color:var(--text);font-size:var(--fs-small)">
               <li>Jones Lane rate plan review (AOV trails CBD peers)</li>
               <li>Test +5–8% weekend rates on Hardware Lane</li>
@@ -2507,7 +2520,7 @@
         </div>
       </div>
       <div class="action-card anim d5" style="margin-top:var(--gap-sm);border-left-color:var(--ch-seo)">
-        <strong>Organic revenue +10.5% YoY&nbsp;($113K)</strong>&nbsp;on −16.8% sessions&nbsp;—&nbsp;but CVR 4.6% is very strong for April, meaning fewer but more committed visitors. Transactions +13.4% YoY&nbsp;(203 vs 179).&nbsp;<strong>AI Search adding $4,104</strong>&nbsp;from 195 sessions at 3% CVR&nbsp;—&nbsp;a small but growing channel to watch.&nbsp;<strong>Risk:</strong>&nbsp;sessions tracking below 2025; action required to rebuild base before Jun–Sep seasonal peak.
+        <strong>Organic&nbsp;revenue&nbsp;+10.5%&nbsp;YoY&nbsp;($113K)</strong>&nbsp;on&nbsp;−16.8%&nbsp;sessions&nbsp;—&nbsp;but&nbsp;CVR&nbsp;4.6%&nbsp;is&nbsp;very&nbsp;strong&nbsp;for&nbsp;April,&nbsp;meaning&nbsp;fewer&nbsp;but&nbsp;more&nbsp;committed&nbsp;visitors.&nbsp;Transactions&nbsp;+13.4%&nbsp;YoY&nbsp;(203&nbsp;vs&nbsp;179).&nbsp;<strong>AI&nbsp;Search&nbsp;adding&nbsp;$4,104</strong>&nbsp;from&nbsp;195&nbsp;sessions&nbsp;at&nbsp;3%&nbsp;CVR&nbsp;—&nbsp;a&nbsp;small&nbsp;but&nbsp;growing&nbsp;channel&nbsp;to&nbsp;watch.&nbsp;<strong>Risk:</strong>&nbsp;sessions&nbsp;tracking&nbsp;below&nbsp;2025;&nbsp;action&nbsp;required&nbsp;to&nbsp;rebuild&nbsp;base&nbsp;before&nbsp;Jun–Sep&nbsp;seasonal&nbsp;peak.
       </div>
     </div>
   </div>
@@ -2955,7 +2968,7 @@
         </div>
       </div>
       <div class="action-card anim d5" style="margin-top:var(--gap-sm);border-left-color:var(--ch-seo)">
-        <strong>Next action:</strong>&nbsp;Internal linking optimisation strategy&nbsp;—&nbsp;connect existing high-authority pages to these new LPs to accelerate indexing signals, strengthen semantic relevance and push these pages into page 1 rankings in May/June.
+        <strong>Next&nbsp;action:</strong>&nbsp;Internal&nbsp;linking&nbsp;optimisation&nbsp;strategy&nbsp;—&nbsp;connect&nbsp;existing&nbsp;high-authority&nbsp;pages&nbsp;to&nbsp;these&nbsp;new&nbsp;LPs&nbsp;to&nbsp;accelerate&nbsp;indexing&nbsp;signals,&nbsp;strengthen&nbsp;semantic&nbsp;relevance&nbsp;and&nbsp;push&nbsp;these&nbsp;pages&nbsp;into&nbsp;page&nbsp;1&nbsp;rankings&nbsp;in&nbsp;May/June.
       </div>
     </div>
   </div>
@@ -3029,13 +3042,13 @@
           <div class="ch-sub">Why This Matters</div>
           <div class="ch-body" style="flex-direction:column;justify-content:flex-start;gap:0.7rem;margin-top:0.5rem">
             <div class="action-card" style="border-left-color:var(--ch-seo);margin:0;padding:0.6rem 0.8rem">
-              <strong style="color:var(--ch-seo)">Signalling:</strong>&nbsp;AI crawlers understand Brady's content&nbsp;—&nbsp;structured data, clear location signals, and semantic content are working. 3% CVR from AI traffic is very strong.
+              <strong style="color:var(--ch-seo)">Signalling:</strong>&nbsp;AI&nbsp;crawlers&nbsp;understand&nbsp;Brady's&nbsp;content&nbsp;—&nbsp;structured&nbsp;data,&nbsp;clear&nbsp;location&nbsp;signals,&nbsp;and&nbsp;semantic&nbsp;content&nbsp;are&nbsp;working.&nbsp;3%&nbsp;CVR&nbsp;from&nbsp;AI&nbsp;traffic&nbsp;is&nbsp;very&nbsp;strong.
             </div>
             <div class="action-card" style="border-left-color:var(--pos);margin:0;padding:0.6rem 0.8rem">
-              <strong style="color:var(--pos)">Opportunity:</strong>&nbsp;267 citations → 195 sessions → 6 bookings = $4,104 revenue. AI channel is nascent but converting above industry average. Double down on FAQ, structured data, and long-form content.
+              <strong style="color:var(--pos)">Opportunity:</strong>&nbsp;267&nbsp;citations&nbsp;→&nbsp;195&nbsp;sessions&nbsp;→&nbsp;6&nbsp;bookings&nbsp;=&nbsp;$4,104&nbsp;revenue.&nbsp;AI&nbsp;channel&nbsp;is&nbsp;nascent&nbsp;but&nbsp;converting&nbsp;above&nbsp;industry&nbsp;average.&nbsp;Double&nbsp;down&nbsp;on&nbsp;FAQ,&nbsp;structured&nbsp;data,&nbsp;and&nbsp;long-form&nbsp;content.
             </div>
             <div class="action-card" style="border-left-color:var(--neutral);margin:0;padding:0.6rem 0.8rem">
-              <strong>Watch:</strong>&nbsp;AI Overviews are likely also reducing brand search CTR&nbsp;(position 5.0, CTR 7.03% vs 9.70% LY). Defensive brand SERP actions remain critical alongside the AI opportunity.
+              <strong>Watch:</strong>&nbsp;AI&nbsp;Overviews&nbsp;are&nbsp;likely&nbsp;also&nbsp;reducing&nbsp;brand&nbsp;search&nbsp;CTR&nbsp;(position&nbsp;5.0,&nbsp;CTR&nbsp;7.03%&nbsp;vs&nbsp;9.70%&nbsp;LY).&nbsp;Defensive&nbsp;brand&nbsp;SERP&nbsp;actions&nbsp;remain&nbsp;critical&nbsp;alongside&nbsp;the&nbsp;AI&nbsp;opportunity.
             </div>
           </div>
         </div>
@@ -3062,10 +3075,10 @@
             <img src="img/ai-visibility/image26.png" alt="LLM prompt: Which Sydney city hotels or Melbourne CBD options are ideal for group stays of 10+ rooms?" style="width:100%;height:auto;border-radius:6px;border:1px solid var(--border);background:#fff"/>
           </div>
           <div class="action-card" style="border-left-color:var(--ch-seo);margin:0;padding:0.7rem 0.9rem">
-            <strong style="color:var(--ch-seo)">Why this matters:</strong>&nbsp;Brady appears&nbsp;<em>twice</em>&nbsp;in the AI's curated answer&nbsp;—&nbsp;Central Melbourne&nbsp;(Group + Premium)&nbsp;and Hardware Lane&nbsp;(Group). Strong intent capture for high-value group bookings.
+            <strong style="color:var(--ch-seo)">Why&nbsp;this&nbsp;matters:</strong>&nbsp;Brady&nbsp;appears&nbsp;<em>twice</em>&nbsp;in&nbsp;the&nbsp;AI's&nbsp;curated&nbsp;answer&nbsp;—&nbsp;Central&nbsp;Melbourne&nbsp;(Group&nbsp;+&nbsp;Premium)&nbsp;and&nbsp;Hardware&nbsp;Lane&nbsp;(Group).&nbsp;Strong&nbsp;intent&nbsp;capture&nbsp;for&nbsp;high-value&nbsp;group&nbsp;bookings.
           </div>
           <div class="action-card" style="border-left-color:var(--pos);margin:0;padding:0.7rem 0.9rem">
-            <strong style="color:var(--pos)">Brand cited:</strong>&nbsp;Brady Hotels Central Melbourne Apartment Hotel&nbsp;·&nbsp;Brady Hotels Hardware Lane.
+            <strong style="color:var(--pos)">Brand&nbsp;cited:</strong>&nbsp;Brady&nbsp;Hotels&nbsp;Central&nbsp;Melbourne&nbsp;Apartment&nbsp;Hotel&nbsp;·&nbsp;Brady&nbsp;Hotels&nbsp;Hardware&nbsp;Lane.
           </div>
         </div>
         <div class="chart-card" style="padding:var(--gap)">
@@ -3095,7 +3108,7 @@
             <img src="img/ai-visibility/image20.png" alt="LLM response screenshot for hotels near Flinders Station Melbourne" style="display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain"/>
           </div>
           <div class="action-card" style="border-left-color:var(--pos);margin:0.5rem 0 0 0;padding:0.45rem 0.7rem;font-size:var(--fs-label);flex-shrink:0">
-            <strong style="color:var(--pos)">Cited:</strong>&nbsp;Brady Apartment Hotel on Flinders.
+            <strong style="color:var(--pos)">Cited:</strong>&nbsp;Brady&nbsp;Apartment&nbsp;Hotel&nbsp;on&nbsp;Flinders.
           </div>
         </div>
         <div class="chart-card" style="padding:var(--gap-sm);display:flex;flex-direction:column;min-height:0;overflow:hidden">
@@ -3104,7 +3117,7 @@
             <img src="img/ai-visibility/image23.png" alt="LLM response screenshot for Melbourne Serviced Apartments and Hotels" style="display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain"/>
           </div>
           <div class="action-card" style="border-left-color:var(--pos);margin:0.5rem 0 0 0;padding:0.45rem 0.7rem;font-size:var(--fs-label);flex-shrink:0">
-            <strong style="color:var(--pos)">Cited:</strong>&nbsp;Brady Hotels &amp; Apartments&nbsp;—&nbsp;long-stay.
+            <strong style="color:var(--pos)">Cited:</strong>&nbsp;Brady&nbsp;Hotels&nbsp;&amp;&nbsp;Apartments&nbsp;—&nbsp;long-stay.
           </div>
         </div>
         <div class="chart-card" style="padding:var(--gap-sm);display:flex;flex-direction:column;min-height:0;overflow:hidden">
@@ -3113,12 +3126,12 @@
             <img src="img/ai-visibility/image24.png" alt="LLM response screenshot for hotels near MCEC" style="display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain"/>
           </div>
           <div class="action-card" style="border-left-color:var(--pos);margin:0.5rem 0 0 0;padding:0.45rem 0.7rem;font-size:var(--fs-label);flex-shrink:0">
-            <strong style="color:var(--pos)">Cited:</strong>&nbsp;Brady Hotels&nbsp;—&nbsp;0.4 km from MCEC.
+            <strong style="color:var(--pos)">Cited:</strong>&nbsp;Brady&nbsp;Hotels&nbsp;—&nbsp;0.4&nbsp;km&nbsp;from&nbsp;MCEC.
           </div>
         </div>
       </div>
       <div class="action-card anim d4" style="border-left-color:var(--ch-seo);margin-top:var(--gap-sm);padding:0.55rem 0.85rem;font-size:var(--fs-small);flex-shrink:0">
-        <strong style="color:var(--ch-seo)">Takeaway:</strong>&nbsp;Brady cited across stay-type, brand-adjacent landmark, and event-venue proximity AI queries&nbsp;—&nbsp;content strategy validated.
+        <strong style="color:var(--ch-seo)">Takeaway:</strong>&nbsp;Brady&nbsp;cited&nbsp;across&nbsp;stay-type,&nbsp;brand-adjacent&nbsp;landmark,&nbsp;and&nbsp;event-venue&nbsp;proximity&nbsp;AI&nbsp;queries&nbsp;—&nbsp;content&nbsp;strategy&nbsp;validated.
       </div>
     </div>
   </div>
@@ -3137,28 +3150,28 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);flex:1;min-height:0">
         <div style="display:flex;flex-direction:column;gap:var(--gap-sm)">
           <div class="action-card anim d2" style="border-left-color:var(--ch-seo)">
-            <strong>① New Landing Pages&nbsp;—&nbsp;In Progress</strong>
+            <strong>①&nbsp;New&nbsp;Landing&nbsp;Pages&nbsp;—&nbsp;In&nbsp;Progress</strong>
             <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-              <li><strong>Melbourne Business Hotels</strong>&nbsp;—&nbsp;copy in progress, targeting corporate segment</li>
-              <li><strong>Elizabeth Street Hotel</strong>&nbsp;—&nbsp;copy in progress, new location content build</li>
-              <li>Support with internal linking strategy on launch to accelerate indexing &amp; ranking</li>
+              <li><strong>Melbourne&nbsp;Business&nbsp;Hotels</strong>&nbsp;—&nbsp;copy&nbsp;in&nbsp;progress,&nbsp;targeting&nbsp;corporate&nbsp;segment</li>
+              <li><strong>Elizabeth&nbsp;Street&nbsp;Hotel</strong>&nbsp;—&nbsp;copy&nbsp;in&nbsp;progress,&nbsp;new&nbsp;location&nbsp;content&nbsp;build</li>
+              <li>Support&nbsp;with&nbsp;internal&nbsp;linking&nbsp;strategy&nbsp;on&nbsp;launch&nbsp;to&nbsp;accelerate&nbsp;indexing&nbsp;&amp;&nbsp;ranking</li>
             </ul>
           </div>
           <div class="action-card anim d3" style="border-left-color:var(--ch-seo)">
-            <strong>② Re-Optimisation Review</strong>
+            <strong>②&nbsp;Re-Optimisation&nbsp;Review</strong>
             <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-              <li><strong>Flinders Street landing page review</strong></li>
+              <li><strong>Flinders&nbsp;Street&nbsp;landing&nbsp;page&nbsp;review</strong></li>
             </ul>
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:var(--gap-sm)">
           <div class="action-card action anim d4">
-            <strong>③ Monthly SEO Tasks</strong>
+            <strong>③&nbsp;Monthly&nbsp;SEO&nbsp;Tasks</strong>
             <ul style="margin:0.4rem 0 0 1.2rem;padding:0;list-style:disc;line-height:1.7;color:var(--text)">
-              <li><strong>Internal linking optimisation</strong>&nbsp;—&nbsp;content pages → hotel LPs for booking intent</li>
-              <li><strong>Health check</strong>&nbsp;on past landing pages&nbsp;(4 indexed but not yet ranking)</li>
-              <li><strong>Monthly technical SEO checks</strong>&nbsp;+ fixes&nbsp;(Core Web Vitals, crawl errors)</li>
-              <li><strong>Citation audit</strong>&nbsp;+&nbsp;<strong>backlink reclamation audit</strong></li>
+              <li><strong>Internal&nbsp;linking&nbsp;optimisation</strong>&nbsp;—&nbsp;content&nbsp;pages&nbsp;→&nbsp;hotel&nbsp;LPs&nbsp;for&nbsp;booking&nbsp;intent</li>
+              <li><strong>Health&nbsp;check</strong>&nbsp;on&nbsp;past&nbsp;landing&nbsp;pages&nbsp;(4&nbsp;indexed&nbsp;but&nbsp;not&nbsp;yet&nbsp;ranking)</li>
+              <li><strong>Monthly&nbsp;technical&nbsp;SEO&nbsp;checks</strong>&nbsp;+&nbsp;fixes&nbsp;(Core&nbsp;Web&nbsp;Vitals,&nbsp;crawl&nbsp;errors)</li>
+              <li><strong>Citation&nbsp;audit</strong>&nbsp;+&nbsp;<strong>backlink&nbsp;reclamation&nbsp;audit</strong></li>
             </ul>
           </div>
         </div>
@@ -3221,7 +3234,7 @@
           <tr><td>FY 2026 Forecast Total</td><td>12 mo</td><td>$223,443</td><td>$5.46M</td><td>$64,800</td><td>—</td><td>$1,177</td><td>$289,420</td><td class="pos">18.9×</td><td class="pos">5.3%</td></tr>
         </tfoot>
       </table>
-      <div class="action-card action anim d3" style="margin-top:var(--gap-sm)"><strong>Agency Retainer</strong>&nbsp;$5,400/mo flat&nbsp;·&nbsp;<strong>SEM Fee</strong>&nbsp;variable mgmt&nbsp;(Jan–Mar actuals only*)&nbsp;·&nbsp;<strong>Metasearch Fee</strong>&nbsp;5% of monthly metasearch spend.</div>
+      <div class="action-card action anim d3" style="margin-top:var(--gap-sm)"><strong>Agency&nbsp;Retainer</strong>&nbsp;$5,400/mo&nbsp;flat&nbsp;·&nbsp;<strong>SEM&nbsp;Fee</strong>&nbsp;variable&nbsp;mgmt&nbsp;(Jan–Mar&nbsp;actuals&nbsp;only*)&nbsp;·&nbsp;<strong>Metasearch&nbsp;Fee</strong>&nbsp;5%&nbsp;of&nbsp;monthly&nbsp;metasearch&nbsp;spend.</div>
     </div>
   </div>
   <div class="section-tag action">Forecast</div>
