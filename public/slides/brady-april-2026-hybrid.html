@@ -434,11 +434,27 @@
   
     /* === PDF GENERATION MODE === */
     /* Applied via body.pdf-mode while html2canvas captures each slide.
-       Locks every slide to a fixed 1280x720 (16:9) so the PDF aspect is correct. */
+       Locks every slide to a fixed 1280x720 (16:9) so the PDF aspect is correct.
+       NOTE: html2canvas@1.4.x ignores windowWidth/Height for vw/vh/clamp()
+       computations and uses the host browser viewport. To get pixel-perfect
+       fidelity regardless of the user's screen size, every viewport-relative
+       CSS variable below is flattened to a fixed pixel value calibrated for a
+       1280px-wide slide at the clamp() maximum. */
     body.pdf-mode {
       overflow: visible !important;
       height: auto !important;
       scroll-snap-type: none !important;
+      /* Lock viewport-derived design tokens to slide-aware pixels */
+      --fs-display: 60.8px !important;
+      --fs-h1: 38.4px !important;
+      --fs-h2: 28.8px !important;
+      --fs-h3: 19.2px !important;
+      --fs-body: 14.7px !important;
+      --fs-small: 12.2px !important;
+      --fs-label: 10.9px !important;
+      --pad: 44.8px !important;
+      --gap: 17.9px !important;
+      --gap-sm: 8.96px !important;
     }
     body.pdf-mode .slide {
       width: 1280px !important;
@@ -454,6 +470,32 @@
       transform: none !important;
       transition: none !important;
     }
+    /* Flatten the inline clamp() / vw rules used in metric cards, cover slide,
+       SEO numbers, section dividers and SVG charts so html2canvas renders the
+       same pixel sizes every time. */
+    body.pdf-mode .cover-title { font-size: 96px !important; line-height: 1.05 !important; }
+    body.pdf-mode .cover-sub { font-size: 27.2px !important; }
+    body.pdf-mode .cover-eyebrow { font-size: 14.7px !important; }
+    body.pdf-mode .cover-meta { gap: 38.4px !important; }
+    body.pdf-mode .sd-num { font-size: 153.6px !important; }
+    body.pdf-mode .sd-title { font-size: 38.4px !important; }
+    body.pdf-mode .sd-sub { font-size: 20.5px !important; }
+    body.pdf-mode .slide-title { font-size: 38.4px !important; }
+    body.pdf-mode .toc-title { font-size: 19.2px !important; }
+    /* SVG charts: explicit pixel max-height to defeat min(50vh,…) shrinkage */
+    body.pdf-mode svg[viewBox] {
+      max-height: 320px !important;
+      max-width: 100% !important;
+      width: 100% !important;
+      height: auto !important;
+    }
+    /* Any remaining inline clamp() / vw font-sizes inside metric tiles */
+    body.pdf-mode [style*="clamp("] { font-size: revert; }
+    body.pdf-mode .slide [style*="font-size:clamp(1.3rem"],
+    body.pdf-mode .slide [style*="font-size:clamp(1.2rem"] { font-size: 27.2px !important; }
+    body.pdf-mode .slide [style*="font-size:clamp(1.1rem"] { font-size: 24px !important; }
+    body.pdf-mode .slide [style*="font-size:clamp(1rem"] { font-size: 19.2px !important; }
+    body.pdf-mode .slide [style*="font-size:clamp(0.9rem"] { font-size: 17.6px !important; }
     /* Loading overlay shown during PDF generation */
     .pdf-overlay {
       position: fixed; inset: 0;
@@ -658,7 +700,7 @@
     <div class="cover-divider anim d4"></div>
     <div class="cover-meta anim d5">
       <div><div class="cover-meta-label">Period</div><div class="cover-meta-value">April 1–30, 2026</div></div>
-      <div><div class="cover-meta-label">Channels</div><div class="cover-meta-value">SEM · Metasearch · Social</div></div>
+      <div><div class="cover-meta-label">Channels</div><div class="cover-meta-value">SEM · Metasearch · Social · SEO</div></div>
       <div><div class="cover-meta-label">Properties</div><div class="cover-meta-value">4 Hotels + Group</div></div>
     </div>
   </div>
@@ -3207,7 +3249,10 @@
   // browser download with a filename derived from <title>. Closes the tab when done.
   if (window.location.hash === '#pdf' || window.location.hash === '#print') {
     var generatePDF = async function () {
-      // 1. Reveal all slides + apply pdf-mode CSS lock to 1280x720
+      // 1. Reveal all slides + apply pdf-mode CSS lock to 1280x720.
+      //    pdf-mode flattens every clamp()/vw token to fixed pixels so
+      //    html2canvas (which ignores windowWidth for viewport units in 1.4.x)
+      //    renders identically regardless of the user's screen size.
       document.querySelectorAll('.slide').forEach(function (s) { s.classList.add('visible'); });
       document.body.classList.add('pdf-mode');
 
@@ -3220,9 +3265,11 @@
         '<div class="pdf-bar"><div class="pdf-bar-fill" id="__pdfBar" style="width:0%"></div></div>';
       document.body.appendChild(overlay);
 
-      // 3. Wait for fonts + layout
+      // 3. Wait for fonts + force layout recompute on every slide so SVG
+      //    charts and clamp() overrides settle before the first capture.
       try { await document.fonts.ready; } catch (e) {}
-      await new Promise(function (r) { setTimeout(r, 600); });
+      document.querySelectorAll('.slide').forEach(function (s) { void s.offsetWidth; });
+      await new Promise(function (r) { setTimeout(r, 900); });
 
       var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
       var total = slides.length;
@@ -3254,6 +3301,11 @@
         if (prog) prog.textContent = 'Rendering slide ' + (i + 1) + ' of ' + total + '…';
         if (bar) bar.style.width = (((i) / total) * 100) + '%';
 
+        // Force reflow on the slide-to-be-captured and yield a frame so the
+        // engine can re-rasterise SVG / table layouts before html2canvas reads.
+        void slide.offsetWidth;
+        await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
+
         var canvas = await html2canvas(slide, {
           scale: 2,
           useCORS: true,
@@ -3262,6 +3314,8 @@
           height: 720,
           windowWidth: 1280,
           windowHeight: 720,
+          scrollX: 0,
+          scrollY: 0,
           logging: false
         });
         var imgData = canvas.toDataURL('image/jpeg', 0.92);
