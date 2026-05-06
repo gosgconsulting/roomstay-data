@@ -503,6 +503,36 @@
       height: 80px !important;
       flex-shrink: 0 !important;
     }
+    /* Defuse html2canvas text-rendering quirks: ligatures, kerning, fractional
+       letter-spacing and aggressive subpixel rendering can cause word-spacing
+       to collapse at line wraps ("Brady citedacross stay-type…"). Forcing
+       deterministic text metrics across the deck during capture eliminates it. */
+    body.pdf-mode,
+    body.pdf-mode * {
+      font-kerning: none !important;
+      font-feature-settings: "kern" 0, "liga" 0, "calt" 0 !important;
+      font-variant-ligatures: none !important;
+      text-rendering: geometricPrecision !important;
+      -webkit-font-smoothing: antialiased !important;
+      -moz-osx-font-smoothing: grayscale !important;
+    }
+    /* Strip letter/word-spacing on body copy ONLY (preserve uppercase eyebrows,
+       table headers, and tags whose visual identity depends on tracking). */
+    body.pdf-mode .slide-content,
+    body.pdf-mode .slide-content p,
+    body.pdf-mode .slide-content li,
+    body.pdf-mode .slide-content td,
+    body.pdf-mode .slide-content span,
+    body.pdf-mode .slide-content div,
+    body.pdf-mode .slide-content strong,
+    body.pdf-mode .slide-content em,
+    body.pdf-mode .action-card,
+    body.pdf-mode .ch-body,
+    body.pdf-mode .ch-sub,
+    body.pdf-mode .ch-title {
+      letter-spacing: normal !important;
+      word-spacing: normal !important;
+    }
     /* Any remaining inline clamp() / vw font-sizes inside metric tiles */
     body.pdf-mode [style*="clamp("] { font-size: revert; }
     body.pdf-mode .slide [style*="font-size:clamp(1.3rem"],
