@@ -2,12 +2,11 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft, Maximize2, Minimize2, ExternalLink, FileDown,
-  Pencil, Check, Plus, PanelLeft, Loader2,
+  Pencil, Check, Plus, PanelLeft,
   Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight,
   Type, ImageIcon, ScrollText,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { GoogleSlidesExportModal } from "@/components/GoogleSlidesExportModal";
 import { cn } from "@/lib/utils";
 
 // Map deck IDs to their public HTML paths
@@ -690,9 +689,7 @@ export default function SlideViewerPage() {
   const navigate = useNavigate();
 
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isGSlidesModalOpen, setIsGSlidesModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [isPptxExporting, setIsPptxExporting] = useState(false);
   const [showPanel, setShowPanel] = useState(false);
   const scriptChannelRef = useRef<BroadcastChannel | null>(null);
   const [slideCount, setSlideCount] = useState(0);
@@ -850,39 +847,15 @@ export default function SlideViewerPage() {
     if (!w) window.open(src, "_blank");
   };
 
-  const handleExportPPT = async () => {
-    if (isPptxExporting) return;
-    const iframeWin = iframeRef.current?.contentWindow as any;
-    const iframeDoc = iframeRef.current?.contentDocument;
-    if (!iframeWin || !iframeDoc) return;
-
-    setIsPptxExporting(true);
-    try {
-      // Inject the bundle into the iframe context if not already loaded
-      if (!iframeWin.domToPptx) {
-        await new Promise<void>((resolve, reject) => {
-          const s = iframeDoc.createElement("script");
-          s.src = "/dom-to-pptx.bundle.js";
-          s.onload = () => resolve();
-          s.onerror = () => reject(new Error("Failed to load dom-to-pptx"));
-          iframeDoc.head.appendChild(s);
-        });
-      }
-
-      const slides = Array.from(iframeDoc.querySelectorAll<HTMLElement>(".slide"));
-      const filename = (iframeDoc.title || "presentation")
-        .replace(/[^a-zA-Z0-9_ -]/g, "")
-        .trim() || "presentation";
-
-      await iframeWin.domToPptx.exportToPptx(
-        slides.length ? slides : [iframeDoc.body],
-        { fileName: `${filename}.pptx`, svgAsVector: true, autoEmbedFonts: true }
-      );
-    } catch (err) {
-      console.error("[Export PPT]", err);
-    } finally {
-      setIsPptxExporting(false);
-    }
+  const handleExportPPT = () => {
+    if (!src) return;
+    // Open the deck in a new tab with #pptx — the deck rasterises every slide
+    // to a JPEG and embeds each as a full-slide image in the PPTX (image-only,
+    // not editable). Same visual fidelity as the PDF export. Replaces the
+    // previous dom-to-pptx pipeline (editable text + vector charts) which
+    // caused render fragility and bloated the bundle.
+    const w = window.open(`${src}#pptx`, "_blank");
+    if (!w) window.open(src, "_blank");
   };
 
   if (!src) {
@@ -940,43 +913,18 @@ export default function SlideViewerPage() {
             {/* Right: export + edit + fullscreen */}
             <div className="flex items-center gap-1">
               <button
-                className="h-8 px-2.5 rounded text-xs text-white/60 hover:text-white hover:bg-white/10 flex items-center gap-1.5 transition-colors"
-                onClick={() => setIsGSlidesModalOpen(true)}
-                title="Export to Google Slides"
+                className="h-8 px-2.5 rounded text-xs flex items-center gap-1.5 transition-colors text-white/60 hover:text-white hover:bg-white/10"
+                onClick={handleExportPPT}
+                title="Export as PowerPoint (image-only)"
               >
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none">
-                  <rect x="3" y="2" width="14" height="18" rx="2" fill="#FBBC04" />
-                  <path d="M17 2l4 4h-4V2z" fill="#E8A900" />
-                  <rect x="6" y="8" width="8" height="1.5" rx="0.5" fill="white" opacity="0.9" />
-                  <rect x="6" y="11" width="8" height="1.5" rx="0.5" fill="white" opacity="0.9" />
-                  <rect x="6" y="14" width="5" height="1.5" rx="0.5" fill="white" opacity="0.9" />
+                  <rect x="3" y="2" width="14" height="18" rx="2" fill="#D04423" />
+                  <path d="M17 2l4 4h-4V2z" fill="#A33319" />
+                  <rect x="6" y="8" width="4" height="1.5" rx="0.5" fill="white" opacity="0.9" />
+                  <circle cx="10.5" cy="11.5" r="2.5" fill="none" stroke="white" strokeWidth="1.2" opacity="0.9" />
+                  <rect x="6" y="14" width="8" height="1.5" rx="0.5" fill="white" opacity="0.9" />
                 </svg>
-                Google Slides
-              </button>
-
-              <button
-                className={cn(
-                  "h-8 px-2.5 rounded text-xs flex items-center gap-1.5 transition-colors",
-                  isPptxExporting
-                    ? "text-orange-300 bg-orange-500/15 cursor-wait"
-                    : "text-white/60 hover:text-white hover:bg-white/10"
-                )}
-                onClick={handleExportPPT}
-                disabled={isPptxExporting}
-                title="Export as PowerPoint"
-              >
-                {isPptxExporting ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                ) : (
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none">
-                    <rect x="3" y="2" width="14" height="18" rx="2" fill="#D04423" />
-                    <path d="M17 2l4 4h-4V2z" fill="#A33319" />
-                    <rect x="6" y="8" width="4" height="1.5" rx="0.5" fill="white" opacity="0.9" />
-                    <circle cx="10.5" cy="11.5" r="2.5" fill="none" stroke="white" strokeWidth="1.2" opacity="0.9" />
-                    <rect x="6" y="14" width="8" height="1.5" rx="0.5" fill="white" opacity="0.9" />
-                  </svg>
-                )}
-                {isPptxExporting ? "Exporting…" : "Export PPT"}
+                Export PPT
               </button>
 
               <button
@@ -1341,14 +1289,6 @@ export default function SlideViewerPage() {
           <Minimize2 className="h-3.5 w-3.5" />
           Exit Fullscreen
         </button>
-      )}
-
-      {src && (
-        <GoogleSlidesExportModal
-          open={isGSlidesModalOpen}
-          onOpenChange={setIsGSlidesModalOpen}
-          slideSrc={src}
-        />
       )}
 
       {/* Hidden file input for image upload */}
