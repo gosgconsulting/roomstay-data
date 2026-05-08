@@ -1317,6 +1317,7 @@
 
   // Keyboard nav
   document.addEventListener('keydown', e => {
+  if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.isContentEditable)) return;
     const map = {
       ArrowDown: 1, ArrowRight: 1, ' ': 1, PageDown: 1,
       ArrowUp: -1, ArrowLeft: -1, PageUp: -1

@@ -721,6 +721,36 @@ export type Database = {
           },
         ]
       }
+      slide_notes: {
+        Row: {
+          id: string
+          deck_id: string
+          slide_index: number
+          user_id: string
+          content: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          deck_id: string
+          slide_index: number
+          user_id: string
+          content?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          deck_id?: string
+          slide_index?: number
+          user_id?: string
+          content?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       slide_reports: {
         Row: {
           account_id: string | null

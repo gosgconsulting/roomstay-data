@@ -1,18 +1,40 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, FileText, Save } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
-const STORAGE_KEY = (slideId: string, index: number) =>
+// localStorage key used only when the user is not authenticated
+const LS_KEY = (slideId: string, index: number) =>
   `roomstay-script::${slideId}::${index}`;
 
-function loadScript(slideId: string, index: number): string {
-  try { return localStorage.getItem(STORAGE_KEY(slideId, index)) ?? ""; }
+function lsLoad(slideId: string, index: number): string {
+  try { return localStorage.getItem(LS_KEY(slideId, index)) ?? ""; }
   catch { return ""; }
 }
 
-function saveScript(slideId: string, index: number, text: string) {
-  try { localStorage.setItem(STORAGE_KEY(slideId, index), text); }
+function lsSave(slideId: string, index: number, text: string) {
+  try { localStorage.setItem(LS_KEY(slideId, index), text); }
   catch { /* quota */ }
+}
+
+async function dbLoad(slideId: string, index: number, userId: string): Promise<string> {
+  const { data } = await supabase
+    .from("slide_notes")
+    .select("content")
+    .eq("deck_id", slideId)
+    .eq("slide_index", index)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.content ?? "";
+}
+
+async function dbSave(slideId: string, index: number, userId: string, text: string) {
+  await supabase
+    .from("slide_notes")
+    .upsert(
+      { deck_id: slideId, slide_index: index, user_id: userId, content: text, updated_at: new Date().toISOString() },
+      { onConflict: "deck_id,slide_index,user_id" }
+    );
 }
 
 export default function ScriptPage() {
@@ -23,12 +45,56 @@ export default function ScriptPage() {
   const [slideTitle, setSlideTitle]     = useState("");
   const [script, setScript]             = useState("");
   const [saved, setSaved]               = useState(true);
+  const [userId, setUserId]             = useState<string | null>(null);
 
   const channelRef  = useRef<BroadcastChannel | null>(null);
   const saveTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevIndex   = useRef<number>(-1);
+  const scriptRef   = useRef<string>("");  // always current value, avoids stale closure
 
-  // ── Initialise BroadcastChannel ──────────────────────────────────────────
+  // Keep scriptRef in sync with script state
+  useEffect(() => { scriptRef.current = script; }, [script]);
+
+  // Resolve auth user once on mount
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserId(data.user?.id ?? null);
+    });
+  }, []);
+
+  // Load a note (DB or localStorage) and update state
+  const loadNote = useCallback(async (idx: number, uid: string | null) => {
+    const text = uid
+      ? await dbLoad(slideId, idx, uid)
+      : lsLoad(slideId, idx);
+    setScript(text);
+    scriptRef.current = text;
+    setSaved(true);
+  }, [slideId]);
+
+  // Save current note
+  const persistNote = useCallback((idx: number, text: string, uid: string | null) => {
+    if (uid) {
+      dbSave(slideId, idx, uid, text);
+    } else {
+      lsSave(slideId, idx, text);
+    }
+  }, [slideId]);
+
+  // Load first slide on mount (userId may not be resolved yet — handled by the userId effect below)
+  useEffect(() => {
+    prevIndex.current = 0;
+  }, [slideId]);
+
+  // Once userId is resolved, load the first slide's note
+  useEffect(() => {
+    if (userId !== undefined) {  // null = not authed, string = authed
+      loadNote(0, userId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  // BroadcastChannel: receive slide changes from the viewer window
   useEffect(() => {
     const ch = new BroadcastChannel(`roomstay-script::${slideId}`);
     channelRef.current = ch;
@@ -37,51 +103,43 @@ export default function ScriptPage() {
       const d = ev.data;
       if (d?.type !== "slide-change") return;
 
-      // Save the current slide's script before switching
+      // Save current slide before switching
       if (prevIndex.current >= 0) {
-        saveScript(slideId, prevIndex.current, script);
+        persistNote(prevIndex.current, scriptRef.current, userId);
       }
 
       const idx = d.index as number;
       prevIndex.current = idx;
       setCurrentIndex(idx);
-      if (d.total)  setTotalSlides(d.total);
-      if (d.title)  setSlideTitle(d.title);
-      setScript(loadScript(slideId, idx));
-      setSaved(true);
+      if (d.total) setTotalSlides(d.total);
+      if (d.title) setSlideTitle(d.title);
+      loadNote(idx, userId);
     };
 
     return () => ch.close();
-    // intentionally exclude `script` to avoid re-subscribing on every keystroke
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slideId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slideId, userId]);
 
-  // Load first slide's script on mount
-  useEffect(() => {
-    setScript(loadScript(slideId, 0));
-    prevIndex.current = 0;
-  }, [slideId]);
-
-  // ── Auto-save with debounce ───────────────────────────────────────────────
+  // Debounced save on every keystroke (600 ms)
   const handleChange = useCallback((text: string) => {
     setScript(text);
+    scriptRef.current = text;
     setSaved(false);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveScript(slideId, currentIndex, text);
+      persistNote(currentIndex, text, userId);
       setSaved(true);
     }, 600);
-  }, [slideId, currentIndex]);
+  }, [currentIndex, userId, persistNote]);
 
-  // ── Manual prev / next ────────────────────────────────────────────────────
+  // Manual prev / next slide buttons
   const go = useCallback((delta: number) => {
-    saveScript(slideId, currentIndex, script);
+    persistNote(currentIndex, scriptRef.current, userId);
     const next = Math.max(0, Math.min(currentIndex + delta, Math.max(0, totalSlides - 1)));
     setCurrentIndex(next);
     prevIndex.current = next;
-    setScript(loadScript(slideId, next));
-    setSaved(true);
-  }, [slideId, currentIndex, totalSlides, script]);
+    loadNote(next, userId);
+  }, [currentIndex, totalSlides, userId, persistNote, loadNote]);
 
   const hasScript = script.trim().length > 0;
   const displayTitle = slideTitle || `Slide ${currentIndex + 1}`;
@@ -171,7 +229,7 @@ export default function ScriptPage() {
             <>
               <Save size={11} color={saved ? "#34d399" : "#f59e0b"} />
               <span style={{ fontSize: "10px", color: saved ? "#34d399" : "#f59e0b" }}>
-                {saved ? "Saved" : "Saving…"}
+                {saved ? (userId ? "Saved to cloud" : "Saved locally") : "Saving…"}
               </span>
             </>
           )}
@@ -187,7 +245,6 @@ export default function ScriptPage() {
       {/* ── Script area ───────────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "24px 28px", minHeight: 0 }}>
 
-        {/* Placeholder hint when empty */}
         {!hasScript && (
           <p style={{
             fontSize: "12px", color: "rgba(255,255,255,0.18)", fontStyle: "italic",
@@ -220,7 +277,7 @@ export default function ScriptPage() {
           onFocus={(e) => { e.target.style.borderColor = "rgba(99,102,241,0.4)"; }}
           onBlur={(e) => {
             e.target.style.borderColor = "rgba(255,255,255,0.07)";
-            saveScript(slideId, currentIndex, script);
+            persistNote(currentIndex, scriptRef.current, userId);
             setSaved(true);
           }}
           spellCheck

@@ -3380,6 +3380,7 @@
   }, { threshold: 0.4 });
   slides.forEach(s => io.observe(s));
   document.addEventListener('keydown', e => {
+  if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA' || document.activeElement.isContentEditable)) return;
     const map = { ArrowDown: 1, ArrowRight: 1, ' ': 1, PageDown: 1, ArrowUp: -1, ArrowLeft: -1, PageUp: -1 };
     if (e.key in map) { e.preventDefault(); goTo(current + map[e.key]); }
     else if (e.key === 'Home') { e.preventDefault(); goTo(0); }
