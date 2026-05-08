@@ -8,6 +8,23 @@ import { useUserAccount } from "@/hooks/useUserAccount";
 // Static slide deck registry — extend this array to add more decks
 const SLIDE_DECKS = [
   {
+    id: "performance-wip-may-2026",
+    title: "Performance — WiP — May 07",
+    subtitle: "Multi-Client Snapshot · Apr 2026 YoY + YTD",
+    description: "16-slide working document covering all clients across all 3 paid channels. SEM (Brady · Aqua · Food 4 Fitness · Roomstay — Windsor.ai), Metasearch (full hotel portfolio — Supabase), Social (Brady · Food 4 Fitness — Windsor.ai). Per-client KPI tables (Spend / Conv / Revenue / ROAS — Month YoY + YTD), graph-led breakdowns by device · country · funnel for every client (Brady hotels regrouped as one), per-channel optimization plans (Pause / Scale / Test) and a cross-channel ROAS league + 30-day priority list. Reuses the chart-card / hbar / kpi-strip / funnel-card components from the Brady Combined Report.",
+    period: "May 07, 2026",
+    client: "Brady · Aqua · F4F · Roomstay",
+    channel: "SEM · Metasearch · Social",
+    slides: 16,
+    kpis: [
+      { label: "Total Rev", value: "$902K" },
+      { label: "Blended ROAS", value: "23.4×" },
+      { label: "Top ROAS", value: "38.4×" },
+    ],
+    src: "/slides/performance-wip-may-2026.html",
+    accentColor: "#f5a623",
+  },
+  {
     id: "brady-wip-april-2026",
     title: "Brady Hotels — WiP Snapshot",
     subtitle: "April 2026 vs YoY · Working Document",

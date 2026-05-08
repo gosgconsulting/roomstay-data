@@ -18,6 +18,7 @@ const DECK_SRCS: Record<string, string> = {
   "brady-elizabeth-launch": "/slides/brady-elizabeth-launch.html",
   "brady-creative-refresh-april-2026": "/slides/brady-creative-refresh-april-2026.html",
   "brady-wip-april-2026": "/slides/brady-wip-april-2026.html",
+  "performance-wip-may-2026": "/slides/performance-wip-may-2026.html",
 };
 
 // ─── Slide templates ──────────────────────────────────────────────────────────
